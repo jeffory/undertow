@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.wt/
+tools/node_modules
+tools/*.png
+assets/generated/
+*.local
