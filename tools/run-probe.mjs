@@ -94,8 +94,10 @@ await sleep(250); // hold so the edge lands on a sim step
 await page.mouse.up();
 const setState = await waitFor(`w.tether.fights.length === 1 && w.run.activeCatch && w.run.activeCatch.tier === 3`, 2000);
 assert(setState, 'SET started a tether fight with the tier-3 catch tagged');
-const fish = await w(`({ mass: w.fish?.tether.mass, maxHp: w.fish?.maxHp, exhausted: w.fish?.tether.exhausted })`);
-assert(fish && fish.mass > 2, `fish scaled by tier-3 (mass ${fish?.mass}, maxHp ${fish?.maxHp})`);
+const fish = await w(`({ species: w.run.activeCatch?.species, name: w.run.activeCatch?.name, mass: w.fish?.tether.mass, paramsMass: w.fish?.params?.mass, maxHp: w.fish?.maxHp, paramsHp: w.fish?.params?.hp, tier: w.fish?.params?.tier, exhausted: w.fish?.tether.exhausted })`);
+assert(fish && fish.species && fish.species !== 'capsule', `tier-3 SET rolled a real species (${fish?.species})`);
+assert(fish && fish.mass === fish.paramsMass && fish.maxHp === fish.paramsHp, `species params drive the fight stats (mass ${fish?.mass}, maxHp ${fish?.maxHp})`);
+assert(fish && fish.tier >= 3, `tier-3 disturbance rolls the Rare/Epic ladder (tier ${fish?.tier})`);
 
 // --- LAND --------------------------------------------------------------------
 // Drive the catch to exhaustion, drag it beside the keeper, flag it landable,

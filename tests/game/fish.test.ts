@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createWorld, createFish, SPINE_SEGMENTS } from '../../src/core/world';
+import { makeParams } from '../../src/gen/fishParams';
 import { FIXED_DT } from '../../src/core/time';
 import {
   spawnFish,
@@ -22,6 +23,7 @@ import {
   HURT_DEFAULT,
   SPINE_AMP,
   FLOP_DURATION,
+  EXHAUST_SPINE_SCALE,
 } from '../../src/game/fish';
 
 const DT = FIXED_DT;
@@ -366,5 +368,52 @@ describe('animateFish (sine-spine)', () => {
     expect(maxHalf).toBeGreaterThan(0);
     // hp scale = hp/maxHp*0.5+0.5 → 50% hp = 0.75 of full amplitude
     expect(maxHalf / maxFull).toBeCloseTo(0.75, 6);
+  });
+});
+
+describe('animateFish (M4 per-species swim profile)', () => {
+  // a live fish with species params (swimFreq/swimAmp from the generator)
+  function speciesFish() {
+    const w = createWorld();
+    w.fish = createFish();
+    const params = makeParams();
+    params.speciesId = 'silt-pikelet';
+    params.swimFreq = 5;
+    params.swimAmp = 0.9;
+    w.fish.params = { ...params };
+    w.fish.spine = new Float32Array(params.spineSegments);
+    return w;
+  }
+
+  it('uses the species swimAmp/swimFreq instead of the M1 constants', () => {
+    const w = speciesFish();
+    animateFish(w, 0);
+    const maxBend = Math.max(...Array.from(w.fish.spine).map(Math.abs));
+    // full hp → ampScale 1 → bend ≈ swimAmp = 0.9 (the sine peaks somewhere)
+    expect(maxBend).toBeGreaterThan(0.6);
+    expect(maxBend).toBeLessThanOrEqual(0.9 + 1e-9);
+    // and it differs from the M1 baseline amplitude (0.55)
+    expect(maxBend).toBeGreaterThan(0.55);
+  });
+
+  it('exhaustion scales the spine amplitude to 40% (EXHAUST_SPINE_SCALE)', () => {
+    const fresh = speciesFish();
+    const exhausted = speciesFish();
+    exhausted.fish.tether.exhausted = true;
+    animateFish(fresh, 0);
+    animateFish(exhausted, 0);
+    const maxFresh = Math.max(...Array.from(fresh.fish.spine).map(Math.abs));
+    const maxExh = Math.max(...Array.from(exhausted.fish.spine).map(Math.abs));
+    expect(maxExh / maxFresh).toBeCloseTo(EXHAUST_SPINE_SCALE, 6);
+  });
+
+  it('stays finite when the fish is dead (flop collapses the wave)', () => {
+    const w = speciesFish();
+    w.fish.hp = 0;
+    w.fish.state = 'dead';
+    for (let i = 0; i < Math.ceil(FLOP_DURATION * 60) + 10; i++) animateFish(w, DT);
+    const maxBend = Math.max(...Array.from(w.fish.spine).map(Math.abs));
+    expect(Number.isFinite(maxBend)).toBe(true);
+    expect(maxBend).toBeLessThan(0.01);
   });
 });

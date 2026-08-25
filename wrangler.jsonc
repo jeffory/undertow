@@ -1,0 +1,10 @@
+{
+  // UNDERTOW — static bundle served as Worker assets.
+  // CI (Workers Builds): build command `npm run build`, deploy `npx wrangler deploy`.
+  "name": "undertow",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

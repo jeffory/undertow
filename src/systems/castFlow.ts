@@ -9,7 +9,7 @@
 import type { WorldState } from '../core/world';
 import { createFish } from '../core/world';
 import { createRng, LOOT } from '../core/rngStreams';
-import { startTetherFight, FISH_STAMINA_BASE } from '../game/tether';
+import { startTetherFight } from '../game/tether';
 import type { Disturbance } from '../run/disturbance';
 import {
   PROMPT_WINDOW,
@@ -18,18 +18,14 @@ import {
   startBite,
   release,
 } from '../run/disturbance';
-import { rollSpeciesAtSet, rollWeight } from '../run/species';
+import { rollSpeciesAtSet } from '../run/species';
+import { generateFishParams, type FishParams } from '../gen/fishParams';
 
-// M1 fish stats scaled by the disturbance tier (task t12 #1: "fish tier scales
-// the M1 fish stats for now"). M4 fills the real species table.
-const FISH_TIER_SCALE: Record<
-  1 | 2 | 3,
-  { mass: number; maxHp: number; swimSpeed: number; pullForce: number; staminaMult: number }
-> = {
-  1: { mass: 1.2, maxHp: 100, swimSpeed: 5, pullForce: 3, staminaMult: 1.0 },
-  2: { mass: 1.8, maxHp: 150, swimSpeed: 6, pullForce: 4.5, staminaMult: 1.4 },
-  3: { mass: 2.6, maxHp: 210, swimSpeed: 7, pullForce: 6, staminaMult: 1.9 },
-};
+// M4 round 1: the species is rolled AT SET from the disturbance-tier table
+// (loot stream) and the FishParams carry the stats that scale the tether fight
+// — replacing the M3 FISH_TIER_SCALE capsule. The wrongness curve is zone 1
+// (Shallows) for now = mild.
+const SHALLOWS_ZONE = 1;
 
 export function updateCastFlow(world: WorldState, dt: number): void {
   stepDisturbances(world, dt);
@@ -81,14 +77,15 @@ function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): vo
   }
 }
 
-// SET — roll species/weight AT the commit, spawn + scale the fish, start the
+// SET — roll species/params AT the commit, spawn + scale the fish, start the
 // tether fight, tag the active catch for the run reducer.
 function setCatch(world: WorldState, d: Disturbance): void {
   d.state = 'gone';
   world.run.promptId = null;
   const loot = createRng(world.seed, LOOT, d.id);
-  const species = rollSpeciesAtSet(loot, d.tier);
-  const weight = rollWeight(loot, d.tier);
+  const preset = rollSpeciesAtSet(loot, d.tier);
+  const params = generateFishParams(preset, loot, { zone: SHALLOWS_ZONE });
+  const weight = params.weightKg;
 
   const fish = world.fish ?? createFish();
   world.fish = fish;
@@ -103,29 +100,47 @@ function setCatch(world: WorldState, d: Disturbance): void {
     world.player.z = world.boat.z;
   }
 
-  const fight = startTetherFight(world, species, 'player');
+  const fight = startTetherFight(world, preset.id, 'player');
   if (fight) {
-    scaleFishForTier(world, fish, d.tier);
-    world.run.activeCatch = { disturbanceId: d.id, tier: d.tier, weight, species };
+    applySpeciesParams(world, fish, params);
+    world.run.activeCatch = {
+      disturbanceId: d.id,
+      tier: d.tier,
+      weight,
+      species: preset.id,
+      name: preset.name,
+    };
   } else {
     world.run.activeCatch = null;
   }
 }
 
-// Scale the M1 fish stats by the disturbance tier (dial 6 still applies).
-function scaleFishForTier(world: WorldState, fish: WorldState['fish'], tier: 1 | 2 | 3): void {
-  const s = FISH_TIER_SCALE[tier]!;
+// Apply the species FishParams to the catch's combat-facing stats (the species
+// replaces the M3 tier capsule — dial 6 fishStaminaPool still multiplies).
+function applySpeciesParams(
+  world: WorldState,
+  fish: WorldState['fish'],
+  params: FishParams,
+): void {
   if (!fish) return;
-  fish.maxHp = s.maxHp;
-  fish.hp = s.maxHp;
-  fish.tether.mass = s.mass;
-  fish.tether.maxSwimSpeed = s.swimSpeed;
-  fish.tether.pullForce = s.pullForce;
-  fish.tether.maxStamina = FISH_STAMINA_BASE * world.tuning.fishStaminaPool * s.staminaMult;
+  fish.maxHp = params.hp;
+  fish.hp = params.hp;
+  fish.tether.mass = params.mass;
+  fish.tether.maxSwimSpeed = params.swimSpeed;
+  fish.tether.pullForce = params.pullForce;
+  fish.tether.maxStamina = params.stamina * world.tuning.fishStaminaPool;
   fish.stamina = fish.tether.maxStamina;
+  fish.tether.lungeCooldown = params.lungeCooldown;
+  fish.tether.lungeStaminaCost = params.lungeStaminaCost;
+  fish.tether.dragSpeed = params.dragSpeed;
+  fish.tether.dragStaminaCostPerM = params.dragStaminaCostPerM;
+  fish.tether.routedDrag = params.routedDrag;
+  fish.tether.patterns = { ...params.patterns };
   fish.tether.exhausted = false;
   fish.state = 'idle';
   fish.stateTimer = 0;
+  fish.spine = new Float32Array(params.spineSegments);
+  fish.params = params;
 }
 
 // Casting: a fresh LMB press, aimed at an idle disturbance within CAST_RANGE of

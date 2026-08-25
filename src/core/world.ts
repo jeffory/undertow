@@ -19,6 +19,8 @@ import type { ClockPhase, NightClock } from '../game/clock';
 import { createClock } from '../game/clock';
 import type { RunResult } from '../save/schemas';
 import type { Disturbance } from '../run/disturbance';
+import type { FishParams } from '../gen/fishParams';
+import { makeParams } from '../gen/fishParams';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -177,6 +179,10 @@ export interface FishState {
   lungeHitDone: number; // 1 once contact damage has been dealt this lunge
   deadTilt: number; // 0→1 belly-flop roll (render rolls the body from this)
   exhaustTilt: number; // 0..max belly-tilt telegraph (animateFish ramps it, plan 02 §6.2)
+  // M4 — the species params this fish was generated from (render builds the
+  // mesh from it; animateFish reads swimFreq/swimAmp). Null only for legacy
+  // worlds before a species roll.
+  params: FishParams | null;
 }
 
 export interface GroundState {
@@ -220,8 +226,9 @@ export interface LureState {
 export interface ActiveCatch {
   disturbanceId: number;
   tier: number;
-  weight: number; // rolled from the LOOT stream at SET
-  species: string;
+  weight: number; // rolled from the LOOT stream at SET (species weightKg)
+  species: string; // species id (bestiary / tether log tag)
+  name: string; // display name for the TRIBUTE RECEIPT
 }
 
 // Spawn-director bookkeeping (plan §9.2): per-phase refill timer + one-shots.
@@ -298,6 +305,10 @@ export interface WorldState {
   clock: NightClock; // 03 — the Night Clock (epoch + phase length)
   run: RunState; // 03 — the run reducer state (haul / cast / result)
   disturbances: Disturbance[]; // 03 — live disturbance ripples (cast targets)
+  // Gate-driver camera override (plan 06 composed shots): when set, the render
+  // system uses this framing instead of the boat/player follow. Cleared on run
+  // reset (resetWorld rebuilds the struct). Not touched by game logic.
+  debugCam?: { x: number; y: number; z: number; lookX: number; lookZ: number } | null;
 }
 
 export const PLAYER_RADIUS = 0.5;
@@ -407,6 +418,7 @@ export function createFish(): FishState {
     lungeHitDone: 0,
     deadTilt: 0,
     exhaustTilt: 0,
+    params: makeParams(),
   };
 }
 

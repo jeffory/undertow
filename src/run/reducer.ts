@@ -27,7 +27,7 @@ export function landCatch(world: WorldState): CatchRecord | null {
   if (!c) return null;
   const memories = catchMemories(c.weight, c.tier, true);
   const rec: CatchRecord = {
-    species: c.species,
+    species: c.name.toLowerCase(), // receipt name ("one (1) purse minnow, damp")
     tier: c.tier,
     weight: c.weight,
     clean: true,
@@ -47,7 +47,7 @@ export function butcherCatch(world: WorldState): CatchRecord | null {
   const tier = Math.max(1, c.tier - 1);
   const memories = catchMemories(c.weight, tier, false);
   const rec: CatchRecord = {
-    species: c.species,
+    species: c.name.toLowerCase(),
     tier,
     weight: c.weight,
     clean: false,

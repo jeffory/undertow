@@ -1,0 +1,131 @@
+<!doctype html>
+<!-- Bestiary-style species showcase (M4 round 1, task t17). Renders four
+     Shallows species from their REAL generated params (gen/fishParams +
+     data/species + render/fishMesh) on neutral pedestals with front/rim
+     lights, slow turntable + low-amplitude sine-spine idle so entries read
+     "alive but still" (plan 04 §6.2). Served by vite: /tools/fish-viewer.html -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { margin: 0; background: #101416; overflow: hidden; }
+      #names {
+        position: fixed; left: 0; right: 0; bottom: 14px;
+        display: flex; justify-content: center; gap: 4vw;
+        font: 13px/1.4 ui-monospace, 'Courier New', monospace;
+        color: #b8c6c2; letter-spacing: 0.12em; text-transform: lowercase;
+      }
+      #names div .rarity { color: #e0b45a; margin-right: 8px; }
+      #names div .sub { display: block; color: #6a7a76; font-size: 10px; margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <div id="names"></div>
+    <script type="module">
+      import * as THREE from '/node_modules/three/build/three.module.js';
+      import { Rng } from '/src/core/rng';
+      import { generateFishParams } from '/src/gen/fishParams';
+      import { speciesById } from '/src/data/species';
+      import { buildFishRig, readabilityScale } from '/src/render/fishMesh';
+
+      const SHOW = ['silt-pikelet', 'toady-office', 'hollow-shiner', "marens-fox"];
+      const SCENE = new THREE.Scene();
+      SCENE.background = new THREE.Color(0x2b3033);
+      const cam = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.01, 500);
+      cam.position.set(0, 2.1, 6.4);
+      cam.lookAt(0, 0.75, 0);
+      const r = new THREE.WebGLRenderer({ antialias: true });
+      r.outputColorSpace = THREE.SRGBColorSpace;
+      r.setSize(innerWidth, innerHeight);
+      document.body.appendChild(r.domElement);
+
+      SCENE.add(new THREE.AmbientLight(0x223344, 0.9));
+      const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(3, 5, 6); SCENE.add(key);
+      const rim = new THREE.DirectionalLight(0x88aabb, 0.8); rim.position.set(-4, 2, -3); SCENE.add(rim);
+      const grid = new THREE.GridHelper(14, 14, 0x3a4144, 0x2a3033); grid.position.y = 0.1; SCENE.add(grid);
+
+      // pedestal plinth per species
+      const plinthMat = new THREE.MeshLambertMaterial({ color: 0x3a4144 });
+      const PLINTH = new THREE.CylinderGeometry(0.5, 0.62, 0.28, 20);
+
+      const spots = SHOW.map((id, i) => {
+        const x = (i - (SHOW.length - 1) / 2) * 2.2;
+        const plinth = new THREE.Mesh(PLINTH, plinthMat);
+        plinth.position.set(x, 0.24, 0);
+        SCENE.add(plinth);
+
+        // one generated params set per species (seeded → stable showcase)
+        const params = generateFishParams(speciesById(id), new Rng(42 + i * 7), { zone: 1 });
+        const rig = buildFishRig(params);
+        const group = new THREE.Group();
+        group.add(rig.mesh);
+        if (rig.glow) group.add(rig.glow);
+        // the game's readability scale (entries must read from the pedestal), with a
+        // little vertical plump so the lathed bodies read at showcase distance;
+        // the spine runs along +Z, so start broadside (spine across the frame)
+        const rs = readabilityScale(params);
+        group.scale.set(rs, rs * 2.2, rs);
+        group.position.set(x, 0.62, 0);
+        group.rotation.y = Math.PI / 2 + i * 0.7;
+        SCENE.add(group);
+        return { id, params, rig, group };
+      });
+
+      // captions
+      const names = document.getElementById('names');
+      for (const s of spots) {
+        const el = document.createElement('div');
+        const rar = { C: 'C', U: 'U', R: 'R', E: 'E' }[s.params.rarity] ?? s.params.rarity;
+        el.innerHTML = `<span class="rarity">[${rar}]</span>${s.params.name}<span class="sub">${s.params.totalLength.toFixed(1)}m · ${s.params.weightKg}kg · ${s.params.spineSegments} segs · ${s.params.finCount} fins</span>`;
+        names.appendChild(el);
+      }
+
+      // low-amplitude sine-spine idle + slow turntable (bestiary "alive but still")
+      function bendRig(rig, t) {
+        const n = rig.params.spineSegments;
+        const posAttr = rig.geo.attributes.position;
+        const pos = posAttr.array;
+        const th = new Float32Array(n);
+        let ang = 0;
+        for (let i = 0; i < n; i++) {
+          th[i] = ang;
+          ang += rig.params.swimAmp * 0.35 * Math.sin(t * rig.params.swimFreq + i * 0.9);
+        }
+        const jx = new Float32Array(n + 1);
+        const jz = new Float32Array(n + 1);
+        for (let i = 1; i <= n; i++) {
+          const dz = rig.segZ[i] - rig.segZ[i - 1];
+          const a = th[i - 1];
+          jx[i] = jx[i - 1] + dz * Math.sin(a);
+          jz[i] = jz[i - 1] + dz * Math.cos(a);
+        }
+        const base = rig.basePos;
+        const segOf = rig.segOfVertex;
+        for (let v = 0; v < rig.count; v++) {
+          const s = segOf[v];
+          const bx = base[v * 3], by = base[v * 3 + 1], bz = base[v * 3 + 2];
+          const oz = bz - rig.segZ[s];
+          const a = th[s];
+          const ca = Math.cos(a), sa = Math.sin(a);
+          pos[v * 3] = jx[s] + bx * ca + oz * sa;
+          pos[v * 3 + 1] = by;
+          pos[v * 3 + 2] = jz[s] - bx * sa + oz * ca;
+        }
+        posAttr.needsUpdate = true;
+        rig.geo.computeVertexNormals();
+        const norm = rig.geo.attributes.normal;
+        if (norm) norm.needsUpdate = true;
+      }
+
+      let t = 0;
+      r.setAnimationLoop(() => {
+        t += 0.016;
+        for (const s of spots) {
+          s.group.rotation.y += 0.001; // slow turntable — entries stay broadside
+          bendRig(s.rig, t);
+        }
+        r.render(SCENE, cam);
+      });
+    </script>
+  </body>
+</html>

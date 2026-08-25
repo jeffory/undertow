@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import type { TetherFight } from '../game/tether';
 import { GROUND_Y } from './ground';
+import { WATER_FISH_Y } from './fishMesh';
 
 // --- tuning ----------------------------------------------------------------
 const SEGMENTS = 16; // bezier samples
@@ -219,11 +220,14 @@ function updateRig(
   const p = world.player;
   const fish = world.fish;
   const ceiling = world.line.tensionCeiling;
+  const isFoot = world.mode === 'foot';
 
-  // Endpoints: rod-tip ≈ player + 1m up; hook on the catch (dive → sink).
-  P0.set(p.x, GROUND_Y + ROD_TIP_Y, p.z);
+  // Endpoints: rod-tip ≈ player + 1m up (boat deck during boat fights); hook on
+  // the catch at the fight's waterline (dive → sink).
+  const rodY = isFoot ? GROUND_Y + ROD_TIP_Y : WATER_FISH_Y + ROD_TIP_Y;
   const diving = rig.dive > 0 || (fish ? (fish.state as string) === 'dive' : false);
-  const hookY = GROUND_Y + HOOK_Y - (diving ? DIVE_DROP : 0);
+  const hookY = (isFoot ? GROUND_Y : WATER_FISH_Y) + HOOK_Y - (diving ? DIVE_DROP : 0);
+  P0.set(p.x, rodY, p.z);
   P2.set(fish ? fish.x : p.x, hookY, fish ? fish.z : p.z);
 
   // Control point: midpoint + sideways sag (catenary in top-down) with a touch
@@ -306,7 +310,7 @@ export function initLines(scene: THREE.Scene): void {
 export function updateLines(world: WorldState, dt: number): void {
   if (!root) return;
   const fights = world.tether.fights;
-  root.visible = world.mode === 'foot' && fights.length > 0;
+  root.visible = fights.length > 0; // boat fights (M4) render the line too
   if (!root.visible) return;
 
   const now = world.time.elapsed;

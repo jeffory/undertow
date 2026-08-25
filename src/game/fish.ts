@@ -299,8 +299,12 @@ export function animateFish(world: WorldState, dt: number): void {
   }
 
   const t = world.time.elapsed;
+  // M4: per-species swim profile (plan 04 §3.1) — the M1 constants are the
+  // default when no species params are attached (legacy land fish).
+  const freq = fish.params?.swimFreq ?? SWIM_FREQ;
+  const amp = fish.params?.swimAmp ?? SPINE_AMP;
   for (let i = 0; i < fish.spine.length; i++) {
-    const bend = SPINE_AMP * ampScale * Math.sin(t * SWIM_FREQ + i * SPINE_PHASE);
+    const bend = amp * ampScale * Math.sin(t * freq + i * SPINE_PHASE);
     fish.spine[i] = Number.isFinite(bend) ? bend : 0;
   }
 }

@@ -98,16 +98,23 @@ export function render(world: WorldState, dt: number): void {
 
   // smooth camera follow — the boat in M0, the player on foot in M1 (same low
   // top-down angle: the camera sits behind the subject on +z so the horizon/
-  // fog band stays in frame; plan §3.1).
-  const foot = world.mode === 'foot';
+  // fog band stays in frame; plan §3.1). A gate driver may override the framing
+  // via world.debugCam (plan 06 composed shots).
   const c = ctx.camera;
-  const tx = foot ? world.player.x : world.boat.x;
-  const tz = foot ? world.player.z : world.boat.z;
-  const lerp = 1 - Math.exp(-dt * 5);
-  c.position.x += (tx - c.position.x) * lerp;
-  c.position.z += (tz + 12 - c.position.z) * lerp;
-  c.position.y = 14;
-  c.lookAt(tx, 0, tz);
+  const cam = world.debugCam;
+  if (cam) {
+    c.position.set(cam.x, cam.y, cam.z);
+    c.lookAt(cam.lookX, 0.6, cam.lookZ);
+  } else {
+    const foot = world.mode === 'foot';
+    const tx = foot ? world.player.x : world.boat.x;
+    const tz = foot ? world.player.z : world.boat.z;
+    const lerp = 1 - Math.exp(-dt * 5);
+    c.position.x += (tx - c.position.x) * lerp;
+    c.position.z += (tz + 12 - c.position.z) * lerp;
+    c.position.y = 14;
+    c.lookAt(tx, 0, tz);
+  }
 
   // mouse → world aim point (the cast system reads it next fixed step)
   updatePick(world, ctx);

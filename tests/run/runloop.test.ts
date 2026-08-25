@@ -16,6 +16,7 @@ import { dreadMultForPhase } from '../../src/game/clock';
 import { catchMemories, CONDOLENCE_RATE } from '../../src/extract/memories';
 import { pointInPolygon } from '../../src/core/poly';
 import { createDisturbance, PROMPT_WINDOW, type Disturbance } from '../../src/run/disturbance';
+import { speciesById } from '../../src/data/species';
 import type { WorldState } from '../../src/core/world';
 
 const DT = FIXED_DT;
@@ -134,6 +135,57 @@ describe('SET starts the tether fight (fish scaled by tier)', () => {
     expect(w.fish).toBeNull();
     expect(w.dread).toBe(dreadBefore); // the free valve — never raises Dread
     expect(w.run.haul.length).toBe(0);
+  });
+});
+
+describe('M4 species roll at SET (replaces the tier capsule)', () => {
+  it('SET rolls a real species: fish carries params + a resized spine', () => {
+    const w = bootWorld(13);
+    const d = disturbanceByBoat(w, 2);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w);
+
+    const c = w.run.activeCatch!;
+    expect(c.species).not.toBe('capsule');
+    expect(speciesById(c.species)).toBeDefined();
+    expect(c.name).toBe(speciesById(c.species).name);
+    expect(c.weight).toBeGreaterThan(0);
+
+    const f = w.fish!;
+    expect(f.params).not.toBeNull();
+    expect(f.params!.speciesId).toBe(c.species);
+    expect(f.spine.length).toBe(f.params!.spineSegments);
+    // the species stats replaced the FISH_TIER_SCALE capsule
+    expect(f.tether.mass).toBeCloseTo(f.params!.mass, 9);
+    expect(f.maxHp).toBe(f.params!.hp);
+    expect(f.tether.patterns).toEqual(f.params!.patterns);
+  });
+
+  it('a landed catch writes the receipt name (lowercase display) into the haul', () => {
+    const w = bootWorld(15);
+    const d = disturbanceByBoat(w, 2);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w);
+
+    const display = w.run.activeCatch!.name.toLowerCase();
+    w.fish!.stamina = 0;
+    w.fish!.tether.exhausted = true;
+    w.fish!.x = w.player.x;
+    w.fish!.z = w.player.z;
+    updateTetherConstraint(w, DT);
+    w.intent.acceptLand = true;
+    updateTetherConstraint(w, DT);
+    processRunEvents(w);
+
+    expect(w.run.haul).toHaveLength(1);
+    expect(w.run.haul[0]!.species).toBe(display); // "one (1) purse minnow, damp"
+    expect(w.run.haul[0]!.clean).toBe(true);
+    expect(w.run.haul[0]!.memories).toBe(catchMemories(w.run.haul[0]!.weight, 2, true));
+    void display;
   });
 });
 
