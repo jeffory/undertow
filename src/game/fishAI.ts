@@ -132,7 +132,10 @@ function canLunge(world: WorldState, fish: FishState, ai: FishState['ai']): bool
 
 function enterLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: FishState['ai']): void {
   ai!.mode = 'lunge';
-  ai!.telegraph = world.tuning.lungeTelegraph; // dial 5 — the hard telegraph gate
+  // dial 5 — the hard telegraph gate. Floor at EPS: lungeStep only fires the
+  // impulse on the telegraph countdown reaching 0, so a dial of exactly 0 would
+  // otherwise skip the countdown branch and the lunge would silently never fire.
+  ai!.telegraph = Math.max(EPS, world.tuning.lungeTelegraph);
   ai!.telegraphKind = 'lunge';
   const d = awayDir(world, fish, ai);
   ai!.pullDirX = d.x;
@@ -168,7 +171,9 @@ function enterDrag(world: WorldState, fight: TetherFight, fish: FishState, ai: F
   fish.state = 'idle';
   if (routed) {
     // "telegraph toward it, then drag along that route deliberately" (plan §7)
-    ai!.telegraph = world.tuning.lungeTelegraph;
+    // EPS floor for the same reason as enterLunge: a 0 dial must still pass
+    // through the countdown branch that arms the drag-swim timer.
+    ai!.telegraph = Math.max(EPS, world.tuning.lungeTelegraph);
     ai!.telegraphKind = 'drag';
     ai!.timer = world.tuning.lungeTelegraph; // telegraph phase first
     world.tetherEvents.push({
