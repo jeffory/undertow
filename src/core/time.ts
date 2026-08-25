@@ -7,6 +7,7 @@ export interface Time {
   accumulator: number; // leftover real time to step through
   step: number; // fixed steps taken this frame (for interpolation)
   elapsed: number; // total simulated time (seconds)
+  simSteps: number; // total fixed sim steps executed (runSimSteps counts these)
   lastReal: number; // performance.now() of previous frame (ms)
   nightPhase: number; // 0..1 dusk→deep-night stub; owned by 03
   timescale: number; // ?timescale=N debug multiplier (clamped 1..20, default 1)
@@ -38,6 +39,7 @@ export function createTime(): Time {
     accumulator: 0,
     step: 0,
     elapsed: 0,
+    simSteps: 0,
     lastReal: 0,
     nightPhase: 0,
     timescale: 1,
@@ -69,9 +71,9 @@ export function advanceClock(time: Time, realMs: number): number {
 // Steps actually due this display frame = base clock steps × timescale (plan 06
 // "Gate-driver speed"). FIXED_DT is untouched, so determinism and all spec
 // timings are preserved — sim time just advances N× faster per wall-clock frame.
-// `elapsed` advances per SIM step (not per base step), so time-sampled behavior
-// (AI rand streams, drag windows) is byte-identical to a real-time run of the
-// same sim steps.
+// NOTE: this advances `elapsed` for the whole frame in one lump. Callers that
+// run sim systems must use runSimSteps (below) so each step observes its own
+// per-step elapsed value.
 export function frameSimSteps(time: Time, realMs: number): number {
   const baseSteps = advanceClock(time, realMs);
   if (time.timescale > 1) {
@@ -79,4 +81,22 @@ export function frameSimSteps(time: Time, realMs: number): number {
   }
   time.step = baseSteps * time.timescale;
   return time.step;
+}
+
+// Run every sim step due this display frame, advancing `elapsed` PER STEP.
+// advanceClock/frameSimSteps advance `elapsed` for the whole frame up front, so
+// systems inside the step loop would all observe the end-of-frame value — and
+// how steps batch into display frames depends on wall-clock frame timing, which
+// breaks replay determinism (spec 8.3) for anything sampling elapsed (drag
+// windows, drift sines, the Night Clock). Here each step sees
+// elapsed = simSteps × FIXED_DT — an exact product, independent of batching and
+// free of long-run float accumulation drift.
+export function runSimSteps(time: Time, realMs: number, step: (dt: number) => void): number {
+  const steps = frameSimSteps(time, realMs);
+  for (let i = 0; i < steps; i++) {
+    time.simSteps++;
+    time.elapsed = time.simSteps * FIXED_DT;
+    step(FIXED_DT);
+  }
+  return steps;
 }

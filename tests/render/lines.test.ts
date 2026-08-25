@@ -58,3 +58,32 @@ describe('line sag (plan §9: sag = (1 − tension/100) × kSag)', () => {
     expect(lineSag(150, CEILING)).toBe(0);
   });
 });
+// --- QA round: rig reaping ------------------------------------------------------
+// When the LAST fight ends, updateLines used to early-return before the reap
+// loop, stranding the final rig's geometries and materials in the scene + the
+// module Map until the next fight (or forever).
+
+import { createWorld, createFish } from '../../src/core/world';
+import { startTetherFight, M2_SPECIES } from '../../src/game/tether';
+import { initLines, updateLines } from '../../src/render/lines';
+
+describe('updateLines rig reaping', () => {
+  it('reaps the last rig on the very step the final fight ends', () => {
+    const scene = new THREE.Scene();
+    initLines(scene);
+    const root = scene.children.find((c) => c instanceof THREE.Group) as THREE.Group;
+    expect(root).toBeDefined();
+
+    const w = createWorld(1);
+    w.fish = createFish();
+    startTetherFight(w, M2_SPECIES, 'player');
+    updateLines(w, 1 / 60);
+    expect(root.children.length).toBe(1); // rig built
+
+    // the fight ends (snap/cut/land) → constraint removed it from fights
+    w.tether.fights.length = 0;
+    updateLines(w, 1 / 60);
+    expect(root.children.length).toBe(0); // rig removed + disposed immediately
+    expect(root.visible).toBe(false);
+  });
+});

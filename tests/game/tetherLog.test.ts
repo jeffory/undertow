@@ -216,3 +216,29 @@ describe('tetherLog — event tallies', () => {
     expect(Array.isArray(f.samples)).toBe(true);
   });
 });
+describe('fight-id reuse across run resets (QA round)', () => {
+  it('a recycled fight id starts a fresh record instead of merging into the finished one', () => {
+    resetTetherLog();
+    const w = createWorld(1);
+    w.fish = createFish();
+    w.fish.x = 5;
+    const first = startTetherFight(w, M2_SPECIES, 'player')!;
+    updateTetherLog(w, DT);
+    // end the fight: constraint removed it, logger finalizes next tick
+    w.tether.fights.length = 0;
+    w.tetherEvents.length = 0;
+    w.tetherEvents.push({ type: 'cut', fightId: first.id, lineId: 'waxed-linen', cost: 'lure' });
+    updateTetherLog(w, DT);
+    expect(getSessionLog().fights[0]!.outcome).toBe('cut');
+
+    // simulate a run reset: tether ids restart at 1 → same id, new fight
+    w.tether.nextId = first.id;
+    w.tetherEvents.length = 0;
+    const second = startTetherFight(w, M2_SPECIES, 'player')!;
+    expect(second.id).toBe(first.id); // the collision under test
+    updateTetherLog(w, DT);
+    const rec = getSessionLog().fights.find((f) => f.fightId === second.id)!;
+    expect(rec.outcome).toBe('ongoing'); // fresh record, not the finished 'cut' one
+    expect(rec.endedAt).toBeNull();
+  });
+});

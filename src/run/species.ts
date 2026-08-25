@@ -14,12 +14,3 @@ export function rollSpeciesAtSet(rng: Rng, tier: 1 | 2 | 3 | 4): SpeciesPreset {
   const t = Math.max(1, Math.min(3, tier)) as 1 | 2 | 3;
   return rollSpeciesFromTier(rng, t);
 }
-
-// Legacy M3 weight helper — the receipt weight now comes from the species
-// params (weightKg = k·totalLength³). Kept as the tier fallback for callers
-// that predate a species roll.
-export function rollWeight(rng: Rng, tier: 1 | 2 | 3 | 4): number {
-  const [lo, hi] =
-    tier === 1 ? [2, 6] : tier === 2 ? [6, 14] : tier === 3 ? [14, 30] : [26, 44];
-  return Math.round(rng.range(lo, hi) * 10) / 10;
-}

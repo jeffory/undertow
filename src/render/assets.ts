@@ -83,11 +83,17 @@ export function loadAssets(): void {
 }
 
 // Returns a fresh clone of the loaded model, or null while loading / on failure.
-// Cloning lets every caller (e.g. the player) own its own copy.
+// Cloning lets every caller (e.g. the player) own its own copy of the scene
+// NODES — but Object3D.clone() SHARES geometries/materials with the cached
+// source, so clones are tagged sharedAsset and must never be disposed (see
+// render/lake.ts disposeObject): disposing one would free the cache's buffers
+// and every later clone would render as nothing.
 export function getAsset(id: string): THREE.Group | null {
   const src = loaded.get(id);
   if (!src) return null;
-  return src.clone();
+  const clone = src.clone();
+  clone.userData.sharedAsset = true;
+  return clone;
 }
 
 // Loaded-state helper so the player knows whether to keep the primitive.

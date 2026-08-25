@@ -418,3 +418,21 @@ describe('replay determinism (spec 8.3)', () => {
     expect(a.tetherEvents.length).toBe(b.tetherEvents.length);
   });
 });
+describe('zero telegraph dial (QA round)', () => {
+  it('lungeTelegraph = 0 still fires the lunge instead of silently dropping it', () => {
+    const { w } = fightWorld();
+    const ai = w.fish!.ai!;
+    w.tuning.lungeTelegraph = 0;
+    ai.timer = 0; // force an orbit transition roll immediately
+    w.fish!.tether.patterns = { orbit: 0, lunge: 1, dive: 0, drag: 0 }; // lunge only
+    w.fish!.stamina = 1e6;
+    let fired = false;
+    for (let i = 0; i < 10 && !fired; i++) {
+      updateTetherFishAI(w, DT);
+      if (w.tetherEvents.some((e) => e.type === 'lunge')) fired = true;
+      updateTetherConstraint(w, DT);
+      movement(w, DT);
+    }
+    expect(fired).toBe(true);
+  });
+});

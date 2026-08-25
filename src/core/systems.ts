@@ -14,6 +14,7 @@ import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
 import { constrainToCircle, separateCircles } from './collision';
 import { constrainCircleInConvex, constrainCircleOutsideHull } from './poly';
 import { dockedIslet, BOAT_COLLIDE_RADIUS } from '../gen/lakeWorld';
+import { stepBoatKinematics } from '../game/boatPhysics';
 import { phaseAt, runElapsedMs } from '../game/clock';
 import { tierFor } from '../game/dread';
 import { updateTetherConstraint } from '../game/tetherConstraint';
@@ -49,11 +50,19 @@ function intent(world: WorldState, dt: number): void {
   // pool (stamina.ts) so spends made this step are reflected immediately.
   updateController(world, dt);
   updateStamina(world, dt);
+  // Boat kinematics (heading/speed from intent) belong to the intent phase too,
+  // per fixed step: they used to run inside the render pass (game/boat.ts),
+  // which stepped them once per DISPLAY frame — boat acceleration/turn rate
+  // then scaled with the display refresh rate and broke determinism (and
+  // ?timescale runs got 1 kinematics step per N movement steps). movement stays
+  // pure position integration.
+  if (world.mode === 'boat') stepBoatKinematics(world.boat, world.intent, dt);
 }
 
 export function movement(world: WorldState, dt: number): void {
   // Boat (M0): integrate position from heading/speed. Only in boat mode — the
-  // boat stays parked while on foot (M1 scaffold).
+  // boat stays parked while on foot (M1 scaffold). Heading/speed themselves
+  // advance in the intent phase (stepBoatKinematics), per fixed step.
   if (world.mode === 'boat') {
     if (world.boat.speed !== 0) {
       world.boat.x += Math.sin(world.boat.heading) * world.boat.speed * dt;

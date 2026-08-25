@@ -236,7 +236,9 @@ def bake_decimate(obj, max_faces):
         mat = bpy.data.materials.new("baked_mat")
         mat.use_nodes = True
     nt = mat.node_tree
-    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    # next() needs an explicit default: without it a material with no Principled
+    # node raises StopIteration and the fallback below is dead code.
+    bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
     if bsdf is None:
         bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
 

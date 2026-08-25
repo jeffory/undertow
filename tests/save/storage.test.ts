@@ -79,3 +79,48 @@ async function applyOne(backend: SaveBackend) {
 
 // keep the key import referenced (used by the IndexedDB store path)
 expect(typeof SAVE_STORAGE_KEY).toBe('string');
+describe('SaveWriter (concurrent write serialization — QA round)', () => {
+  class SlowBackend implements SaveBackend {
+    inner = new MemorySaveBackend();
+    delayMs = 10;
+    async load() {
+      await new Promise((r) => setTimeout(r, this.delayMs));
+      return this.inner.load();
+    }
+    async write(data: unknown) {
+      await new Promise((r) => setTimeout(r, this.delayMs));
+      return this.inner.write(data);
+    }
+  }
+
+  it('two overlapping run writes both land (the load-then-write race is gone)', async () => {
+    const { SaveWriter } = await import('../../src/core/save');
+    const backend = new SlowBackend();
+    const writer = new SaveWriter(backend);
+    // fire both without awaiting — this is exactly the run-end + next-run race
+    const [, second] = await Promise.all([writer.record(result()), writer.record(result())]);
+    expect(second.meta.runsCompleted).toBe(2);
+    expect(second.runs).toHaveLength(2);
+    expect(second.meta.memoriesTotal).toBe(12);
+    const onDisk = await loadSave(backend.inner);
+    expect(onDisk.meta.runsCompleted).toBe(2);
+  });
+
+  it('a failed write does not wedge the queue for later writes', async () => {
+    const { SaveWriter } = await import('../../src/core/save');
+    let fail = true;
+    const mem = new MemorySaveBackend();
+    const backend: SaveBackend = {
+      load: () => mem.load(),
+      write: (d) => {
+        if (fail) return Promise.reject(new Error('quota'));
+        return mem.write(d);
+      },
+    };
+    const writer = new SaveWriter(backend);
+    await expect(writer.record(result())).rejects.toThrow('quota');
+    fail = false;
+    const save = await writer.record(result());
+    expect(save.meta.runsCompleted).toBe(1);
+  });
+});

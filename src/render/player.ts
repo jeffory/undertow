@@ -132,6 +132,14 @@ function trySwap(): void {
   if (!model) return;
   if (primitive) {
     root.remove(primitive);
+    // free the fallback's buffers — this module built them, nothing shares them
+    primitive.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      }
+    });
     primitive = null;
   }
   // Model origin is at the feet and +Y is up (see prep.py normalize); it

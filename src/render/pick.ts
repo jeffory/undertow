@@ -7,13 +7,16 @@ import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import type { RenderContext } from './renderer';
 
+// scratch objects hoisted out of the per-frame path (no per-frame allocation)
+const ndc = new THREE.Vector2();
+const ray = new THREE.Raycaster();
+
 export function updatePick(world: WorldState, ctx: RenderContext): void {
   const w = ctx.renderer.domElement.clientWidth || 1;
   const h = ctx.renderer.domElement.clientHeight || 1;
   const mx = world.input.mouseX;
   const my = world.input.mouseY;
-  const ndc = new THREE.Vector2((mx / w) * 2 - 1, -(my / h) * 2 + 1);
-  const ray = new THREE.Raycaster();
+  ndc.set((mx / w) * 2 - 1, -(my / h) * 2 + 1);
   ray.setFromCamera(ndc, ctx.camera);
   const dir = ray.ray.direction;
   if (Math.abs(dir.y) < 1e-6) {

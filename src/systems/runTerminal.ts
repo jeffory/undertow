@@ -41,7 +41,14 @@ export function updateRunTerminal(world: WorldState, dt: number): void {
   if (run.ended) return;
 
   // Extraction: in the boat, no fight, near a live buoy, holding E 1.5s.
-  if (world.mode === 'boat' && world.tether.fights.length === 0) {
+  // The buoy scan only matters while E is held (or a hold is being cleared) —
+  // skipping it in the common no-input case avoids a per-buoy distance walk
+  // every fixed step of every boat-mode run.
+  if (
+    world.mode === 'boat' &&
+    world.tether.fights.length === 0 &&
+    (world.intent.extract || run.extract.held !== 0 || run.extract.buoyId !== null)
+  ) {
     const buoy = nearestExtractBuoy(world, world.boat.x, world.boat.z);
     if (buoy && world.intent.extract) {
       run.extract.held += dt;

@@ -104,3 +104,49 @@ describe('timescale hook (plan 06 "Gate-driver speed")', () => {
     expect(s2).toBe(s1);
   });
 });
+describe('runSimSteps (per-step elapsed — QA round)', () => {
+  it('systems observe the same elapsed sequence regardless of frame batching', async () => {
+    const { runSimSteps } = await import('../../src/core/time');
+    // clock A: 6 steps delivered as 6 × one-step frames
+    const a = createTime();
+    runSimSteps(a, 1000, () => {});
+    const seenA: number[] = [];
+    for (let f = 1; f <= 6; f++) {
+      runSimSteps(a, 1000 + f * (1000 / 60), () => seenA.push(a.elapsed));
+    }
+    // clock B: the same 6 steps delivered as 2 × three-step frames
+    const b = createTime();
+    runSimSteps(b, 1000, () => {});
+    const seenB: number[] = [];
+    for (let f = 1; f <= 2; f++) {
+      runSimSteps(b, 1000 + f * 3 * (1000 / 60), () => seenB.push(b.elapsed));
+    }
+    expect(seenA).toHaveLength(6);
+    expect(seenB).toHaveLength(6);
+    expect(seenB).toEqual(seenA);
+  });
+
+  it('advances elapsed exactly one FIXED_DT per executed step, timescale included', async () => {
+    const { runSimSteps } = await import('../../src/core/time');
+    const t = createTime();
+    t.timescale = 10;
+    runSimSteps(t, 1000, () => {});
+    const seen: number[] = [];
+    const steps = runSimSteps(t, 1016.7, () => seen.push(t.elapsed));
+    expect(steps).toBe(10);
+    seen.forEach((e, i) => expect(e).toBeCloseTo((i + 1) * FIXED_DT, 12));
+    expect(t.elapsed).toBeCloseTo(10 * FIXED_DT, 12);
+  });
+
+  it('elapsed is an exact product of step count (no float accumulation drift)', async () => {
+    const { runSimSteps } = await import('../../src/core/time');
+    const t = createTime();
+    runSimSteps(t, 0, () => {});
+    // one hour of one-step frames
+    const frameMs = 1000 / 60;
+    for (let f = 1; f <= 60 * 60 * 60; f++) {
+      runSimSteps(t, f * frameMs, () => {});
+    }
+    expect(t.elapsed).toBe(t.simSteps * FIXED_DT); // exact, not accumulated
+  });
+});

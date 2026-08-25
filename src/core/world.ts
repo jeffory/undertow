@@ -378,6 +378,10 @@ export function createWorld(seed = 1): WorldState {
     seed,
     mode: 'boat',
     tether: { fights: [], nextId: 1 },
+    // copies, not references: the debug panel mutates world.tuning in place and
+    // gear swaps will mutate world.line — sharing the module constants meant a
+    // slider drag silently rewrote DEFAULT_TUNING itself, so "reset to
+    // defaults" and every later createWorld() inherited the mutated values
     line: { ...BASE_LINE },
     tuning: { ...DEFAULT_TUNING },
     tetherEvents: [],

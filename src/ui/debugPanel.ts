@@ -94,6 +94,10 @@ function syncSliders(world: WorldState): void {
 }
 
 function buildPanel(world: WorldState): void {
+  // Set the guard FIRST: if anything below ever threw, updateDebugPanel would
+  // otherwise re-run the whole build (including the window keydown listener)
+  // every frame.
+  built = true;
   rootEl = document.createElement('div');
   rootEl.id = 'debug-panel';
   document.body.appendChild(rootEl);
@@ -185,7 +189,6 @@ function buildPanel(world: WorldState): void {
     world.tuning[key] = v;
   }
   syncSliders(world);
-  built = true;
 }
 
 // --- per-frame readouts ----------------------------------------------------------
