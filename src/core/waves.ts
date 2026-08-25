@@ -25,6 +25,11 @@ export const WAVES: GerstnerWave[] = [
   { direction: 4.5, wavelength: 18, amplitude: 0.28, speed: 3.2, steepness: 0.7 },
 ];
 
+// Peak surface height = Σ amplitudes (~1.23). The shader's crest-accent and
+// foam thresholds are expressed as fractions of this so they stay coupled to
+// the wave table (single source of truth for the wave constants).
+export const WAVE_MAX_HEIGHT = WAVES.reduce((s, w) => s + w.amplitude, 0);
+
 export function wavenumber(wavelength: number): number {
   return (2 * Math.PI) / wavelength;
 }

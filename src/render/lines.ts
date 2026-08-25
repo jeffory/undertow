@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import type { TetherFight } from '../game/tether';
-import { GROUND_Y } from './ground';
+import { groundYAt } from './lake';
 import { WATER_FISH_Y } from './fishMesh';
 
 // --- tuning ----------------------------------------------------------------
@@ -223,10 +223,14 @@ function updateRig(
   const isFoot = world.mode === 'foot';
 
   // Endpoints: rod-tip ≈ player + 1m up (boat deck during boat fights); hook on
-  // the catch at the fight's waterline (dive → sink).
-  const rodY = isFoot ? GROUND_Y + ROD_TIP_Y : WATER_FISH_Y + ROD_TIP_Y;
+  // the catch at the fight's waterline (dive → sink). On foot both anchors ride
+  // the terrain surface so the line stays attached to the rod and the catch.
+  const rodY = isFoot ? groundYAt(world, p.x, p.z) + ROD_TIP_Y : WATER_FISH_Y + ROD_TIP_Y;
   const diving = rig.dive > 0 || (fish ? (fish.state as string) === 'dive' : false);
-  const hookY = (isFoot ? GROUND_Y : WATER_FISH_Y) + HOOK_Y - (diving ? DIVE_DROP : 0);
+  const hookBase = isFoot
+    ? groundYAt(world, fish ? fish.x : p.x, fish ? fish.z : p.z)
+    : WATER_FISH_Y;
+  const hookY = hookBase + HOOK_Y - (diving ? DIVE_DROP : 0);
   P0.set(p.x, rodY, p.z);
   P2.set(fish ? fish.x : p.x, hookY, fish ? fish.z : p.z);
 

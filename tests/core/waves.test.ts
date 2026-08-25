@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { waterHeightAt, WAVES } from '../../src/core/waves';
+import { waterHeightAt, WAVES, WAVE_MAX_HEIGHT } from '../../src/core/waves';
 
 const SUM_AMPS = WAVES.reduce((s, w) => s + w.amplitude, 0);
 
@@ -48,5 +48,12 @@ describe('waterHeightAt (pure Gerstner sum)', () => {
       maxSeen = Math.max(maxSeen, waterHeightAt(0, 0, t));
     }
     expect(maxSeen).toBeGreaterThanOrEqual(0.8 * SUM_AMPS);
+  });
+
+  it('WAVE_MAX_HEIGHT is the Σ-amplitude bound the shader thresholds derive from', () => {
+    // the water fragment shader's crest-accent + foam thresholds are fractions
+    // of this value (single source of truth), so pin it to the wave table.
+    expect(WAVE_MAX_HEIGHT).toBeCloseTo(SUM_AMPS, 12);
+    expect(WAVE_MAX_HEIGHT).toBeCloseTo(1.23, 10);
   });
 });

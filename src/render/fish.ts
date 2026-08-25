@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
-import { GROUND_Y } from './ground';
+import { groundYAt } from './lake';
 import { HIT_FLASH_DURATION } from '../game/fish';
 import { buildFishRig, disposeFishRig, readabilityScale, FISH_MATERIAL, WATER_FISH_Y, type FishRig } from './fishMesh';
 
@@ -113,7 +113,7 @@ export function updateFishMesh(world: WorldState, _dt: number): void {
   }
   if (!rig || !rigFor) return;
 
-  const y = world.mode === 'boat' ? WATER_FISH_Y : GROUND_Y + 0.35;
+  const y = world.mode === 'boat' ? WATER_FISH_Y : groundYAt(world, fish!.x, fish!.z) + 0.35;
   outer.position.set(fish!.x, y, fish!.z);
   outer.scale.setScalar(readabilityScale(rigFor));
   outer.rotation.y = fish!.facing;

@@ -69,39 +69,41 @@ export interface SkyPalette {
   fogDensity: number;
 }
 
-// dusk bone-teal → night near-black → deep night +blue fog → false dawn pale
+// dusk bone-teal → night near-black → deep night +blue fog → false dawn pale.
+// Round A: fog/sky deepened toward dark teal (VS QA: the void must read as
+// night sky, not grey) — every phase darker, fog tinted teal (blue > red).
 export function skyPaletteForPhase(phase: ClockPhase): SkyPalette {
   switch (phase) {
     case 'dusk':
       return {
-        top: [10, 20, 24],
-        horizon: [22, 48, 60],
-        bottom: [5, 7, 9],
-        fog: [18, 44, 58],
-        fogDensity: 0.015,
+        top: [8, 14, 18],
+        horizon: [16, 34, 44],
+        bottom: [4, 6, 8],
+        fog: [12, 32, 42],
+        fogDensity: 0.016,
       };
     case 'night':
       return {
-        top: [6, 10, 14],
-        horizon: [14, 28, 40],
-        bottom: [3, 4, 6],
-        fog: [12, 26, 38],
-        fogDensity: 0.018,
+        top: [5, 9, 13],
+        horizon: [11, 22, 32],
+        bottom: [2, 3, 5],
+        fog: [9, 21, 32],
+        fogDensity: 0.019,
       };
     case 'deepNight':
       return {
-        top: [3, 5, 9],
-        horizon: [8, 16, 28],
-        bottom: [2, 3, 5],
-        fog: [8, 20, 34],
-        fogDensity: 0.022,
+        top: [2, 4, 8],
+        horizon: [6, 13, 24],
+        bottom: [1, 2, 4],
+        fog: [7, 17, 29],
+        fogDensity: 0.023,
       };
     case 'falseDawn':
       return {
-        top: [20, 26, 32],
-        horizon: [40, 58, 70],
-        bottom: [10, 14, 18],
-        fog: [36, 52, 66],
+        top: [16, 22, 28],
+        horizon: [32, 46, 58],
+        bottom: [8, 12, 16],
+        fog: [30, 44, 56],
         fogDensity: 0.014,
       };
   }

@@ -1,31 +1,57 @@
-// LAKE RENDER — M3 round 1 (task scope 4). Renders the procedural lake:
-// every islet's polygon as a flat-shaded earth mesh with slight height
-// variation, distinct primitive markers for wrecks / buoys / sinkholes, cloned
-// rocks.glb instances on islet edges, and the lighthouse on the designated
-// start islet. Perf: islet meshes are a handful of tris each; markers are 1-2
-// draw calls each; the heavy geometry is the shared rocks.glb clones
-// (budgeted to ~4) and one lighthouse instance. Visible in BOTH modes (the
-// lake is the world; ground.ts's debug disc only shows without a lake).
+// LAKE RENDER — M3 round 1 (task scope 4) + CRITICAL round B islet terrain
+// (task t2). Renders the procedural lake: every islet as a FLAT-SHADED,
+// FACETED slate-rock mesh with stepped height relief (a deterministic height
+// field from src/gen/isletHeight.ts, low-amplitude noise rising toward the
+// centre) and a beveled skirt dropping below the waterline so the shore reads
+// as a rocky edge, not a paper cutout. Distinct primitive markers for wrecks /
+// buoys / sinkholes, cloned rocks.glb instances scattered on the SHORELINE of
+// eligible islets sitting ON the terrain, and the lighthouse anchored on a
+// crag at the START ISLET'S FAR EDGE (scaled ~1.6x). Perf: islet meshes are a
+// few hundred tris each; markers are 1-2 draw calls each; the heavy geometry is
+// the shared rocks.glb clones (budgeted) and one lighthouse instance. Visible
+// in BOTH modes (the lake is the world; ground.ts's debug disc only shows
+// without a lake).
+//
+// groundYAt(world, x, z) is the entity-grounding seam: player / fish / props /
+// tether-line read their feet height from it, sampling the SAME field that
+// builds the visual mesh, so feet meet the terrain exactly. The walkable
+// polygon collision contract is untouched — collision still uses the hull; the
+// visual skirt may overhang it slightly.
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import type { Buoy, Islet, LakeMap, Wreck } from '../gen/lakeMap';
-import { polygonCentroid } from '../core/poly';
+import {
+  isletHeightAt,
+  isletMaxRadius,
+  isletPeakRise,
+  isletHash01,
+} from '../gen/isletHeight';
 import { getAsset, hasAsset } from './assets';
 
-export const GROUND_Y = 0.25; // islet top surface, above the water plane
+export const GROUND_Y = 0.25; // islet shoreline surface, above the water plane
 
-// Earth palette (matches the M1 debug ground) with per-islet slight variation
-const EARTH_TOP = 0x6a5336;
-const EARTH_EDGE = 0x3a2c1c;
-
+// --- slate-rock palette (CRITICAL bar: dark slate #1c2226..#2d353b with
+// earth-brown accents near the waterline) ---------------------------------------
+const SLATE_DARK = 0x1c2226; // dark slate — low slopes / shade facets
+const SLATE_LIGHT = 0x2d353b; // lighter slate — raised facets catch the moon
+const EARTH = 0x3a2c1c; // earth-brown accent at the waterline
+const DEEP = 0x0a0d10; // near-black below the waterline (the skirt)
 const WRECK_COLOR = 0x1c1512; // near-black timber
 const BUOY_PRIMARY = 0xffb45e; // warm amber — the extraction buoy near the start
 const BUOY_SECONDARY = 0x9db8d4; // pale bone-teal — the mid-map buoy
 const SINKHOLE_COLOR = 0x04070a; // the descent gap
 
-const LIGHTHOUSE_SCALE = 0.18; // 22m glb → ~4m tower on the start islet
+const LIGHTHOUSE_SCALE = 0.29; // 22m glb → ~6.4m tower (1.6x the old 0.18)
+const LIGHTHOUSE_EDGE_T = 0.9; // how far toward the far edge the tower sits
 const ROCK_SCALE = 0.45; // rocks.glb (2.2m) → ~1m shoreline boulders
+
+// Islet terrain construction: ISLET_RINGS rings (the rim is the last) with 2n
+// verts each (poly verts + edge midpoints — same footprint), plus a centre fan
+// and an outward-and-down beveled skirt below the waterline.
+const ISLET_RINGS = 4;
+const SKIRT_OUT = 1.14; // skirt extends this fraction beyond the rim footprint
+const SKIRT_DROP = 1.1; // skirt drops this far below GROUND_Y (below the water)
 
 let lakeGroup: THREE.Group | null = null;
 let builtFor: LakeMap | null = null;
@@ -38,43 +64,146 @@ let lighthouseSwapped = false;
 
 // --- islet mesh ---------------------------------------------------------------
 
-// Triangle fan from the polygon centroid with a slightly lifted centre vertex:
-// a gentle dome, flat-shaded, rim darker than the top. Star-shaped (radial-order)
-// polygons make the fan valid; winding matches ground.ts so normals face +Y.
-function buildIsletGeometry(poly: { x: number; z: number }[]): THREE.BufferGeometry {
-  const c = polygonCentroid(poly);
-  const n = poly.length;
+const clamp = (v: number, lo: number, hi: number): number =>
+  v < lo ? lo : v > hi ? hi : v;
+
+const C_SLATE_DARK = new THREE.Color(SLATE_DARK);
+const C_SLATE_LIGHT = new THREE.Color(SLATE_LIGHT);
+const C_EARTH = new THREE.Color(EARTH);
+const C_DEEP = new THREE.Color(DEEP);
+const faceCol = new THREE.Color();
+
+// Ring verts at scale t toward the islet centre: [p0, mid01, p1, mid12, ...].
+// t=1 reproduces the exact walkable polygon (midpoints lie on its edges).
+function ringVerts(iso: Islet, t: number): Array<{ x: number; z: number }> {
+  const c = iso.center;
+  const n = iso.poly.length;
+  const out: Array<{ x: number; z: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const a = iso.poly[i]!;
+    const b = iso.poly[(i + 1) % n]!;
+    out.push({ x: c.x + (a.x - c.x) * t, z: c.z + (a.z - c.z) * t });
+    out.push({ x: c.x + ((a.x + b.x) / 2 - c.x) * t, z: c.z + ((a.z + b.z) / 2 - c.z) * t });
+  }
+  return out;
+}
+
+// Ground world-Y for a point on an islet (the visual mesh + grounding agree).
+function isoY(iso: Islet, x: number, z: number): number {
+  return GROUND_Y + isletHeightAt(iso, x, z);
+}
+
+// Per-face colour: slate ramp by face height + a waterline earth-brown band +
+// a deterministic per-face jitter so adjacent facets read as separate blocks.
+function faceColor(iso: Islet, mx: number, my: number, mz: number): THREE.Color {
+  const h = my - GROUND_Y;
+  const peak = Math.max(0.3, isletPeakRise(iso));
+  const tTop = clamp(h / peak, 0, 1);
+  faceCol.lerpColors(C_SLATE_DARK, C_SLATE_LIGHT, tTop);
+  const tWater = clamp(1 - h / 0.45, 0, 1);
+  faceCol.lerp(C_EARTH, tWater * 0.5);
+  const jit = 0.9 + 0.2 * isletHash01(iso, Math.floor(mx * 3), Math.floor(mz * 3));
+  faceCol.multiplyScalar(jit);
+  return faceCol;
+}
+
+// Build the faceted terrain as a NON-INDEXED triangle soup (three duplicated
+// verts per face) so computeVertexNormals yields flat per-face normals, exactly
+// the "craggy faceted rock" look. Skirt faces blend earth-brown → near-black.
+function buildIsletGeometry(iso: Islet): THREE.BufferGeometry {
+  const m = iso.poly.length * 2; // verts per ring
+  const c = iso.center;
   const positions: number[] = [];
   const colors: number[] = [];
-  const indices: number[] = [];
-  const cTop = new THREE.Color(EARTH_TOP);
-  const cEdge = new THREE.Color(EARTH_EDGE);
-  const col = new THREE.Color();
 
-  positions.push(c.x, GROUND_Y + 0.6, c.z);
-  col.copy(cTop);
-  colors.push(col.r, col.g, col.b);
+  const pushTri = (
+    ax: number, ay: number, az: number,
+    bx: number, by: number, bz: number,
+    cx: number, cy: number, cz: number,
+    skirt: boolean,
+  ): void => {
+    const mx = (ax + bx + cx) / 3;
+    const my = (ay + by + cy) / 3;
+    const mz = (az + bz + cz) / 3;
+    let r: number;
+    let g: number;
+    let b: number;
+    if (skirt) {
+      const depth = clamp((GROUND_Y - my) / SKIRT_DROP, 0, 1);
+      faceCol.lerpColors(C_EARTH, C_DEEP, depth);
+      r = faceCol.r;
+      g = faceCol.g;
+      b = faceCol.b;
+    } else {
+      const col = faceColor(iso, mx, my, mz);
+      r = col.r;
+      g = col.g;
+      b = col.b;
+    }
+    positions.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+    colors.push(r, g, b, r, g, b, r, g, b);
+  };
 
-  for (let i = 0; i < n; i++) {
-    const v = poly[i]!;
-    positions.push(v.x, GROUND_Y, v.z);
-    col.lerpColors(cTop, cEdge, (i % 2) * 0.3 + 0.15);
-    colors.push(col.r, col.g, col.b);
+  // centre vertex (t=0) + rings t = k/ISLET_RINGS (k=1..ISLET_RINGS, rim last)
+  const cY = isoY(iso, c.x, c.z);
+  const rings: Array<Array<{ x: number; z: number }>> = [];
+  for (let k = 1; k <= ISLET_RINGS; k++) rings.push(ringVerts(iso, k / ISLET_RINGS));
+
+  // centre fan (winding: centre → earlier angle → later angle → +Y normal)
+  const inner = rings[0]!;
+  for (let i = 0; i < m; i++) {
+    const a = inner[i]!;
+    const b = inner[(i + 1) % m]!;
+    pushTri(c.x, cY, c.z, a.x, isoY(iso, a.x, a.z), a.z, b.x, isoY(iso, b.x, b.z), b.z, false);
   }
-  for (let i = 0; i < n; i++) {
-    indices.push(0, ((i + 1) % n) + 1, i + 1);
+
+  // bands between rings (winding verified → outward + upward normals)
+  for (let r = 0; r < rings.length - 1; r++) {
+    const A = rings[r]!;
+    const B = rings[r + 1]!;
+    for (let i = 0; i < m; i++) {
+      const a = A[i]!;
+      const a2 = A[(i + 1) % m]!;
+      const b = B[i]!;
+      const b2 = B[(i + 1) % m]!;
+      pushTri(
+        a.x, isoY(iso, a.x, a.z), a.z,
+        a2.x, isoY(iso, a2.x, a2.z), a2.z,
+        b2.x, isoY(iso, b2.x, b2.z), b2.z,
+        false,
+      );
+      pushTri(
+        a.x, isoY(iso, a.x, a.z), a.z,
+        b2.x, isoY(iso, b2.x, b2.z), b2.z,
+        b.x, isoY(iso, b.x, b.z), b.z,
+        false,
+      );
+    }
+  }
+
+  // skirt: rim ring → outward-and-down, dropping below the waterline
+  const rim = rings[rings.length - 1]!;
+  const botY = GROUND_Y - SKIRT_DROP;
+  for (let i = 0; i < m; i++) {
+    const a = rim[i]!;
+    const a2 = rim[(i + 1) % m]!;
+    const sx = c.x + (a.x - c.x) * SKIRT_OUT;
+    const sz = c.z + (a.z - c.z) * SKIRT_OUT;
+    const s2x = c.x + (a2.x - c.x) * SKIRT_OUT;
+    const s2z = c.z + (a2.z - c.z) * SKIRT_OUT;
+    pushTri(a.x, isoY(iso, a.x, a.z), a.z, s2x, botY, s2z, a2.x, isoY(iso, a2.x, a2.z), a2.z, true);
+    pushTri(a.x, isoY(iso, a.x, a.z), a.z, sx, botY, sz, s2x, botY, s2z, true);
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colors), 3));
-  geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
 }
 
 function buildIsletMesh(iso: Islet): THREE.Mesh {
-  const geo = buildIsletGeometry(iso.poly);
+  const geo = buildIsletGeometry(iso);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   return new THREE.Mesh(geo, mat);
 }
@@ -128,14 +257,17 @@ function buildSinkhole(sinkhole: { pos: { x: number; z: number } }): THREE.Mesh 
   return m;
 }
 
-// --- rocks (approved rocks.glb clones on islet edges, budgeted) ----------------
+// --- rocks (rocks.glb clones scattered ON the terrain at the shoreline) --------
 // Rocks load async after boot, so they are placed lazily (like the keeper /
-// rowboat / lighthouse swaps) rather than during the one-shot rebuild.
+// rowboat / lighthouse swaps) rather than during the one-shot rebuild. Rock
+// spawns are deterministic per islet id (isletHash01) and their y is the terrain
+// height at the spawn point, so every boulder sits ON the new faceted rock.
 interface RockSpawn {
   x: number;
   y: number;
   z: number;
   yaw: number;
+  scale: number;
 }
 
 let rockSpawns: RockSpawn[] = [];
@@ -145,12 +277,25 @@ function computeRockSpawns(lake: LakeMap): void {
   rockSpawns.length = 0;
   rocksAdded = false;
   for (const iso of lake.islets) {
-    if (iso.kind === 'rock') continue; // pure obstacles stay bare (a `return`
-    // here aborted rock placement for every islet after the first rock islet)
+    if (iso.kind === 'rock') continue; // pure obstacles stay bare
     // start islet + every 3rd walkable islet keeps the tri budget well under 450k
     if (iso.id !== 0 && iso.id % 3 !== 0) continue;
-    const v = iso.poly[iso.id % iso.poly.length]!;
-    rockSpawns.push({ x: v.x, y: GROUND_Y, z: v.z, yaw: iso.id * 1.7 });
+    const count = iso.id === 0 ? 3 : 1; // the start islet gets a small crag cluster
+    const maxR = isletMaxRadius(iso);
+    for (let i = 0; i < count; i++) {
+      const ang = isletHash01(iso, i, 1) * Math.PI * 2;
+      const t = 0.8 + 0.17 * isletHash01(iso, i, 2); // shoreline band, inside the rim
+      const r = maxR * t;
+      const x = iso.center.x + Math.cos(ang) * r;
+      const z = iso.center.z + Math.sin(ang) * r;
+      rockSpawns.push({
+        x,
+        y: isoY(iso, x, z),
+        z,
+        yaw: isletHash01(iso, i, 3) * Math.PI * 2,
+        scale: ROCK_SCALE * (0.8 + 0.4 * isletHash01(iso, i, 4)),
+      });
+    }
   }
 }
 
@@ -159,7 +304,7 @@ function tryAddRocks(): void {
   for (const spawn of rockSpawns) {
     const model = getAsset('rocks');
     if (!model) return;
-    model.scale.setScalar(ROCK_SCALE);
+    model.scale.setScalar(spawn.scale);
     model.rotation.y = spawn.yaw;
     model.position.set(spawn.x, spawn.y, spawn.z);
     lakeGroup.add(model);
@@ -168,15 +313,32 @@ function tryAddRocks(): void {
 }
 
 // --- lighthouse ---------------------------------------------------------------
+// The far edge of the start islet: the outermost vertex in the -X direction
+// (away from the lake interior where the boat spawns) pulled slightly inward so
+// the tower base stands on the rocky slope, not the rim drop.
+function farEdgePoint(iso: Islet): { x: number; z: number } {
+  let far = iso.poly[0]!;
+  for (const v of iso.poly) if (v.x < far.x) far = v;
+  const dx = far.x - iso.center.x;
+  const dz = far.z - iso.center.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const r = isletMaxRadius(iso) * LIGHTHOUSE_EDGE_T;
+  return { x: iso.center.x + (dx / len) * r, z: iso.center.z + (dz / len) * r };
+}
+
 function buildLighthouse(iso: Islet): THREE.Group {
+  const p = farEdgePoint(iso);
   const group = new THREE.Group();
-  group.position.set(iso.center.x, 0, iso.center.z);
+  // anchor the tower base on the terrain at the crag — the old placement left
+  // the base floating above the flat mud and its cyan-ish fallback cone read as
+  // stray geometry; both are gone (slate fallback + grounded base).
+  group.position.set(p.x, isoY(iso, p.x, p.z), p.z);
   group.scale.setScalar(LIGHTHOUSE_SCALE);
 
-  // cone body fallback until the generated model lands
+  // cone body fallback until the generated model lands — slate, matching the rock
   const bodyGeo = new THREE.ConeGeometry(2.6, 20, 8);
   bodyGeo.translate(0, 10, 0);
-  lighthouseBody = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: 0x0a1c26 }));
+  lighthouseBody = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: SLATE_DARK }));
   group.add(lighthouseBody);
 
   // warm lantern patch + short point light at the top
@@ -213,6 +375,17 @@ function trySwapLighthouse(): void {
   }
   lighthouseBody = null;
   lighthouseSwapped = true;
+}
+
+// --- entity grounding seam -----------------------------------------------------
+// Player / fish / props / tether-line read their feet height from here. Falls
+// back to the flat GROUND_Y when there is no lake or the player is not docked
+// (legacy M1 world / boat mode callers never hit the foot branch).
+export function groundYAt(world: WorldState, x: number, z: number): number {
+  if (!world.lake || world.dockedIslet == null) return GROUND_Y;
+  const iso = world.lake.islets[world.dockedIslet];
+  if (!iso) return GROUND_Y;
+  return isoY(iso, x, z);
 }
 
 // --- rebuild ------------------------------------------------------------------

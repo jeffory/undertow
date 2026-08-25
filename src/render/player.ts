@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { GROUND_Y } from './ground';
+import { groundYAt } from './lake';
 import { getAsset, hasAsset } from './assets';
 
 const DODGE_DURATION = 0.25; // seconds; matches the 0.25s i-frame roll window
@@ -172,6 +173,9 @@ export function updatePlayer(world: WorldState, dt: number): void {
   const p = world.player;
   root.position.x = p.x;
   root.position.z = p.z;
+  // Feet meet the terrain: the foot player stands on the faceted islet surface
+  // (falls back to the flat GROUND_Y when there is no lake).
+  root.position.y = groundYAt(world, p.x, p.z);
   root.rotation.y = p.facing;
 
   // Roll hook: while dodge.active, tilt the figure sideways and spin it once

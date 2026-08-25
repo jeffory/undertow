@@ -33,8 +33,8 @@ const DEEP_COLOR = 0x081014; // near-black, teal-tinted (the surface default)
 const SHALLOW_COLOR = 0x355c66; // deep bone-teal crest accent (narrow, top of range only)
 const FOAM_COLOR = 0xeaf2ee; // near-white bone foam
 const CREST_START_FRAC = 0.45; // crest accent begins at 45% of max wave height
-const FOAM_LO_FRAC = 0.72; // foam threshold: lowest crest that gets foam
-const FOAM_HI_FRAC = 0.92; // foam saturates here (top of the range)
+const FOAM_LO_FRAC = 0.88; // foam threshold: only the rare aligned crests
+const FOAM_HI_FRAC = 0.98; // foam saturates here (top of the range)
 
 const WAVE_MAX = WAVE_MAX_HEIGHT;
 const CREST_START = CREST_START_FRAC * WAVE_MAX;
@@ -124,7 +124,9 @@ void main() {
 
   // Subtle moon specular so a glint path rakes across the swells.
   vec3 hv = normalize(uMoonDir + viewDir);
-  float spec = pow(max(dot(n, hv), 0.0), 64.0) * 0.35;
+  // flat facets share one normal — a broad spec gain paints whole
+  // triangles pale, so keep the glint corridor faint
+  float spec = pow(max(dot(n, hv), 0.0), 96.0) * 0.1;
 
   vec3 color = base * uAmbient * 0.8;
   color += base * moon;
@@ -144,7 +146,7 @@ void main() {
   float foamHash = 0.8 + 0.2 * fract(fh * 1.61803);
   float upness = 0.55 + 0.45 * max(n.y, 0.0);
   float foam = smoothstep(FOAM_LO, FOAM_HI, vHeight) * upness * foamHash;
-  color = mix(color, uFoamColor, clamp(foam * 0.85, 0.0, 1.0));
+  color = mix(color, uFoamColor, clamp(foam * 0.5, 0.0, 1.0));
 
   // Cheap fresnel-ish darkening at grazing angles (also fattens the fog blend).
   // Weakened from the original 0.5 so the darker palette's moonlit facets stay
