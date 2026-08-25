@@ -17,6 +17,10 @@ import type { TetherEvent } from '../game/tether';
 const DEBUG_FLAG =
   typeof location !== 'undefined' ? /[?&]debug/.test(location.search) : false;
 const SAMPLE_INTERVAL = 0.25; // s between per-fight samples (4 Hz)
+// Retention cap on finished fight records: each record holds unbounded
+// samples/events arrays, and nothing in game code ever called resetTetherLog,
+// so a long session grew the Map (and its finalize scan) forever.
+const RECORD_CAP = 100;
 
 export type FightOutcome =
   | 'ongoing'
@@ -204,6 +208,11 @@ export function updateTetherLog(world: WorldState, dt: number): void {
   for (const f of world.tether.fights) {
     current.add(f.id);
     let rec = records.get(f.id);
+    // Fight ids restart at 1 after a run reset (resetWorld rebuilds the tether
+    // state), so a recycled id can collide with a FINISHED record from the
+    // previous run — which would silently absorb the new fight's stats and
+    // never re-finalize. Treat a finished record under a live id as stale.
+    if (rec && rec.endedAt !== null) rec = undefined;
     if (!rec) {
       rec = {
         fightId: f.id,
@@ -334,6 +343,14 @@ export function updateTetherLog(world: WorldState, dt: number): void {
       rec.tensionAtEnd = Number(rec.lastTension.toFixed(1));
       rec.outcome = rec.hint ?? 'unknown';
       printFightSummary(rec);
+    }
+  }
+
+  // Evict the oldest FINISHED records past the cap (tallies keep the totals).
+  if (records.size > RECORD_CAP) {
+    for (const [id, rec] of records) {
+      if (records.size <= RECORD_CAP) break;
+      if (rec.endedAt !== null) records.delete(id); // Map iterates in insertion order
     }
   }
 }
