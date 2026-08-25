@@ -12,6 +12,8 @@ import { spawnFish, updateFishAI, animateFish } from '../game/fish';
 import { updateTetherFishAI } from '../game/fishAI';
 import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
 import { constrainToCircle, separateCircles } from './collision';
+import { constrainCircleInConvex, constrainCircleOutsideHull } from './poly';
+import { dockedIslet, BOAT_COLLIDE_RADIUS } from '../gen/lakeWorld';
 import { updateTetherConstraint } from '../game/tetherConstraint';
 import { updateTetherLog } from '../playtest/tetherLog';
 import { updateDebugPanel } from '../ui/debugPanel';
@@ -84,9 +86,12 @@ export function movement(world: WorldState, dt: number): void {
 }
 
 export function collision(world: WorldState, _dt: number): void {
-  // M1 land collision (foot mode only): keep the player and fish inside the
-  // islet boundary, and keep a live fish off the player's circle. Shared
-  // infrastructure owned by the M1 scaffold (pure math in core/collision.ts).
+  // M1/M3 collision (foot mode): keep the player and fish on the walkable islet
+  // the player is docked to (the procedural lake's islet hull — plan 03 §2.6
+  // "collision uses the convex hull approximation"), and keep a live fish off
+  // the player's circle. When no lake is generated (legacy debug world) the M1
+  // ground circle is the fallback. In boat mode the islets are LAND — the boat
+  // is pushed out of every islet hull (task scope 3 "islets as land").
   //
   // T9 water-phase hooks:
   //  - a hooked fish (tether fight active) is IN the water — it is not clamped
@@ -94,24 +99,51 @@ export function collision(world: WorldState, _dt: number): void {
   //    (the source of the water-phase trigger);
   //  - a submerged player is swimming in the deep — collision stops clamping
   //    them back to the shore (waterPhase exits when they reach it).
-  if (world.mode !== 'foot') return;
+
+  // Boat mode: islets are land.
+  if (world.mode === 'boat') {
+    const lake = world.lake;
+    if (!lake) return;
+    const b = world.boat;
+    const r = BOAT_COLLIDE_RADIUS;
+    for (const iso of lake.islets) {
+      const q = constrainCircleOutsideHull({ x: b.x, z: b.z, radius: r }, iso.hull);
+      b.x = q.x;
+      b.z = q.z;
+    }
+    return;
+  }
+
   const g = world.ground;
   const p = world.player;
   const under = world.water.active;
   const tethered = world.tether.fights.length > 0;
+  const iso = dockedIslet(world);
 
   if (!under) {
-    const pc = constrainToCircle({ x: p.x, z: p.z, radius: p.radius }, g);
-    p.x = pc.x;
-    p.z = pc.z;
+    if (iso) {
+      const pc = constrainCircleInConvex({ x: p.x, z: p.z, radius: p.radius }, iso.hull);
+      p.x = pc.x;
+      p.z = pc.z;
+    } else {
+      const pc = constrainToCircle({ x: p.x, z: p.z, radius: p.radius }, g);
+      p.x = pc.x;
+      p.z = pc.z;
+    }
   }
 
   const f = world.fish;
   if (f) {
     if (!tethered) {
-      const fc = constrainToCircle({ x: f.x, z: f.z, radius: f.radius }, g);
-      f.x = fc.x;
-      f.z = fc.z;
+      if (iso) {
+        const fc = constrainCircleInConvex({ x: f.x, z: f.z, radius: f.radius }, iso.hull);
+        f.x = fc.x;
+        f.z = fc.z;
+      } else {
+        const fc = constrainToCircle({ x: f.x, z: f.z, radius: f.radius }, g);
+        f.x = fc.x;
+        f.z = fc.z;
+      }
     }
     // a dead fish is a corpse — the player walks through it
     if (f.state !== 'dead') {
@@ -199,6 +231,7 @@ export function updateDebugOverlay(world: WorldState): void {
 
   el.textContent =
     `UNDERTOW\n` +
+    `seed ${world.seed}\n` +
     `fps ~${fpsSmooth.toFixed(0)}\n` +
     `draw calls ${dc}\n` +
     `tris ${tris}\n` +

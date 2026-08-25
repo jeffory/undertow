@@ -13,6 +13,7 @@ import type { LineStats } from '../game/line';
 import { BASE_LINE } from '../game/line';
 import type { TetherTuning } from '../game/tuning';
 import { DEFAULT_TUNING } from '../game/tuning';
+import type { LakeMap } from '../gen/lakeMap';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -226,6 +227,8 @@ export interface WorldState {
   tetherEvents: TetherEvent[]; // 02 — produced by tetherConstraint, cleared per tick
   water: WaterPhaseState; // 02 — water-phase state (T9 owns the system)
   lure: LureState; // 02 — equipped lure slot (cut/snap cost)
+  lake: LakeMap | null; // 03 — the generated procedural lake (run start sets it)
+  dockedIslet: number | null; // 03 — islet index the foot player is on (null = aboard)
 }
 
 export const PLAYER_RADIUS = 0.5;
@@ -233,10 +236,6 @@ export const FISH_RADIUS = 0.8;
 export const GROUND_RADIUS = 20;
 export const PLAYER_MAX_HP = 100;
 export const SPINE_SEGMENTS = 8;
-// Foot-mode debug spawn: on the islet a few metres off the parked boat (which
-// sits at the origin) so the player doesn't overlap it when boots or toggles
-// into foot mode.
-export const FOOT_SPAWN = { x: 0, z: 6 };
 
 export function createWorld(seed = 1): WorldState {
   return {
@@ -289,6 +288,8 @@ export function createWorld(seed = 1): WorldState {
       threatsApproach: false,
     },
     lure: { id: 'basic-lure', count: 1 },
+    lake: null,
+    dockedIslet: null,
   };
 }
 

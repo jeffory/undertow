@@ -17,7 +17,7 @@
 // hit via the hp delta, so damage is never applied twice.
 
 import type { WorldState, FishState, HitEvent } from '../core/world';
-import { createFish } from '../core/world';
+import { spawnFishOnDockedIslet } from '../gen/lakeWorld';
 
 // --- combat seam ---------------------------------------------------------------
 // WORKER B pushes HitEvents with this targetId for the fish (combat.ts defines
@@ -140,7 +140,9 @@ function applyFishHits(world: WorldState, fish: FishState): void {
 // --- spawn (spawn slot) ------------------------------------------------------------
 export function spawnFish(world: WorldState): void {
   if (world.fish) return; // the scaffold spawns the single fish exactly once
-  world.fish = createFish();
+  // M3: place the catch on the islet the player is docked to (it spawns inside
+  // the islet hull near the player); legacy origin offset when no lake is present.
+  spawnFishOnDockedIslet(world);
 }
 
 // --- T17 land AI (spawn/combat-adjacent slot) ----------------------------------------

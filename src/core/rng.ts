@@ -27,4 +27,43 @@ export class Rng {
   nextFloat(): number {
     return this.nextU32() / 4294967296;
   }
+
+  // --- plan 03 §1.1 convenience surface (deterministic, u32-backed) ---------
+
+  // [a, b)
+  range(a: number, b: number): number {
+    return a + this.nextFloat() * (b - a);
+  }
+
+  // inclusive int in [a, b]
+  int(a: number, b: number): number {
+    return a + Math.floor(this.nextFloat() * (b - a + 1));
+  }
+
+  chance(p: number): boolean {
+    return this.nextFloat() < p;
+  }
+
+  pick<T>(arr: T[]): T {
+    return arr[this.int(0, arr.length - 1)]!;
+  }
+
+  // Fisher-Yates on a copy; the input is never mutated.
+  shuffle<T>(arr: T[]): T[] {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = this.int(0, i);
+      const tmp = out[i]!;
+      out[i] = out[j]!;
+      out[j] = tmp;
+    }
+    return out;
+  }
+
+  // Derive a child stream without touching the parent (plan 03 §1.1): the child
+  // seed is a 32-bit fold of the parent's current state + salt. Deterministic.
+  fork(salt: number): Rng {
+    const mixed = (this.state ^ BigInt((salt >>> 0) * 2654435761)) & 0xffffffffn;
+    return new Rng(Number(mixed) >>> 0);
+  }
 }

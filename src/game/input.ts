@@ -4,8 +4,14 @@
 // world.intent. The boat worker consumes the Intent. Plain module state.
 
 import type { WorldState } from '../core/world';
-import { FOOT_SPAWN } from '../core/world';
 import { startTetherFight, M2_SPECIES } from './tether';
+import {
+  nearestDockableIslet,
+  dockPlayer,
+  playerNearBoat,
+  boardBoat,
+  DOCK_RANGE,
+} from '../gen/lakeWorld';
 
 // --- raw device state (module-level, updated by listeners) -----------------
 
@@ -147,15 +153,16 @@ export function updateInput(world: WorldState): void {
   intent.aimX = mouseX;
   intent.aimY = mouseY;
 
-  // M1 scaffold: B toggles boat <-> foot (debug mode switch; the real drive is
-  // the '?mode=foot' URL param at boot and 03's map worker later).
+  // M3: B docks / un-docks. In boat mode, approach within ~2m of a walkable
+  // islet's edge + B → foot mode on that islet. On foot, B near the parked boat
+  // → back aboard. (This replaces the M1 debug mode toggle; the '?mode=foot' URL
+  // param handles the debug boot path.)
   if (consumeTap('KeyB')) {
-    world.mode = world.mode === 'boat' ? 'foot' : 'boat';
-    // When entering foot mode, drop the keeper onto the islet clear of the
-    // parked boat (which sits at the origin) so the two never overlap.
-    if (world.mode === 'foot') {
-      world.player.x = FOOT_SPAWN.x;
-      world.player.z = FOOT_SPAWN.z;
+    if (world.mode === 'boat') {
+      const iso = nearestDockableIslet(world, world.boat.x, world.boat.z, DOCK_RANGE);
+      if (iso) dockPlayer(world, iso.id);
+    } else if (playerNearBoat(world, DOCK_RANGE)) {
+      boardBoat(world);
     }
   }
 

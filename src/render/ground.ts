@@ -91,7 +91,10 @@ export function initGround(scene: THREE.Scene): void {
 
 export function updateGround(world: WorldState, _dt: number): void {
   if (!mesh || !props) return;
-  const foot = world.mode === 'foot';
+  // M3: when a procedural lake exists it renders the real islets — the M1 debug
+  // disc and its rocks only appear in the legacy no-lake world (plan 03 §2.4).
+  const hasLake = world.lake !== null;
+  const foot = world.mode === 'foot' && !hasLake;
   mesh.visible = foot;
   props.visible = foot;
   if (foot) addRocks();

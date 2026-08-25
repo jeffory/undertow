@@ -23,6 +23,8 @@
 import type { WorldState } from '../core/world';
 import { enterWaterPhase } from './tether';
 import type { TetherEvent } from './tether';
+import { dockedIslet } from '../gen/lakeWorld';
+import { circleOutOfHull, polygonCentroid } from '../core/poly';
 
 // --- tuning constants ---------------------------------------------------------
 export const BREATH_MAX = 15; // s of breath (spec §4.5 "15s breath timer")
@@ -32,12 +34,17 @@ export const DRIFT_AMP = 0.3; // m/s — sinusoidal drift magnitude (plan §8 "s
 export const DRIFT_FREQ_X = 0.7; // rad/s — drift wave along x
 export const DRIFT_FREQ_Z = 0.5; // rad/s — drift wave along z
 
-// The player is "in deep water" once their centre sits beyond the walkable
-// islet — the same radius the collision system clamps to. So the only way past
-// it is being pulled (a tethered drag), which is exactly the trigger.
+// The player is "in deep water" once their circle pokes past the walkable islet
+// they are docked to (the islet's convex hull — plan 03 §2.6). So the only way
+// past it is being pulled (a tethered drag), which is exactly the trigger. Falls
+// back to the M1 ground circle when no lake is present.
 function inDeepWater(world: WorldState): boolean {
-  const g = world.ground;
   const p = world.player;
+  const iso = dockedIslet(world);
+  if (iso) {
+    return circleOutOfHull({ x: p.x, z: p.z, radius: p.radius }, iso.hull) > 0;
+  }
+  const g = world.ground;
   const dist = Math.hypot(p.x - g.x, p.z - g.z);
   return dist > g.radius - p.radius;
 }
@@ -49,10 +56,13 @@ function updateDrift(world: WorldState): void {
 }
 
 function updateTowardShore(world: WorldState): void {
-  const g = world.ground;
+  // struggle vector points at the walkable surface centre (islet hull centroid,
+  // or the legacy ground centre)
   const p = world.player;
-  const dx = g.x - p.x;
-  const dz = g.z - p.z;
+  const iso = dockedIslet(world);
+  const target = iso ? polygonCentroid(iso.hull) : { x: world.ground.x, z: world.ground.z };
+  const dx = target.x - p.x;
+  const dz = target.z - p.z;
   const len = Math.hypot(dx, dz) || 1e-6;
   world.water.towardShore.x = dx / len;
   world.water.towardShore.z = dz / len;

@@ -11,6 +11,7 @@ import { initWater, updateWater } from './water';
 import { initPost, updatePost, compositeScene } from './post';
 import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
+import { initLake, updateLake } from './lake';
 import { initPlayer, updatePlayer } from './player';
 import { initFish, updateFishMesh } from './fish';
 import { initLines, updateLines } from './lines';
@@ -52,6 +53,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initLantern(scene);
   initBoat(scene);
   initGround(scene);
+  initLake(scene);
   initPlayer(scene);
   initFish(scene);
   initLines(scene);
@@ -84,6 +86,7 @@ export function render(world: WorldState, dt: number): void {
   updateLantern(world, dt);
   updateBoat(world, dt);
   updateGround(world, dt);
+  updateLake(world, dt);
   updatePlayer(world, dt);
   updateFishMesh(world, dt);
   updateLines(world, dt);
