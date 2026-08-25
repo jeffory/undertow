@@ -11,6 +11,7 @@ import type { WorldState } from '../core/world';
 import { DEFAULT_TUNING } from '../game/tuning';
 import type { TetherTuning } from '../game/tuning';
 import { getSessionLog, sessionSummary } from '../playtest/tetherLog';
+import { getSave } from '../core/save';
 
 const DEBUG_FLAG =
   typeof location !== 'undefined' ? /[?&]debug/.test(location.search) : false;
@@ -197,9 +198,12 @@ function updateReadouts(world: WorldState): void {
   const maxSt = fish ? fish.tether.maxStamina : 0;
   const stamina = fish && maxSt > 0 ? Math.round((fish.stamina / maxSt) * 100) : -1;
   if (liveEl) {
+    const save = getSave();
+    const lic = save ? `G${save.license.grade} · ${Math.round(save.license.xp)}xp` : 'no save';
     liveEl.textContent =
       `tension ${tension.toFixed(1)} | L ${L.toFixed(2)} | ` +
-      `fish ${stamina < 0 ? '—' : `${stamina}%`} | ${fish ? fish.state : 'no fish'}`;
+      `fish ${stamina < 0 ? '—' : `${stamina}%`} | ${fish ? fish.state : 'no fish'} | ` +
+      `license ${lic}`;
   }
 
   const log = getSessionLog();

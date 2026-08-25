@@ -18,6 +18,8 @@ import type { CatchRecord } from '../extract/memories';
 import type { ClockPhase, NightClock } from '../game/clock';
 import { createClock } from '../game/clock';
 import type { RunResult } from '../save/schemas';
+import type { SundryItem } from '../save/schemas';
+import type { BestiaryEvent } from '../bestiary/bestiary';
 import type { Disturbance } from '../run/disturbance';
 import type { FishParams } from '../gen/fishParams';
 import { makeParams } from '../gen/fishParams';
@@ -55,6 +57,9 @@ export interface PlayerState {
   dodge: DodgeState; // roll state (0.25s i-frames, 0.6s cooldown, 25 stamina)
   iframes: number; // seconds of invulnerability remaining
   hp: number; // keeper health
+  maxHp: number; // keeper max health (trinkets raise it at run start)
+  maxStamina: number; // stamina pool ceiling (G2 license +10 at run start)
+  staminaRegenBonus: number; // flat extra regen/s from the Damp trinket
   radius: number; // circle collision radius (land combat, spec 8.3)
   stagger: number; // seconds of tether-snap stagger (plan 02 §5.3, ~0.3s)
 }
@@ -198,6 +203,7 @@ export interface UiState {
   // crosshair, stamina bar, hints
   debug: boolean;
   underwater: boolean; // T9 — set while the water phase is active; render/DOM tint reads it
+  bestiaryTap: boolean; // M4 — the B-key edge (no dock/board action); the ui system toggles the overlay
 }
 
 export interface WaterPhaseState {
@@ -257,6 +263,13 @@ export interface RunState {
   secondaryPrev: boolean; // RMB edge tracker for the RELEASE prompt
   promptId: number | null; // disturbance id in the SET/RELEASE window
   debugCastPoint: { x: number; z: number } | null; // ?debug aim seam (gate driver)
+  // M4 (t19) — per-run slots the reducer + cast flow fill and buildRunResult
+  // folds onto the RunResult:
+  inventory: SundryItem[]; // sundries recovered this run (the receipt's list)
+  bestiaryEvents: BestiaryEvent[]; // bestiary state transitions this run
+  memoriesMult: number; // extraction memory multiplier (license G5 / municipal)
+  licenseGrade: number; // the grade at run start (loot-roll ctx; set by runStart)
+  forceDrop: boolean; // ?debug gate-driver seam — always surface a sundry on land
   spawn: SpawnState;
   extract: ExtractState;
 }
@@ -275,6 +288,11 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     secondaryPrev: false,
     promptId: null,
     debugCastPoint: null,
+    inventory: [],
+    bestiaryEvents: [],
+    memoriesMult: 1,
+    licenseGrade: 1,
+    forceDrop: false,
     spawn: { refillTimer: 0, lastPhase: 'dusk', initialSpawned: false },
     extract: { held: 0, buoyId: null },
   };
@@ -315,6 +333,7 @@ export const PLAYER_RADIUS = 0.5;
 export const FISH_RADIUS = 0.8;
 export const GROUND_RADIUS = 20;
 export const PLAYER_MAX_HP = 100;
+export const PLAYER_MAX_STAMINA = 100;
 export const SPINE_SEGMENTS = 8;
 
 export function createWorld(seed = 1): WorldState {
@@ -328,11 +347,14 @@ export function createWorld(seed = 1): WorldState {
       facing: 0,
       vx: 0,
       vz: 0,
-      stamina: 100,
+      stamina: PLAYER_MAX_STAMINA,
       staminaRegenDelay: 0,
       dodge: { active: false, timeLeft: 0, cooldownLeft: 0, dirX: 0, dirZ: 0 },
       iframes: 0,
       hp: PLAYER_MAX_HP,
+      maxHp: PLAYER_MAX_HP,
+      maxStamina: PLAYER_MAX_STAMINA,
+      staminaRegenBonus: 0,
       radius: PLAYER_RADIUS,
       stagger: 0,
     },
@@ -351,13 +373,13 @@ export function createWorld(seed = 1): WorldState {
     fish: null,
     ground: { x: 0, z: 0, radius: GROUND_RADIUS },
     dread: 0,
-    ui: { debug: false, underwater: false },
+    ui: { debug: false, underwater: false, bestiaryTap: false },
     time: createTime(),
     seed,
     mode: 'boat',
     tether: { fights: [], nextId: 1 },
-    line: BASE_LINE,
-    tuning: DEFAULT_TUNING,
+    line: { ...BASE_LINE },
+    tuning: { ...DEFAULT_TUNING },
     tetherEvents: [],
     water: {
       active: false,

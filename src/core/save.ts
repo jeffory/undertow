@@ -117,11 +117,15 @@ export { exportSave, importSave, SAVE_VERSION };
 let backend: SaveBackend | null = null;
 let currentSave: SaveGame | null = null;
 
-export function initSaveSystem(): void {
-  if (backend) return;
+// Load the save on boot and refresh the singleton. Returns the loaded save so
+// main.ts can apply the run-start passives (license + equipped trinkets) to the
+// fresh world once the stored row is in hand.
+export function initSaveSystem(): Promise<SaveGame> {
+  if (backend) return Promise.resolve(currentSave ?? freshSave());
   backend = defaultBackend();
-  void loadSave(backend).then((s) => {
+  return loadSave(backend).then((s) => {
     currentSave = s;
+    return s;
   });
 }
 
@@ -134,4 +138,21 @@ export async function saveRunResult(result: RunResult): Promise<SaveGame> {
   if (!backend) backend = defaultBackend();
   currentSave = await recordRun(backend, result);
   return currentSave;
+}
+
+// General live-save mutation (e.g. the pre-run trinket picker persisting the
+// equipped loadout). Noop (null) when no save is loaded. The mutation is applied
+// to the singleton, written through, and returned.
+export async function updateSave(mutate: (s: SaveGame) => SaveGame): Promise<SaveGame | null> {
+  if (!currentSave) return null;
+  currentSave = mutate(currentSave);
+  if (!backend) backend = defaultBackend();
+  await backend.write(currentSave);
+  return currentSave;
+}
+
+// Persist the two equipped trinket slots (ids resolve into the box). Returns the
+// updated save or null when none is loaded.
+export async function setEquippedTrinkets(ids: string[]): Promise<SaveGame | null> {
+  return updateSave((s) => ({ ...s, equipped: ids.slice(0, 2) }));
 }

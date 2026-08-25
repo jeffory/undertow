@@ -20,6 +20,7 @@ import {
 } from '../run/disturbance';
 import { rollSpeciesAtSet } from '../run/species';
 import { generateFishParams, type FishParams } from '../gen/fishParams';
+import { recordBestiary } from '../bestiary/bestiary';
 
 // M4 round 1: the species is rolled AT SET from the disturbance-tier table
 // (loot stream) and the FishParams carry the stats that scale the tether fight
@@ -110,6 +111,9 @@ function setCatch(world: WorldState, d: Disturbance): void {
       species: preset.id,
       name: preset.name,
     };
+    // Bestiary (plan 04 §6.1): hooked = seen + fought — the species is only
+    // revealed at the moment it is hooked, so that is the silhouette entry.
+    recordBestiary(world, preset.id, 'hooked');
   } else {
     world.run.activeCatch = null;
   }

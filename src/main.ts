@@ -8,8 +8,11 @@ import { createRenderer, resizeRenderer, currentRenderContext } from './render/r
 import { initInput } from './game/input';
 import { ensureLake, spawnAtLakeStart, dockPlayer } from './gen/lakeWorld';
 import { initRun } from './run/run';
-import { initSaveSystem, getSave } from './core/save';
+import { initSaveSystem, getSave, updateSave } from './core/save';
 import { initSavePanel } from './ui/savePanel';
+import { toggleBestiary } from './ui/bestiaryScreen';
+import { applyRunStartPassives } from './loot/runStart';
+import { gradeForXp } from './loot/license';
 import * as THREE from 'three';
 
 const app = document.getElementById('app');
@@ -38,7 +41,9 @@ spawnAtLakeStart(world);
 initRun(world);
 
 // Load the save on boot (task t12 #5): IndexedDB row → zod-validated SaveGame.
-initSaveSystem();
+// Once it's in hand, apply the run-start passives (license + equipped trinkets)
+// to the fresh boot world.
+void initSaveSystem().then(() => applyRunStartPassives(world));
 
 // ?timescale=N gate-driver hook (debug only): run N fixed steps per rAF frame
 // so automated gates play faster than real time. FIXED_DT is untouched, so all
@@ -61,6 +66,15 @@ if (/[?&]debug/.test(search)) {
   // the save panel (export/import) + the run-loop probe seams
   initSavePanel();
   (window as unknown as { __save: () => unknown }).__save = () => getSave();
+  // M4 gate seams: open the bestiary ledger; push the license over a threshold
+  // (drives the grade-up letter screenshot); force a sundry on every land.
+  (window as unknown as { __bestiary: () => void }).__bestiary = () => toggleBestiary(world);
+  (window as unknown as { __setLicenseXp: (xp: number) => void }).__setLicenseXp = (xp: number) => {
+    void updateSave((s) => ({ ...s, license: { xp, grade: gradeForXp(xp) } }));
+  };
+  (window as unknown as { __setForceDrop: (on: boolean) => void }).__setForceDrop = (on: boolean) => {
+    world.run.forceDrop = on;
+  };
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
     (x: number, z: number) => {
       const ctx = currentRenderContext();

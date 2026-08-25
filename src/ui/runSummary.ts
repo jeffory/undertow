@@ -8,8 +8,15 @@
 import type { WorldState } from '../core/world';
 import type { RunResult } from '../save/schemas';
 import { startNewRun } from '../run/run';
+import { applyRunStartPassives } from '../loot/runStart';
+import { GRADE_TITLES } from '../loot/license';
 
 let overlayEl: HTMLDivElement | null = null;
+
+export interface RunSummaryOptions {
+  licenseGrade?: number; // Keeper's License grade line (task t19 §4)
+  onDischarge?: () => void; // the run-terminal flow (grade-up letter → picker → run)
+}
 
 const PHASE_LABEL: Record<string, string> = {
   dusk: 'DUSK',
@@ -30,9 +37,12 @@ export function showRunSummary(
   world: WorldState,
   result: RunResult,
   extracted: boolean,
+  opts: RunSummaryOptions = {},
 ): void {
   if (typeof document === 'undefined') return;
   dismissRunSummary(); // never stack overlays
+
+  const licenseGrade = opts.licenseGrade ?? 1;
 
   const root = document.createElement('div');
   root.id = 'run-summary';
@@ -83,6 +93,17 @@ export function showRunSummary(
       margin: 10px 0 2px; border-top: 2px solid #4a3a26; padding-top: 8px; }
     #run-summary .ledger { margin-top: 10px; font-size: 11px; color: #5a4630; }
     #run-summary .ledger div { display: flex; justify-content: space-between; }
+    #run-summary .sundries { margin-top: 12px; border-top: 1px solid #6a5638; padding-top: 8px; }
+    #run-summary .sundries-head {
+      font-size: 10px; letter-spacing: 0.14em; color: #6a5638; font-weight: bold;
+      margin-bottom: 4px;
+    }
+    #run-summary .sundries div { display: flex; justify-content: space-between; font-size: 11px; }
+    #run-summary .sundries .rar { color: #7a2014; font-weight: bold; letter-spacing: 0.08em; }
+    #run-summary .license-line {
+      margin-top: 8px; padding: 6px 8px; border: 1px dashed #6a5638;
+      font-size: 11px; display: flex; justify-content: space-between; color: #3a2c1a;
+    }
     #run-summary .stamp {
       margin: 14px 0 4px; padding: 4px 10px; display: inline-block;
       border: 2px solid #8a2014; color: #8a2014; border-radius: 3px;
@@ -180,6 +201,40 @@ export function showRunSummary(
     : `MEMORIES RETAINED   ${result.memoriesTotal}  (30%)`;
   invoice.appendChild(total);
 
+  // SUNDRIES RECOVERED (task t19 §3): the run's looted items, listed under their
+  // own schedule on the invoice. The box keeps them for the pre-run picker.
+  if ((result.sundries ?? []).length > 0) {
+    const sundries = document.createElement('div');
+    sundries.className = 'sundries';
+    const head = document.createElement('div');
+    head.className = 'sundries-head';
+    head.textContent = 'SUNDRIES RECOVERED';
+    sundries.appendChild(head);
+    for (const item of result.sundries ?? []) {
+      const row = document.createElement('div');
+      const name = document.createElement('span');
+      name.textContent = `one (1) ${item.name}`;
+      row.appendChild(name);
+      const rar = document.createElement('span');
+      rar.className = 'rar';
+      rar.textContent = item.rarity;
+      row.appendChild(rar);
+      sundries.appendChild(row);
+    }
+    invoice.appendChild(sundries);
+  }
+
+  // Keeper's License grade line (task t19 §4).
+  const lic = document.createElement('div');
+  lic.className = 'license-line';
+  const licLabel = document.createElement('span');
+  licLabel.textContent = 'KEEPER\'S LICENSE';
+  lic.appendChild(licLabel);
+  const licVal = document.createElement('span');
+  licVal.textContent = `GRADE ${licenseGrade} — ${GRADE_TITLES[licenseGrade] ?? ''}`.replace(/\s+/g, ' ').trim();
+  lic.appendChild(licVal);
+  invoice.appendChild(lic);
+
   const ledger = document.createElement('div');
   ledger.className = 'ledger';
   const phaseRow = document.createElement('div');
@@ -217,7 +272,13 @@ export function showRunSummary(
   discharge.textContent = extracted ? 'DISCHARGE' : 'ACCEPT';
   discharge.addEventListener('click', () => {
     dismissRunSummary();
-    startNewRun(world);
+    if (opts.onDischarge) {
+      opts.onDischarge();
+    } else {
+      // default: straight into the fresh run, passives applied at start
+      startNewRun(world);
+      applyRunStartPassives(world);
+    }
   });
   invoice.appendChild(discharge);
 

@@ -9,9 +9,14 @@
 import type { WorldState } from '../core/world';
 import type { CatchRecord } from '../extract/memories';
 import { catchMemories } from '../extract/memories';
-import { landGainByTier, applyDreadGain } from '../game/dread';
+import { landGainByTier, applyDreadGain, tierFor } from '../game/dread';
 import { dreadMultForPhase, phaseAt, runElapsedMs } from '../game/clock';
 import type { ClockPhase } from '../game/clock';
+import { createRng, LOOT } from '../core/rngStreams';
+import { rollCatchDrop, rollAffixedTrinket, type RollCtx } from '../loot/roller';
+import type { SundryItem } from '../save/schemas';
+import type { Rarity } from '../loot/items';
+import { recordBestiary } from '../bestiary/bestiary';
 
 export function currentPhase(world: WorldState): ClockPhase {
   return phaseAt(runElapsedMs(world.run.startedAt, world.time.elapsed));
@@ -21,7 +26,8 @@ export function currentDreadMult(world: WorldState): number {
   return dreadMultForPhase(currentPhase(world));
 }
 
-// A clean land: full tier, clean ×1.5 credit, Dread gain by tier.
+// A clean land: full tier, clean ×1.5 credit, Dread gain by tier. Rolls the
+// loot drop (clean quality +1) and records the bestiary clean-catch credit.
 export function landCatch(world: WorldState): CatchRecord | null {
   const c = world.run.activeCatch;
   if (!c) return null;
@@ -35,6 +41,9 @@ export function landCatch(world: WorldState): CatchRecord | null {
     xp: memories,
   };
   world.run.haul.push(rec);
+  const drop = rollDropForCatch(world, 1);
+  if (drop) world.run.inventory.push(drop);
+  recordBestiary(world, c.species, 'clean');
   world.dread = applyDreadGain(world.dread, landGainByTier(c.tier as 1 | 2 | 3 | 4), currentDreadMult(world));
   world.run.activeCatch = null;
   return rec;
@@ -55,9 +64,34 @@ export function butcherCatch(world: WorldState): CatchRecord | null {
     xp: memories,
   };
   world.run.haul.push(rec);
+  const drop = rollDropForCatch(world, -1);
+  if (drop) world.run.inventory.push(drop);
+  recordBestiary(world, c.species, 'butchered');
   world.dread = applyDreadGain(world.dread, landGainByTier(tier as 1 | 2 | 3 | 4), currentDreadMult(world));
   world.run.activeCatch = null;
   return rec;
+}
+
+// Loot roll for a landed catch (plan 04 §7): seeded over the 'loot' stream keyed
+// by the disturbance (same seed + same catch → same drop), ctx from the catch's
+// tier + current Dread tier + the run's license grade + quality bonus.
+// `forceDrop` is the ?debug gate-driver seam — always surface a sundry.
+function rollDropForCatch(world: WorldState, qualityBonus: number): SundryItem | null {
+  const c = world.run.activeCatch;
+  if (!c) return null;
+  const rng = createRng(world.seed, LOOT, c.disturbanceId);
+  const ctx: RollCtx = {
+    zoneDepth: 1, // Shallows (the wrongness/loot base for this milestone)
+    catchTier: c.tier,
+    dreadTier: tierFor(world.dread),
+    licenseGrade: world.run.licenseGrade,
+    qualityBonus,
+  };
+  if (world.run.forceDrop) {
+    const rarity: Rarity = 'R'; // the gate driver's deterministic trinket grade
+    return rollAffixedTrinket(rng, rarity);
+  }
+  return rollCatchDrop(rng, ctx);
 }
 
 // snap / cut / pulled-under — the catch is gone; nothing recorded, no gain.

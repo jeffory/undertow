@@ -161,14 +161,22 @@ export function updateInput(world: WorldState): void {
   // M3: B docks / un-docks. In boat mode, approach within ~2m of a walkable
   // islet's edge + B → foot mode on that islet. On foot, B near the parked boat
   // → back aboard. (This replaces the M1 debug mode toggle; the '?mode=foot' URL
-  // param handles the debug boot path.)
+  // param handles the debug boot path.) When neither action applies, the tap is
+  // the BESTIARY key (M4, task t19 — pick and document: B on open water opens
+  // the bestiary ledger; the ui system consumes the tap flag).
   if (consumeTap('KeyB')) {
+    let acted = false;
     if (world.mode === 'boat') {
       const iso = nearestDockableIslet(world, world.boat.x, world.boat.z, DOCK_RANGE);
-      if (iso) dockPlayer(world, iso.id);
+      if (iso) {
+        dockPlayer(world, iso.id);
+        acted = true;
+      }
     } else if (playerNearBoat(world, DOCK_RANGE)) {
       boardBoat(world);
+      acted = true;
     }
+    if (!acted) world.ui.bestiaryTap = true;
   }
 
   // M2 scaffold temp hook (plan 02 §12): T in foot mode starts a tether fight

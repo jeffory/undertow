@@ -9,9 +9,12 @@
 
 import type { WorldState } from '../core/world';
 import type { Buoy } from '../gen/lakeMap';
-import { endRun } from '../run/run';
-import { showRunSummary } from '../ui/runSummary';
-import { saveRunResult } from '../core/save';
+import { endRun, startNewRun } from '../run/run';
+import { showRunSummary, dismissRunSummary } from '../ui/runSummary';
+import { showGradeUpLetter } from '../ui/gradeUpLetter';
+import { showTrinketPicker } from '../ui/trinketPicker';
+import { getSave, saveRunResult } from '../core/save';
+import { gradeUpForRun, type GradeUpInfo } from '../loot/license';
 
 export const EXTRACT_HOLD_SECONDS = 1.5; // hold E at a live buoy (task t12 #4)
 export const EXTRACT_RANGE = 3; // m — how close the boat must get to a buoy
@@ -62,11 +65,49 @@ export function updateRunTerminal(world: WorldState, dt: number): void {
 
 function finishRun(world: WorldState, extracted: boolean): void {
   const result = endRun(world, extracted);
-  if (typeof document !== 'undefined') {
-    showRunSummary(world, result, extracted);
-    // write on run end (plan §8.2 / task t12 #5) — fire-and-forget, the store is async
-    void saveRunResult(result).catch(() => {
-      /* save failures never crash the run loop */
-    });
+  if (typeof document === 'undefined') return;
+
+  // The grade-up is computed from the pre-persist save so the letter reads the
+  // exact run that earned it; the persist promise is awaited in the discharge
+  // flow so the picker/next-run read post-merge state.
+  const preSave = getSave();
+  const gradeUp = preSave ? gradeUpForRun(preSave, result) : null;
+  const licenseGrade = gradeUp ? gradeUp.newGrade : (preSave?.license.grade ?? 1);
+  const persist = saveRunResult(result).catch(() => {
+    /* save failures never crash the run loop */
+  });
+
+  showRunSummary(world, result, extracted, {
+    licenseGrade,
+    onDischarge: () => {
+      dismissRunSummary();
+      void continueAfterDischarge(world, gradeUp, persist);
+    },
+  });
+}
+
+// After the receipt dismisses: show the grade-up letter (next hub-return) if the
+// run earned one, then the pre-run trinket picker if the box has trinkets, then
+// start the fresh run (startNewRun applies the equipped passives).
+async function continueAfterDischarge(
+  world: WorldState,
+  gradeUp: GradeUpInfo | null,
+  persist: Promise<unknown>,
+): Promise<void> {
+  await persist.catch(() => {});
+  if (gradeUp) {
+    showGradeUpLetter(world, gradeUp, () => pickerOrStart(world));
+  } else {
+    pickerOrStart(world);
+  }
+}
+
+function pickerOrStart(world: WorldState): void {
+  const save = getSave();
+  const hasTrinkets = (save?.box ?? []).some((i) => i.slot === 'trinket');
+  if (hasTrinkets) {
+    showTrinketPicker(world);
+  } else {
+    startNewRun(world);
   }
 }

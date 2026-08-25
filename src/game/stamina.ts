@@ -7,6 +7,10 @@
 //
 // spendStamina(player, amount) is the shared spend seam — WORKER B's combat
 // imports it for the 30-cost heavy.
+//
+// M4 (t19): the pool ceiling is per-run player.maxStamina (G2 license +10 at run
+// start) and the Damp trinket adds flat staminaRegenBonus regen/s — the 100
+// ceiling + 40/s base are the defaults every run resets to.
 
 import type { PlayerState, WorldState } from '../core/world';
 
@@ -26,7 +30,8 @@ export function spendStamina(player: PlayerState, amount: number): boolean {
   return true;
 }
 
-// Tick the pool: count the no-regen window down, then regen 40/s up to the cap.
+// Tick the pool: count the no-regen window down, then regen up to the run's
+// ceiling (player.maxStamina) at the base rate + the equipped trinket bonus.
 // Regen applies on the same step the delay elapses, so the pause is exactly 0.8s.
 export function updateStamina(world: WorldState, dt: number): void {
   const p = world.player;
@@ -34,7 +39,7 @@ export function updateStamina(world: WorldState, dt: number): void {
     p.staminaRegenDelay -= dt;
     if (p.staminaRegenDelay <= EPS) p.staminaRegenDelay = 0;
   }
-  if (p.staminaRegenDelay === 0 && p.stamina < STAMINA_MAX) {
-    p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_REGEN * dt);
+  if (p.staminaRegenDelay === 0 && p.stamina < p.maxStamina) {
+    p.stamina = Math.min(p.maxStamina, p.stamina + (STAMINA_REGEN + p.staminaRegenBonus) * dt);
   }
 }
