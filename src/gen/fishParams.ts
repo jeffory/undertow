@@ -49,6 +49,7 @@ export interface FishParams {
   spineSegments: number; // 6..14
   spineLengths: number[]; // world units per segment; sum = totalLength
   girthCurve: number[]; // radius factor per segment 0..1 (lathed profile)
+  snout: number; // 0..1 — 0 = blunt carp head, 1 = long pointed pike snout
   finCount: number; // 2..9; odd counts read as "wrong"
   finPlacement: FinPlacement[]; // length === finCount
   eyeCount: number; // 0..3; 2 is normal, anything else is the joke
@@ -97,6 +98,7 @@ export interface SpeciesBase {
   lengthM: number; // target total length (m) — jittered ±8%
   spineSegments: number; // 6..14
   girthCurve: number[]; // radius factors, length === spineSegments
+  snout: number; // 0..1 — 0 = blunt carp head, 1 = long pointed pike snout
   finCount: number; // 2..9
   finKinds: FinKind[]; // non-caudal fin kinds, cycled to fill finCount-1
   eyeCount: number;
@@ -184,7 +186,8 @@ export function makeParams(): FishParams {
     category: 'catch',
     spineSegments: 8,
     spineLengths: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-    girthCurve: [0.5, 0.6, 0.65, 0.6, 0.5, 0.45, 0.4, 0.35],
+    girthCurve: [0.3, 0.45, 0.6, 0.65, 0.62, 0.55, 0.48, 0.4],
+    snout: 0.5,
     finCount: 3,
     finPlacement: [
       { at: 0, kind: 'caudal', scale: 1 },
@@ -239,8 +242,10 @@ function buildFinPlacement(base: SpeciesBase, rng: Rng, mult: number, finCount: 
   const kinds = base.finKinds.length > 0 ? base.finKinds : (['dorsal'] as FinKind[]);
   for (let i = 0; i < extra; i++) {
     const kind = kinds[Math.min(i, kinds.length - 1)]!;
-    const span = extra > 1 ? i / (extra - 1) : 0.5;
-    const at = clamp(0.16 + span * 0.52 + jitter(rng, 0.05, mult), 0.08, 0.82);
+    // kind-aware anchor: pectorals sit just behind the head, dorsal mid-back
+    const baseAt =
+      kind === 'pectoral' ? 0.2 : kind === 'dorsal' ? 0.4 : kind === 'ventral' ? 0.46 : kind === 'ridge' ? 0.5 : 0.45;
+    const at = clamp(baseAt + jitter(rng, 0.05, mult), 0.08, 0.82);
     out.push({ at, kind, scale: 0.85 + jitter(rng, 0.2, mult) });
   }
   return out;
@@ -301,6 +306,7 @@ export function generateFishParams(
     spineSegments,
     spineLengths: [],
     girthCurve: [],
+    snout: clamp(base.snout + jitter(rng, 0.06, mult), 0, 1),
     finCount,
     finPlacement: [],
     eyeCount,

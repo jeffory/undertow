@@ -61,6 +61,8 @@ describe('the 12 Shallows roster', () => {
       expect(sp.eyeCount, sp.id).toBeLessThanOrEqual(3);
       expect(sp.jawSplit, sp.id).toBeGreaterThanOrEqual(0);
       expect(sp.jawSplit, sp.id).toBeLessThanOrEqual(1);
+      expect(sp.snout, sp.id).toBeGreaterThanOrEqual(0);
+      expect(sp.snout, sp.id).toBeLessThanOrEqual(1);
       expect(sp.limbBudget, sp.id).toBeGreaterThanOrEqual(0);
       expect(sp.limbBudget, sp.id).toBeLessThanOrEqual(4);
       expect(sp.humanRatio, sp.id).toBeGreaterThanOrEqual(0);

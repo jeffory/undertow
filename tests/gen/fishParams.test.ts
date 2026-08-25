@@ -27,6 +27,8 @@ describe('makeParams — the fish-normal baseline', () => {
     expect(p.spineSegments).toBe(8);
     expect(p.spineLengths).toHaveLength(8);
     expect(p.girthCurve).toHaveLength(8);
+    expect(p.snout).toBeGreaterThanOrEqual(0);
+    expect(p.snout).toBeLessThanOrEqual(1);
     expect(p.finCount).toBe(3);
     expect(p.eyeCount).toBe(2);
     expect(p.limbBudget).toBe(0);
@@ -89,7 +91,7 @@ describe('jitter bounds — every rarity stays inside spec ranges', () => {
     }
   });
 
-  it('eyeCount ∈ [0,3], limbBudget ∈ [0,4], jawSplit/humanRatio/eyeSize ∈ [0,1]', () => {
+  it('eyeCount ∈ [0,3], limbBudget ∈ [0,4], jawSplit/humanRatio/eyeSize/snout ∈ [0,1]', () => {
     for (const sp of SHALLOWS_SPECIES) {
       for (const r of rarities) {
         for (const s of seeds) {
@@ -98,6 +100,8 @@ describe('jitter bounds — every rarity stays inside spec ranges', () => {
           expect(p.eyeCount, `${sp.id}@${r}/${s}`).toBeLessThanOrEqual(3);
           expect(p.eyeSize, `${sp.id}@${r}/${s}`).toBeGreaterThanOrEqual(0);
           expect(p.eyeSize, `${sp.id}@${r}/${s}`).toBeLessThanOrEqual(1);
+          expect(p.snout, `${sp.id}@${r}/${s}`).toBeGreaterThanOrEqual(0);
+          expect(p.snout, `${sp.id}@${r}/${s}`).toBeLessThanOrEqual(1);
           expect(p.limbBudget, `${sp.id}@${r}/${s}`).toBeGreaterThanOrEqual(0);
           expect(p.limbBudget, `${sp.id}@${r}/${s}`).toBeLessThanOrEqual(4);
           expect(p.jawSplit, `${sp.id}@${r}/${s}`).toBeGreaterThanOrEqual(0);

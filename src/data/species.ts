@@ -31,7 +31,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 1,
     lengthM: 1.2,
     spineSegments: 10,
-    girthCurve: [0.5, 0.6, 0.65, 0.6, 0.5, 0.45, 0.4, 0.35, 0.3, 0.2],
+    girthCurve: [0.16, 0.28, 0.42, 0.55, 0.62, 0.6, 0.54, 0.48, 0.42, 0.38], // slender pike, long taper
+    snout: 0.9, // pointed pike snout
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -56,7 +57,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 1,
     lengthM: 0.8,
     spineSegments: 8,
-    girthCurve: [0.35, 0.4, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2],
+    girthCurve: [0.2, 0.3, 0.42, 0.48, 0.45, 0.4, 0.36, 0.32], // stubby minnow
+    snout: 0.5,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -82,7 +84,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 1,
     lengthM: 1.0,
     spineSegments: 7,
-    girthCurve: [0.5, 0.85, 1, 0.9, 0.6, 0.4, 0.3],
+    girthCurve: [0.3, 0.5, 0.75, 0.95, 1.0, 0.85, 0.62], // deep-bodied toad, fat mid
+    snout: 0.15, // blunt head
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -109,7 +112,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 1,
     lengthM: 1.0,
     spineSegments: 6,
-    girthCurve: [0.6, 0.8, 0.95, 0.95, 0.8, 0.6],
+    girthCurve: [0.55, 0.7, 0.8, 0.8, 0.7, 0.6], // barrel, thick throughout
+    snout: 0.25,
     finCount: 2,
     finKinds: [D()],
     eyeCount: 2,
@@ -119,7 +123,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0.2,
     swimFreq: 1.8,
     swimAmp: 0.7,
-    palette: 0,
+    palette: 1, // olive-bronze mud-roller
     stats: { mass: 1.8, stamina: 120, pullForce: 4.0, swimSpeed: 4.5, hp: 120 },
     patterns: { orbit: 0.45, lunge: 0.25, dive: 0.1, drag: 0.2 },
     wrongnessInfluence: 0.9,
@@ -134,7 +138,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 2,
     lengthM: 1.1,
     spineSegments: 8,
-    girthCurve: [0.45, 0.5, 0.55, 0.55, 0.5, 0.45, 0.4, 0.35],
+    girthCurve: [0.24, 0.38, 0.52, 0.58, 0.55, 0.5, 0.46, 0.42],
+    snout: 0.6,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -161,7 +166,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 2,
     lengthM: 1.1,
     spineSegments: 9,
-    girthCurve: [0.4, 0.45, 0.5, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25],
+    girthCurve: [0.22, 0.32, 0.45, 0.5, 0.5, 0.46, 0.42, 0.38, 0.34], // pale banded shad
+    snout: 0.55,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -171,7 +177,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0,
     swimFreq: 2.6,
     swimAmp: 0.5,
-    palette: 2,
+    palette: 2, // silver-blue ladder
     banding: { colorIdx: 0, period: 0.2 }, // ladder rungs
     stats: { mass: 1.7, stamina: 110, pullForce: 4.0, swimSpeed: 5.5, hp: 110 },
     patterns: { orbit: 0.4, lunge: 0.3, dive: 0.2, drag: 0.1 },
@@ -186,7 +192,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 2,
     lengthM: 1.4,
     spineSegments: 12,
-    girthCurve: [0.3, 0.35, 0.4, 0.4, 0.38, 0.35, 0.32, 0.3, 0.28, 0.25, 0.22, 0.18],
+    girthCurve: [0.14, 0.2, 0.28, 0.36, 0.42, 0.44, 0.43, 0.4, 0.37, 0.34, 0.3, 0.26], // dark slender shad
+    snout: 0.7,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -211,9 +218,10 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 3,
     lengthM: 0.9,
     spineSegments: 8,
-    girthCurve: [0.4, 0.45, 0.5, 0.48, 0.45, 0.4, 0.35, 0.3],
+    girthCurve: [0.22, 0.32, 0.45, 0.5, 0.48, 0.44, 0.4, 0.36], // silvery shiner
+    snout: 0.45,
     finCount: 3,
-    finKinds: [D(), 'ventral'],
+    finKinds: [D(), P()],
     eyeCount: 2,
     eyeSize: 0.22,
     jawSplit: 0.25,
@@ -221,7 +229,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0,
     swimFreq: 2.8,
     swimAmp: 0.6,
-    palette: 1,
+    palette: 2, // silver-blue, biolum
     glow: true,
     stats: { mass: 1.2, stamina: 95, pullForce: 3.6, swimSpeed: 7, hp: 80 },
     patterns: { orbit: 0.4, lunge: 0.35, dive: 0.2, drag: 0.05 },
@@ -237,7 +245,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 3,
     lengthM: 1.9,
     spineSegments: 14,
-    girthCurve: [0.25, 0.28, 0.3, 0.32, 0.3, 0.28, 0.26, 0.25, 0.24, 0.22, 0.2, 0.18, 0.16, 0.14],
+    girthCurve: [0.12, 0.16, 0.2, 0.22, 0.22, 0.2, 0.19, 0.18, 0.17, 0.16, 0.15, 0.14, 0.13, 0.12], // unnervingly long ribbon
+    snout: 0.6,
     finCount: 2,
     finKinds: ['ridge'],
     eyeCount: 2,
@@ -247,7 +256,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0,
     swimFreq: 1.5,
     swimAmp: 1.1,
-    palette: 3,
+    palette: 3, // pale sickly — the rare+ pale variant
     stats: { mass: 2.4, stamina: 140, pullForce: 5.5, swimSpeed: 8, hp: 160 },
     patterns: { orbit: 0.3, lunge: 0.4, dive: 0.25, drag: 0.05 },
     wrongnessInfluence: 0.6,
@@ -262,7 +271,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 3,
     lengthM: 1.1,
     spineSegments: 7,
-    girthCurve: [0.5, 0.55, 0.6, 0.6, 0.55, 0.45, 0.35],
+    girthCurve: [0.3, 0.45, 0.6, 0.65, 0.6, 0.5, 0.4], // flat silver blade
+    snout: 0.6,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -272,7 +282,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0,
     swimFreq: 2.4,
     swimAmp: 0.5,
-    palette: 4,
+    palette: 2, // metallic silver-blue
     stats: { mass: 1.6, stamina: 105, pullForce: 4.4, swimSpeed: 6, hp: 120 },
     patterns: { orbit: 0.4, lunge: 0.3, dive: 0.2, drag: 0.1 },
     wrongnessInfluence: 0.5,
@@ -287,7 +297,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 3,
     lengthM: 1.2,
     spineSegments: 8,
-    girthCurve: [0.5, 0.65, 0.75, 0.8, 0.75, 0.65, 0.5, 0.4],
+    girthCurve: [0.3, 0.55, 0.8, 0.95, 1.0, 0.9, 0.72, 0.55], // deep-bodied carp, blunt head
+    snout: 0.2,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -297,7 +308,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0,
     swimFreq: 1.6,
     swimAmp: 0.45,
-    palette: 0,
+    palette: 1, // olive-bronze
     attachment: 'bell',
     stats: { mass: 2.6, stamina: 130, pullForce: 4.6, swimSpeed: 4.8, hp: 150 },
     patterns: { orbit: 0.4, lunge: 0.2, dive: 0.1, drag: 0.3 },
@@ -314,7 +325,8 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     tier: 4,
     lengthM: 1.3,
     spineSegments: 11,
-    girthCurve: [0.35, 0.4, 0.42, 0.4, 0.38, 0.35, 0.32, 0.3, 0.28, 0.25, 0.2],
+    girthCurve: [0.2, 0.3, 0.4, 0.46, 0.48, 0.46, 0.42, 0.38, 0.34, 0.3, 0.26], // slim fox, fast
+    snout: 0.6,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -324,7 +336,7 @@ export const SHALLOWS_SPECIES: SpeciesPreset[] = [
     humanRatio: 0.2,
     swimFreq: 4.0,
     swimAmp: 0.4,
-    palette: 5,
+    palette: 4,
     banding: { colorIdx: 0, period: 0.3 }, // the only red in the Shallows
     stats: { mass: 1.3, stamina: 90, pullForce: 5.2, swimSpeed: 9, hp: 100 },
     patterns: { orbit: 0.35, lunge: 0.4, dive: 0.15, drag: 0.1 },
@@ -346,7 +358,8 @@ export const BOSS_AND_BAGMAN: SpeciesPreset[] = [
     tier: 5,
     lengthM: 3.5,
     spineSegments: 12,
-    girthCurve: [0.4, 0.5, 0.6, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25],
+    girthCurve: [0.2, 0.3, 0.4, 0.5, 0.55, 0.56, 0.54, 0.5, 0.46, 0.42, 0.38, 0.34], // massive scarred pike
+    snout: 0.85,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
@@ -372,7 +385,8 @@ export const BOSS_AND_BAGMAN: SpeciesPreset[] = [
     tier: 2,
     lengthM: 0.7,
     spineSegments: 7,
-    girthCurve: [0.35, 0.4, 0.4, 0.38, 0.35, 0.3, 0.25],
+    girthCurve: [0.2, 0.3, 0.42, 0.46, 0.42, 0.38, 0.34], // frantic small minnow
+    snout: 0.5,
     finCount: 3,
     finKinds: [D(), P()],
     eyeCount: 2,
