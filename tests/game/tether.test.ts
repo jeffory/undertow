@@ -443,3 +443,86 @@ describe('event stream (T14 / Addendum A.6)', () => {
     expect(w.tetherEvents.some((e) => e.type === 'drag')).toBe(false);
   });
 });
+// --- QA round: degenerate mass splits + drag cooldown decay ---------------------
+
+describe('mass-split degenerate cases (NaN guards)', () => {
+  function customFight(massA: number, massB: number) {
+    const w = createWorld(1);
+    w.fish = createFish();
+    w.fish.x = 16; // L 14 → 2m excess along +X
+    w.fish.z = 0;
+    const fight = startTetherFight(w, M2_SPECIES, 'player', {
+      a: {
+        anchor: { kind: 'entity', entityId: -1 },
+        owner: 'player',
+        mass: massA,
+        radius: 0.5,
+        reel: { kind: 'player-stance' },
+        cut: { kind: 'lure' },
+      },
+      b: {
+        anchor: { kind: 'entity', entityId: -2 },
+        owner: 'enemy',
+        mass: massB,
+        radius: FISH_RADIUS,
+        reel: { kind: 'none' },
+        cut: { kind: 'none' },
+      },
+      L: 14,
+    });
+    expect(fight).not.toBeNull();
+    return { w, fight: fight! };
+  }
+
+  it('an Infinity-mass B endpoint moves nothing but pulls A the whole excess (no NaN)', () => {
+    const { w } = customFight(1, Infinity);
+    updateTetherConstraint(w, DT);
+    expect(Number.isFinite(w.player.x)).toBe(true);
+    expect(Number.isFinite(w.fish!.x)).toBe(true);
+    expect(w.fish!.x).toBe(16); // immovable end never moves
+    expect(w.player.x).toBeCloseTo(2, 6); // A takes the full correction
+  });
+
+  it('an Infinity-mass A endpoint: B takes the whole correction (no NaN)', () => {
+    const { w } = customFight(Infinity, 2);
+    updateTetherConstraint(w, DT);
+    expect(w.player.x).toBe(0);
+    expect(w.fish!.x).toBeCloseTo(14, 6);
+    expect(Number.isFinite(w.fish!.x)).toBe(true);
+  });
+
+  it('both ends Infinity: nothing moves, tension still accumulates, no NaN', () => {
+    const { w, fight } = customFight(Infinity, Infinity);
+    updateTetherConstraint(w, DT);
+    expect(w.player.x).toBe(0);
+    expect(w.fish!.x).toBe(16);
+    expect(Number.isFinite(fight.tension)).toBe(true);
+    expect(fight.tension).toBeGreaterThan(0);
+  });
+
+  it('zero total mass splits evenly instead of NaN-poisoning both endpoints', () => {
+    const { w } = customFight(0, 0);
+    updateTetherConstraint(w, DT);
+    expect(Number.isFinite(w.player.x)).toBe(true);
+    expect(Number.isFinite(w.fish!.x)).toBe(true);
+    expect(w.player.x).toBeCloseTo(1, 6);
+    expect(w.fish!.x).toBeCloseTo(15, 6);
+  });
+});
+
+describe('drag cooldown decay', () => {
+  it('decays while the line is slack (it used to freeze until the next taut step)', () => {
+    const { w, fight } = fightWorld({ excess: 0 }); // fish exactly at L → slack path
+    fight.drag.cooldown = 0.2;
+    updateTetherConstraint(w, DT);
+    expect(fight.drag.cooldown).toBeCloseTo(0.2 - DT, 9);
+  });
+
+  it('a fired drag keeps its full cooldown on the firing step', () => {
+    const { w, fight } = fightWorld({ mass: 4, excess: 2 });
+    updateTetherConstraint(w, DT);
+    expect(w.tetherEvents.some((e) => e.type === 'drag')).toBe(true);
+    // the cooldown set by the fire is not partially consumed the same step
+    expect(fight.drag.cooldown).toBeCloseTo(0.3, 9);
+  });
+});

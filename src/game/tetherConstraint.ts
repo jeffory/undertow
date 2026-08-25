@@ -245,11 +245,36 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
 
   // 4. CONSTRAINT (plan §3 branch 4, Addendum A.3) — mass-split position
   //    correction + tension from real overshoot, brace on the player endpoint.
+  // The drag cooldown ticks every step, taut or slack — decaying it only while
+  // taut froze the cooldown on a slack line, and decaying it after a fire ate
+  // one dt of the fresh cooldown on the firing step.
+  fight.drag.cooldown = Math.max(0, fight.drag.cooldown - dt);
   if (len > fight.L) {
     const nx = dx / len;
     const nz = dz / len;
     const excess = len - fight.L;
-    const shareA = fight.b.mass / (fight.a.mass + fight.b.mass); // 0 < share < 1 (fixed = ∞ → 0)
+    // Mass-split share of the correction applied to the A end (heavier B → A
+    // moves more). ∞/∞ and 0/0 both produce NaN through the naive ratio, so the
+    // fixed-anchor (mass = ∞) and degenerate (sum ≤ 0) cases are explicit:
+    // an infinite-mass end never moves; two immovable ends split nothing.
+    const massA = fight.a.mass;
+    const massB = fight.b.mass;
+    let shareA: number;
+    let shareB: number;
+    if (massA === Infinity && massB === Infinity) {
+      shareA = 0;
+      shareB = 0;
+    } else if (massA === Infinity) {
+      shareA = 0;
+      shareB = 1;
+    } else if (massB === Infinity) {
+      shareA = 1;
+      shareB = 0;
+    } else {
+      const sum = massA + massB;
+      shareA = sum > 0 ? massB / sum : 0.5;
+      shareB = 1 - shareA;
+    }
     const move = playerMoveDir(world);
     const braceA =
       fight.a.owner === 'player'
@@ -260,7 +285,7 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
         ? 1 - tuning.braceEfficacy * Math.max(0, move.x * -nx + move.z * -nz)
         : 1;
     const corrA = excess * shareA * braceA;
-    const corrB = excess * (1 - shareA) * braceB;
+    const corrB = excess * shareB * braceB;
     aPos.write(pa.x + nx * corrA, pa.z + nz * corrA);
     bPos.write(pb.x - nx * corrB, pb.z - nz * corrB);
     fight.tension += excess * tuning.kTension * dt;
@@ -294,7 +319,6 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
       drag.accumulated = 0;
       drag.cooldown = DRAG_COOLDOWN;
     }
-    drag.cooldown = Math.max(0, drag.cooldown - dt);
   } else {
     fight.tension -= tuning.slackDecay * dt;
   }
