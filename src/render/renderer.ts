@@ -13,6 +13,7 @@ import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
 import { initPlayer, updatePlayer } from './player';
 import { initFish, updateFishMesh } from './fish';
+import { loadAssets } from './assets';
 
 export interface RenderContext {
   renderer: THREE.WebGLRenderer;
@@ -53,6 +54,10 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initPlayer(scene);
   initFish(scene);
   initPost();
+
+  // Kick off async GLTF loads at boot; render modules swap primitives for the
+  // loaded models when they land (primitive stays as the fallback meanwhile).
+  loadAssets();
 
   ctx = { renderer, scene, camera, follow: { x: 0, y: 0, z: 0 } };
   return ctx;

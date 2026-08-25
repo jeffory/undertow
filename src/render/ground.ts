@@ -11,8 +11,8 @@ import type { WorldState } from '../core/world';
 export const GROUND_Y = 0.25; // top surface of the islet, above the water plane
 const GROUND_RADIUS = 20; // must match world.ground.radius (world.ts)
 const GROUND_SEGMENTS = 36; // low-poly rim
-const GROUND_TOP = 0x3a2c1e; // dark earth, centre (bright enough to read against the water)
-const GROUND_EDGE = 0x1a120c; // darker rim so the bank reads against the water
+const GROUND_TOP = 0x6a5336; // dark earth, centre (lifted so the moon+ambient shape it — reads as a dark grey-brown islet, not void black)
+const GROUND_EDGE = 0x3a2c1c; // darker rim so the bank reads against the water
 
 let mesh: THREE.Mesh | null = null;
 

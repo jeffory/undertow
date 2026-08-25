@@ -16,6 +16,7 @@ cross-slice interface contracts.
 | [05-meta-and-content.md](05-meta-and-content.md) | Meta & Content | M5 The Town → M10 The End | Lighthouse hub, rig-up, town restoration (+2 starting Dread twist), barks/bottle notes, zones 2–5 pressures + bosses, both endings & Maren breadcrumbs, procedural audio (Tone.js), content budget & balance pass |
 | [06-testing.md](06-testing.md) | Testing | cross-cutting | Vitest unit layer, smoke gate, tests-first rule, timescale hook for gate drivers |
 | [07-assets.md](07-assets.md) | Asset pipeline | cross-cutting (added 2026-08-25) | **Supersedes spec §8 "no assets"**: Tripo3D generation (`tools/tripo.py`) + Blender-headless prep + GLTF loading, `docs/concepts/images/` as art bible, Claude visual-approval loop (agy second opinions), raised tri/texture budgets, M1.5 pipeline-validation milestone. Fish stay procedural (FishParams); hero creatures go hybrid (generated mesh, procedural bones) |
+| [08-polish.md](08-polish.md) | Polish & shell | M2.5 + per-milestone (added 2026-08-25) | Title screen (attract-mode lake), text-only opening story, options menu (graphics/controls/accessibility settings, zod-versioned), README, diegetic HUD pass, feel-polish backlog per milestone |
 
 ## Build order
 

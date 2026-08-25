@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Asset QA viewer: /tools/viewer.html?glb=/assets/keeper.glb&dist=3
+     Neutral grey scene, no fog, front + side key lights, slow turntable.
+     Served by vite dev (tools/ is not bundled; open via /tools/viewer.html). -->
+<html>
+  <head><meta charset="utf-8"><style>html,body{margin:0;background:#3a3a3e}</style></head>
+  <body>
+    <script type="module">
+      import * as THREE from '/node_modules/three/build/three.module.js';
+      import { GLTFLoader } from '/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+      const q = new URLSearchParams(location.search);
+      const url = q.get('glb') ?? '/assets/keeper.glb';
+      const dist = Number(q.get('dist') ?? 3);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x3a3a3e);
+      const cam = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 500);
+      const r = new THREE.WebGLRenderer({ antialias: true });
+      r.outputColorSpace = THREE.SRGBColorSpace;
+      r.setSize(innerWidth, innerHeight);
+      document.body.appendChild(r.domElement);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(2, 3, 4); scene.add(key);
+      const rim = new THREE.DirectionalLight(0x8899bb, 0.8); rim.position.set(-3, 2, -2); scene.add(rim);
+      const grid = new THREE.GridHelper(10, 20, 0x666666, 0x4a4a4e); scene.add(grid);
+      let root = null;
+      new GLTFLoader().load(url, (g) => {
+        root = g.scene;
+        const box = new THREE.Box3().setFromObject(root);
+        const c = box.getCenter(new THREE.Vector3());
+        cam.position.set(0, c.y + 0.3, dist);
+        cam.lookAt(0, c.y, 0);
+        scene.add(root);
+        window.__loaded = true;
+      }, undefined, (e) => { window.__error = String(e); });
+      let t = 0;
+      r.setAnimationLoop(() => { if (root) root.rotation.y = t += 0.004; r.render(scene, cam); });
+    </script>
+  </body>
+</html>

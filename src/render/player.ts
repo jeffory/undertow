@@ -1,24 +1,28 @@
-// PLAYER — M1 scaffold: a low-poly keeper figure (capsule torso + head + limbs,
-// ~140 tris, vertex colours only, no textures). Positioned/rotated from
-// world.player each frame; shown only in foot mode. A brief roll hook tilts and
-// spins the figure while world.player.dodge.active — the real roll animation is
-// WORKER A's job (controller), this is just a readable placeholder. The figure
-// faces +Z in local space so rotation.y = world.player.facing matches the
-// movement convention (facing 0 = +Z, +PI/2 = +X).
+// PLAYER — M1 scaffold: a low-poly keeper figure. A procedural primitive
+// (capsule torso + head + limbs, ~140 tris, vertex colours only) is the
+// pre-load fallback; once the generated keeper model (assets/manifest.json ->
+// public/assets/keeper.glb) lands, the primitive is swapped for the loaded
+// model, keeping the same position / facing / roll-animation transform hooks.
+// Positioned/rotated from world.player each frame; shown only in foot mode.
+// The figure faces +Z in local space so rotation.y = world.player.facing
+// matches the movement convention (facing 0 = +Z, +PI/2 = +X).
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { GROUND_Y } from './ground';
+import { getAsset, hasAsset } from './assets';
 
 const DODGE_DURATION = 0.25; // seconds; matches the 0.25s i-frame roll window
 
 // --- palette (dark keeper: coat, head, hands) ---------------------------------
-const COAT = 0x3a4a5a; // deep keeper blue-grey
+const COAT = 0x3a4a5a; // deep keeper blue-grey (fallback only)
 const COAT_DARK = 0x2a3644; // limbs
 const HEAD = 0x7a5a42; // weathered skin
 const BOOTS = 0x1e1a16; // near-black boots
 
-let group: THREE.Group | null = null;
+let root: THREE.Group | null = null; // holds primitive OR loaded model
+let primitive: THREE.Group | null = null; // fallback figure
+let swapped = false; // have we swapped primitive -> loaded model?
 
 // Paint a geometry a single flat colour (flat shading via MeshLambertMaterial).
 function tint(geo: THREE.BufferGeometry, color: number): void {
@@ -39,8 +43,8 @@ function limb(w: number, h: number, d: number): THREE.BoxGeometry {
   return geo;
 }
 
-export function initPlayer(scene: THREE.Scene): void {
-  group = new THREE.Group();
+function buildPrimitive(): THREE.Group {
+  const group = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
 
   // torso — low-poly capsule
@@ -74,32 +78,57 @@ export function initPlayer(scene: THREE.Scene): void {
     leg.position.set(side * 0.12, 0.0, 0);
     group.add(leg);
   }
+  return group;
+}
 
-  group.position.y = GROUND_Y;
-  group.visible = false; // foot mode only
-  scene.add(group);
+export function initPlayer(scene: THREE.Scene): void {
+  root = new THREE.Group();
+  primitive = buildPrimitive();
+  root.add(primitive);
+
+  root.position.y = GROUND_Y;
+  root.visible = false; // foot mode only
+  scene.add(root);
+}
+
+// Swap the primitive fallback for the loaded keeper model once available.
+function trySwap(): void {
+  if (swapped || !root || !hasAsset('keeper')) return;
+  const model = getAsset('keeper');
+  if (!model) return;
+  if (primitive) {
+    root.remove(primitive);
+    primitive = null;
+  }
+  // Model origin is at the feet and +Y is up (see prep.py normalize); it
+  // already matches the keeper's height/radius, so no extra scale is needed
+  // beyond the 1.8m build height. The loaded asset is a group clone.
+  root.add(model);
+  swapped = true;
 }
 
 export function updatePlayer(world: WorldState, dt: number): void {
-  if (!group) return;
+  if (!root) return;
   void dt;
 
+  trySwap();
+
   const foot = world.mode === 'foot';
-  group.visible = foot;
+  root.visible = foot;
   if (!foot) return;
 
   const p = world.player;
-  group.position.x = p.x;
-  group.position.z = p.z;
-  group.rotation.y = p.facing;
+  root.position.x = p.x;
+  root.position.z = p.z;
+  root.rotation.y = p.facing;
 
   // Roll hook: while dodge.active, tilt the figure sideways and spin it once
   // around the roll axis, reading as a tumble. Progress runs 0→1 over the roll.
   if (p.dodge.active) {
     const rollT = 1 - Math.min(Math.max(p.dodge.timeLeft / DODGE_DURATION, 0), 1);
-    group.rotation.z = Math.sin(rollT * Math.PI) * 0.9;
-    group.rotation.y = p.facing + rollT * Math.PI * 2;
+    root.rotation.z = Math.sin(rollT * Math.PI) * 0.9;
+    root.rotation.y = p.facing + rollT * Math.PI * 2;
   } else {
-    group.rotation.z = 0;
+    root.rotation.z = 0;
   }
 }

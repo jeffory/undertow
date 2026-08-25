@@ -16,11 +16,14 @@ import { GROUND_Y } from './ground';
 import { HIT_FLASH_DURATION } from '../game/fish';
 
 // --- Shallows palette (plan 8.1: bone-teal accents on near-black) ------------
-const BODY = 0x2a5a5b; // dark teal body
-const BODY_DARK = 0x1c4244; // deep teal — dorsal / back
-const BELLY = 0xc8d8cd; // pale bone belly
-const HEAD = 0x244a4b; // slightly darker head
-const TAIL = 0x1c4244; // tail matches the back
+// Lifted so the body reads as a clearly visible dark teal under the weak moon +
+// ambient (the curved sides only catch ambient, so an un-lifted 0x2a5a5b body
+// sank to near-black). Kept moody: dark teal back, pale bone belly.
+const BODY = 0x45858a; // dark teal body
+const BODY_DARK = 0x336a6f; // deep teal — dorsal / back
+const BELLY = 0xdfe9dc; // pale bone belly
+const HEAD = 0x3c767b; // slightly darker head
+const TAIL = 0x336a6f; // tail matches the back
 
 // --- spine geometry -----------------------------------------------------------
 const SEG_LEN = 0.5; // spine segment spacing (m)
