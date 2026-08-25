@@ -137,6 +137,7 @@ export type TetherEvent =
   | { type: 'landed'; clean: true }
   | { type: 'butchered'; lineId: string; minusOneTier: true }
   | { type: 'pulledUnder'; breathSec: number; occupied: boolean; sinkingHaul?: boolean }
+  | { type: 'surfaced'; breathSec: number } // T9 — water phase exit (reached shore / line ended)
   | { type: 'reeledMs'; ms: number }                                   // instrumentation
   | { type: 'tensionWarning'; fightId: number; tension: number }       // creak/high-tension UI
   | { type: 'boatHooked'; draggerId: EntityId }

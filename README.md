@@ -21,8 +21,9 @@ fight is a leash fight.
 |---|---|---|
 | M0 The Look | ✅ | Night lake, Gerstner water, fog, lantern, rowable boat |
 | M1 The Fight | ✅ | On-foot combat: dodge, stamina, gaff combo, first fish (automated fight-gate verified) |
-| M1.5 Asset pipeline | 🔨 | Tripo3D + Blender headless → GLTF; keeper character approved |
-| M2 The Line | ⏳ | The tether — the fun-or-dead checkpoint |
+| M1.5 Asset pipeline | ✅ | Tripo3D + Blender → GLTF; keeper/rowboat/lighthouse/rocks in-game |
+| M2 The Line | ✅ | Tether combat: constraint, reel/brace/snap/cut, fish AI, water phase, line render — six-scenario automated gate passing (human feel-pass pending) |
+| M3 The Loop | ⏳ | Procedural lake, Dread, night clock, extraction, saves |
 | M3–M10 | — | Run loop, fish generator, town, zones, endings ([docs/plan](docs/plan/00-overview.md)) |
 
 ## Quickstart

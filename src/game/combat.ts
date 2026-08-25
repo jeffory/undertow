@@ -119,6 +119,20 @@ export function updateCombat(world: WorldState, dt: number): void {
   // (the fish AI in the spawn slot) read the fresh events pushed this tick.
   c.hits.length = 0;
 
+  // Submerged (plan 02 §8): gaff is NOT a water verb — the player can only
+  // reel / cut / struggle while under. Mirror the dodge branch: cancel any
+  // swing/wind-up and remember the primary level so a press while surfacing
+  // doesn't ghost into a swing.
+  if (world.water.active) {
+    c.comboStage = 0;
+    c.comboWindow = 0;
+    c.attackTimer = 0;
+    c.heavyCharge = 0;
+    c.swingHitDelivered = false;
+    c.primaryPrev = world.intent.primary;
+    return;
+  }
+
   // A dodge resets the whole chain and cancels any swing or wind-up in
   // progress. Taps during the roll are ignored entirely.
   if (world.player.dodge.active) {

@@ -184,16 +184,19 @@ export interface GroundState {
 export interface UiState {
   // crosshair, stamina bar, hints
   debug: boolean;
+  underwater: boolean; // T9 — set while the water phase is active; render/DOM tint reads it
 }
 
 export interface WaterPhaseState {
-  // 02 (plan 02 §8, T9): submerged, dragged under. Triggered by a drag-into-deep
-  // while tethered. M2 ships the data + enterWaterPhase API; the timer/verbs are
-  // 03/05's waterPhase system.
+  // 02 (plan 02 §8, T9): submerged, dragged under. Triggered when a drag
+  // displaces the tethered player past the islet shoreline (world.ground
+  // boundary). The waterPhase system (game/waterPhase.ts) owns the timer,
+  // drift, and struggle-to-shore vector.
   active: boolean; // submerged, dragged under
-  breath: number; // 15s max, drains underwater
+  breath: number; // 15s max, drains underwater (clamped at 0 — not lethal in M2)
   breathMax: number; // 15
   drift: { x: number; z: number }; // small sinusoidal drift to add to movement
+  towardShore: { x: number; z: number }; // struggle vector (player → islet centre)
   threatsApproach: boolean; // true when dread tier >= 3 — spawn system hook
 }
 
@@ -269,7 +272,7 @@ export function createWorld(seed = 1): WorldState {
     fish: null,
     ground: { x: 0, z: 0, radius: GROUND_RADIUS },
     dread: 0,
-    ui: { debug: false },
+    ui: { debug: false, underwater: false },
     time: createTime(),
     seed,
     mode: 'boat',
@@ -277,7 +280,14 @@ export function createWorld(seed = 1): WorldState {
     line: BASE_LINE,
     tuning: DEFAULT_TUNING,
     tetherEvents: [],
-    water: { active: false, breath: 15, breathMax: 15, drift: { x: 0, z: 0 }, threatsApproach: false },
+    water: {
+      active: false,
+      breath: 15,
+      breathMax: 15,
+      drift: { x: 0, z: 0 },
+      towardShore: { x: 0, z: 0 },
+      threatsApproach: false,
+    },
     lure: { id: 'basic-lure', count: 1 },
   };
 }

@@ -10,6 +10,7 @@ import { updateStamina } from '../game/stamina';
 import { updateCombat } from '../game/combat';
 import { spawnFish, updateFishAI, animateFish } from '../game/fish';
 import { updateTetherFishAI } from '../game/fishAI';
+import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
 import { constrainToCircle, separateCircles } from './collision';
 import { updateTetherConstraint } from '../game/tetherConstraint';
 import { updateTetherLog } from '../playtest/tetherLog';
@@ -69,8 +70,16 @@ export function movement(world: WorldState, dt: number): void {
     // Reel stance reads its 0.5 move-speed multiplier here (plan 02 §5.1).
     const reelActive = world.tether.fights.some((f) => f.reel.active);
     const speedMult = reelActive ? 0.5 : 1;
-    world.player.x += world.player.vx * speedMult * dt;
-    world.player.z += world.player.vz * speedMult * dt;
+    if (world.water.active) {
+      // Underwater (plan 02 §8): movement is damped (0.85×/frame) plus the
+      // waterPhase system's sinusoidal drift — slow and drifty. Reel's 0.5
+      // multiplier still applies (reeling is a water verb).
+      world.player.x += (world.player.vx * speedMult * WATER_DAMP + world.water.drift.x) * dt;
+      world.player.z += (world.player.vz * speedMult * WATER_DAMP + world.water.drift.z) * dt;
+    } else {
+      world.player.x += world.player.vx * speedMult * dt;
+      world.player.z += world.player.vz * speedMult * dt;
+    }
   }
 }
 
@@ -78,19 +87,32 @@ export function collision(world: WorldState, _dt: number): void {
   // M1 land collision (foot mode only): keep the player and fish inside the
   // islet boundary, and keep a live fish off the player's circle. Shared
   // infrastructure owned by the M1 scaffold (pure math in core/collision.ts).
+  //
+  // T9 water-phase hooks:
+  //  - a hooked fish (tether fight active) is IN the water — it is not clamped
+  //    to the islet, so a routed drag can pull the pair past the shoreline
+  //    (the source of the water-phase trigger);
+  //  - a submerged player is swimming in the deep — collision stops clamping
+  //    them back to the shore (waterPhase exits when they reach it).
   if (world.mode !== 'foot') return;
   const g = world.ground;
   const p = world.player;
+  const under = world.water.active;
+  const tethered = world.tether.fights.length > 0;
 
-  const pc = constrainToCircle({ x: p.x, z: p.z, radius: p.radius }, g);
-  p.x = pc.x;
-  p.z = pc.z;
+  if (!under) {
+    const pc = constrainToCircle({ x: p.x, z: p.z, radius: p.radius }, g);
+    p.x = pc.x;
+    p.z = pc.z;
+  }
 
   const f = world.fish;
   if (f) {
-    const fc = constrainToCircle({ x: f.x, z: f.z, radius: f.radius }, g);
-    f.x = fc.x;
-    f.z = fc.z;
+    if (!tethered) {
+      const fc = constrainToCircle({ x: f.x, z: f.z, radius: f.radius }, g);
+      f.x = fc.x;
+      f.z = fc.z;
+    }
     // a dead fish is a corpse — the player walks through it
     if (f.state !== 'dead') {
       const [pa, fb] = separateCircles(
@@ -117,6 +139,33 @@ function renderSystem(world: WorldState, dt: number): void {
 function ui(world: WorldState, _dt: number): void {
   updateDebugOverlay(world);
   updateDebugPanel(world);
+  updateWaterTint(world);
+}
+
+// --- underwater screen-inversion hook (T9) -------------------------------------
+// The waterPhase system sets world.ui.underwater; this consumes it as a cheap
+// DOM tint (a blue screen overlay). The real post/water effect is 01's render
+// job (render/post.ts) — this hook is the seam so the flag is observable and
+// screenshot-able now, before post owns it.
+
+let tintEl: HTMLDivElement | null = null;
+
+function updateWaterTint(world: WorldState): void {
+  if (!world.ui.underwater) {
+    if (tintEl) {
+      tintEl.remove();
+      tintEl = null;
+    }
+    return;
+  }
+  if (!tintEl) {
+    tintEl = document.createElement('div');
+    tintEl.id = 'underwater-tint';
+    tintEl.style.cssText =
+      'position:fixed;inset:0;z-index:20;pointer-events:none;' +
+      'background:rgba(0,45,95,0.35);mix-blend-mode:screen;';
+    document.body.appendChild(tintEl);
+  }
 }
 
 // --- debug overlay (?debug URL flag, plan section 6) -------------------------
@@ -168,6 +217,7 @@ export const UPDATE_ORDER: SystemFn[] = [
   intent,
   updateTetherFishAI, // 02 round 2A: tethered-fight FSM — end of intent phase
   updateTetherConstraint, // 02: distance constraint — AFTER intent, BEFORE movement
+  updateWaterPhase, // 02 T9: reads the post-pull position (trigger) + sets drift before movement
   updateTetherLog, // 02: playtest instrumentation — consumes the fresh event stream
   movement,
   collision,

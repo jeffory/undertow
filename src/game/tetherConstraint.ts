@@ -268,12 +268,16 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
     // Drag detection (plan §4.2): displacement actually applied to the PLAYER end.
     const playerCorr = fight.a.owner === 'player' ? corrA : fight.b.owner === 'player' ? corrB : 0;
     const drag = fight.drag;
-    drag.accumulated += playerCorr;
-    drag.lastDir = { x: nx, z: nz };
+    // Slide the window FIRST, then accumulate. Plan §4.2: "a single huge lunge
+    // can exceed 1.5m in one frame — the window logic treats that as an
+    // immediate drag." If we accumulated before the slide, a one-frame pull
+    // landing exactly on a window boundary would be wiped before it could fire.
     if (world.time.elapsed - drag.windowStart > DRAG_WINDOW) {
       drag.windowStart = world.time.elapsed;
       drag.accumulated = 0;
     }
+    drag.accumulated += playerCorr;
+    drag.lastDir = { x: nx, z: nz };
     if (drag.accumulated > DRAG_THRESHOLD && drag.cooldown <= 0) {
       // Round 2A hook: the fish AI tags the pull source (lunge burst vs dive
       // swim) so render/log know what kind of yank this was.

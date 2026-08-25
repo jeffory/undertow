@@ -347,6 +347,18 @@ describe('drag events (plan 4.2)', () => {
     updateTetherConstraint(w, DT);
     expect(w.tetherEvents.some((e) => e.type === 'drag')).toBe(false);
   });
+
+  it('a big pull landing exactly on a window boundary still fires (slide then accumulate)', () => {
+    // Regression for the T12 gate: a single-frame pull >1.5m is an immediate
+    // drag per plan §4.2. If the window slid AFTER accumulating, this pull
+    // would be wiped on the slide tick and the drag would be silently lost.
+    const { w, fight } = fightWorld({ mass: 4, excess: 2 }); // player correction = 1.6m
+    fight.drag.windowStart = w.time.elapsed - 0.2; // window is stale → slides this tick
+    updateTetherConstraint(w, DT);
+    const ev = w.tetherEvents.find((e) => e.type === 'drag');
+    expect(ev).toBeDefined();
+    if (ev && ev.type === 'drag') expect(ev.magnitude).toBeGreaterThan(1.5);
+  });
 });
 
 describe('replay determinism (spec 8.3)', () => {

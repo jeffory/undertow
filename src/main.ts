@@ -52,7 +52,7 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 
 // sim systems run at fixed DT; render+ui run once per display frame (plan 01 §3.4)
-const SIM_COUNT = 11; // input..animation (before render); includes fishAI + tetherLog
+const SIM_COUNT = 12; // input..animation (before render); includes fishAI + waterPhase + tetherLog
 const PRESENT_INDEX = SIM_COUNT; // render, ui
 
 function frame(now: number): void {
