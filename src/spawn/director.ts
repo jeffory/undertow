@@ -59,7 +59,12 @@ function nearIsletPoint(world: WorldState, rng: { int(a: number, b: number): num
 }
 
 function disturbanceStream(world: WorldState) {
-  return createRng(world.seed, AI, DISTURBANCE_STREAM_SALT);
+  // Salt with the next disturbance id: a fixed salt alone re-created the SAME
+  // stream (identical islet picks / angles / tiers / bite seeds) on every
+  // refill call, so refills replayed the initial spawn forever. The id counter
+  // is deterministic per run, so the whole spawn set is still reproducible from
+  // the run seed — each batch just draws from its own point in seed space.
+  return createRng(world.seed, AI, DISTURBANCE_STREAM_SALT ^ (world.run.nextDisturbanceId >>> 0));
 }
 
 function currentBudget(world: WorldState) {
@@ -121,9 +126,3 @@ export function stepSpawnDirector(world: WorldState, dt: number): void {
     spawn.refillTimer = refillTimerForPhase(phase);
   }
 }
-
-// M4 guarantee hooks — document the seams; nothing produces them in M3.
-export const GUARANTEE_SEAMS = {
-  unCaughtSpecies: 'TODO M4: force one disturbance to an un-caught species (needs bestiary caught-set + meta)',
-  bagmanFloor: 'TODO M4: first-3-runs Bagman floor (needs meta.runsCompleted + bagmanSeen from M5)',
-};
