@@ -174,6 +174,8 @@ function renderSystem(world: WorldState, dt: number): void {
 }
 
 function ui(world: WorldState, _dt: number): void {
+  tickFps();
+  updateBuildBadge();
   updateDebugOverlay(world);
   updateDebugPanel(world);
   updateWaterTint(world);
@@ -214,20 +216,39 @@ const DEBUG_FLAG = typeof location !== 'undefined' ? /[?&]debug/.test(location.s
 let fpsSmooth = 60;
 let lastFpsTick = 0;
 let fpsFrames = 0;
+let fpsDirty = false;
 
-export function updateDebugOverlay(world: WorldState): void {
-  if (!DEBUG_FLAG) return;
-  const el = document.getElementById('debug');
-  if (!el) return;
-  el.style.display = 'block';
-
+// Runs every display frame from the ui system (debug or not) so both the
+// debug overlay and the corner build badge share one fps estimate.
+function tickFps(): void {
+  if (typeof performance === 'undefined') return;
   const now = performance.now();
   fpsFrames++;
   if (now - lastFpsTick >= 500) {
     fpsSmooth = (fpsSmooth * 0.7) + (fpsFrames * 1000 / Math.max(1, now - lastFpsTick)) * 0.3;
     fpsFrames = 0;
     lastFpsTick = now;
+    fpsDirty = true;
   }
+}
+
+// Build date + fps, top-right, grey and subtle (styled in index.html).
+// __BUILD_DATE__ is a vite define; absent under vitest, so guard via typeof.
+declare const __BUILD_DATE__: string;
+const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : 'dev';
+
+function updateBuildBadge(): void {
+  if (!fpsDirty || typeof document === 'undefined') return;
+  fpsDirty = false;
+  const el = document.getElementById('buildinfo');
+  if (el) el.textContent = `${BUILD_DATE} · ${Math.round(fpsSmooth)} fps`;
+}
+
+export function updateDebugOverlay(world: WorldState): void {
+  if (!DEBUG_FLAG) return;
+  const el = document.getElementById('debug');
+  if (!el) return;
+  el.style.display = 'block';
 
   // draw-call / tris readout via the renderer's info (wired through main.ts)
   const info = debugInfoRef && debugInfoRef.current
