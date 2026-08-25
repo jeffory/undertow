@@ -9,14 +9,6 @@
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'drowned';
 
-export const RARITY_MULT: Record<Rarity, number> = {
-  common: 1,
-  uncommon: 2,
-  rare: 3.5,
-  epic: 6,
-  drowned: 10,
-};
-
 // M3: tier 1 = common, 2 = uncommon, 3 = rare, 4 = epic (M4 content fills out).
 export const TIER_MULT = [0, 1, 2, 3.5, 6];
 

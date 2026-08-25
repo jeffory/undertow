@@ -39,8 +39,6 @@ export const MetaSchema = z.object({
   bestHaul: z.number(),
   seenIntro: z.boolean(),
 });
-export type RunMeta = z.infer<typeof MetaSchema>;
-
 export const SaveGameSchema = z.object({
   version: z.literal(SAVE_VERSION),
   meta: MetaSchema,

@@ -27,8 +27,6 @@ export type ReelSource =
   | { kind: 'ai' }            // reverse/snatch: the enemy reels (05 §0)
   | { kind: 'none' };         // this end never reels
 
-export type CutCostKind = 'lure' | 'hull-segment' | 'contextual' | 'none';
-
 export type CutCost =
   | { kind: 'lure' }          // M2 default: F-cut costs the equipped lure
   | { kind: 'hull-segment' }  // boat fight: cleat cut costs a hull segment (03 §6.1)
