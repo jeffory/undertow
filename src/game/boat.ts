@@ -301,8 +301,9 @@ export function updateBoat(world: WorldState, dt: number): void {
       // gentle rise/fall pulse
       const a = 0.5 + 0.3 * Math.sin(wakeClock * 10 + b.speed * 3);
       (wake.material as THREE.PointsMaterial).opacity = a * Math.min(b.speed / 1.5, 1);
-      wake.position.set(b.x, b.y - 0.02, b.z);
-      wake.rotation.y = b.heading;
+      // NOTE: the wake is a child of the boat group, which already carries the
+      // boat's world transform — setting world coords here double-transformed
+      // it and sent the splash grid drifting across the lake.
     }
   }
 }

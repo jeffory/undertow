@@ -56,6 +56,8 @@ if (/[?&]mode=foot/.test(search)) {
 // automated fight driver (tools/fight.mjs) can read and verify combat state.
 if (/[?&]debug/.test(search)) {
   (window as unknown as { __world: unknown }).__world = world;
+  // scene handle for QA drivers (object inventory / stray-geometry hunts)
+  (window as unknown as { __scene: unknown }).__scene = currentRenderContext()?.scene ?? null;
   // the save panel (export/import) + the run-loop probe seams
   initSavePanel();
   (window as unknown as { __save: () => unknown }).__save = () => getSave();
