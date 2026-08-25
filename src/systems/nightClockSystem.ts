@@ -25,10 +25,14 @@ export function updateNightClockSystem(world: WorldState, _dt: number): void {
   const lake = world.lake;
   if (lake) {
     const fdElapsed = phase === 'falseDawn' ? phaseProgress(elapsedMs) * PHASE_LENGTH_S : -1;
-    for (const b of lake.buoys) {
-      const progress = buoySinkProgress(b.primary, fdElapsed);
-      b.submergeProgress = progress;
-      b.submerged = progress >= 1;
+    // Outside false dawn the loop would just rewrite 0/false onto every buoy
+    // every step; only run it while submergence can actually be non-zero.
+    if (fdElapsed >= 0 || lake.buoys.some((b) => b.submergeProgress > 0)) {
+      for (const b of lake.buoys) {
+        const progress = buoySinkProgress(b.primary, fdElapsed);
+        b.submergeProgress = progress;
+        b.submerged = progress >= 1;
+      }
     }
   }
 }

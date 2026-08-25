@@ -112,8 +112,10 @@ function consumeTap(code: string): boolean {
 }
 
 export function updateInput(world: WorldState): void {
-  // raw state
-  world.input.keys = new Set(held);
+  // raw state — reuse the Set (a fresh `new Set(held)` every fixed step was
+  // 60 allocations/s of a structure nothing currently reads)
+  world.input.keys.clear();
+  for (const code of held) world.input.keys.add(code);
   world.input.mouseX = mouseX;
   world.input.mouseY = mouseY;
   world.input.mouseDown = leftDown;
