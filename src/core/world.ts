@@ -5,8 +5,14 @@ import type { EntityStore } from './entity';
 import { createEntityStore } from './entity';
 import type { Time } from './time';
 import { createTime } from './time';
+import { Rng } from './rng';
 import type { Intent } from '../types/intent';
 import { createIntent } from '../types/intent';
+import type { TetherState, TetherEvent } from '../game/tether';
+import type { LineStats } from '../game/line';
+import { BASE_LINE } from '../game/line';
+import type { TetherTuning } from '../game/tuning';
+import { DEFAULT_TUNING } from '../game/tuning';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -41,6 +47,7 @@ export interface PlayerState {
   iframes: number; // seconds of invulnerability remaining
   hp: number; // keeper health
   radius: number; // circle collision radius (land combat, spec 8.3)
+  stagger: number; // seconds of tether-snap stagger (plan 02 §5.3, ~0.3s)
 }
 
 export interface BoatState {
@@ -49,6 +56,8 @@ export interface BoatState {
   z: number; // water-surface height (sample from water)
   heading: number; // radians
   speed: number;
+  atWinchPost: boolean; // reel-source gate for boat fights (02 seam, 03 fills)
+  atCleat: boolean; // cut-cost gate for boat fights (02 seam, 03 fills)
 }
 
 export interface HitEvent {
@@ -82,7 +91,55 @@ export type FishStateKind =
   | 'lunge'
   | 'hurt'
   | 'recover'
-  | 'dead';
+  | 'dead'
+  | 'dive'; // tether-FSM dive (render reads it for the line's dive-hook sink)
+
+export interface PatternWeights {
+  orbit: number;
+  lunge: number;
+  dive: number;
+  drag: number;
+}
+
+export interface FishTetherStats {
+  // 02 tether block (plan 02 §2.2): the exhaustion/lunge stats the tethered-fight
+  // AI reads in round 2. Mass drives the correction split; stamina is the shared
+  // exhaustion pool (FishState.stamina, 0..maxStamina).
+  mass: number; // mass ratio vs player (=1.0); heavy → yanks the player
+  maxStamina: number; // exhaustion pool ceiling (= 100 × dial 6 at fight start)
+  maxSwimSpeed: number; // m/s — lunge impulses clamp to this (plan 02 §4.1)
+  pullForce: number; // impulse magnitude per lunge (m/s) — dial 1
+  lungeCooldown: number; // s between lunges
+  lungeStaminaCost: number; // stamina per lunge (× line.exhaustMult for Braided Sinew)
+  dragSpeed: number; // m/s while in drag state
+  dragStaminaCostPerM: number;
+  routedDrag: boolean; // bosses + deliberately-routing species drag toward hazards
+  patterns: PatternWeights; // species bias over orbit/lunge/dive/drag
+  exhausted: boolean; // stamina === 0 — animation system reads this
+}
+
+// --- tethered-fight AI (plan 02 §7, round 2A — game/fishAI.ts) -----------------
+// The FSM is deliberately separate from the M1 land AI (per 01 §7's risk note).
+// FishState.ai is null while no tether fight is active; startTetherFight seeds
+// it. PCG32 stream keyed by (world.seed, fight id) so a replay is byte-identical
+// (spec 8.3).
+
+export type TetherAIMode = 'orbit' | 'lunge' | 'dive' | 'drag' | 'exhausted';
+
+export interface TetherFishAI {
+  mode: TetherAIMode;
+  timer: number; // s left in the current mode/phase
+  telegraph: number; // s of telegraph remaining (0 = none); render reads it
+  telegraphKind: 'lunge' | 'drag' | null;
+  pullDirX: number; // normalized pull dir locked at telegraph start
+  pullDirZ: number;
+  orbitDir: number; // 1 | -1
+  orbitFlipTimer: number; // s until the next orbit direction flip
+  lungeCooldown: number; // s until the fish may lunge again
+  biasTimer: number; // s until the next weighted transition roll
+  pullBy: 'lunge' | 'dive'; // current pull source — drag events tag with this
+  rng: Rng; // PCG32 stream (seeded from world.seed + fight id)
+}
 
 export interface FishState {
   // M1: the one hardcoded sine-spine fish (plan 01 §4.5). The fish integrates
@@ -100,6 +157,8 @@ export interface FishState {
   spine: Float32Array; // per-segment bend (radians), CPU sine-spine animation
   hitFlash: number; // seconds of hurt-flash remaining (vertex-colour flash)
   radius: number; // circle collision radius
+  tether: FishTetherStats; // 02 — exhaustion/lunge stats (plan 02 §2.2)
+  ai: TetherFishAI | null; // 02 round 2A — tethered-fight FSM (game/fishAI.ts)
   // --- WORKER C land-AI / sine-spine fields (plan 01 §4.5, T16/T17) ---------
   lastHp: number; // hp from the previous step — hp-delta check for hurt
   strafeDir: number; // 1 | -1 — strafe orbit direction (random flips)
@@ -110,6 +169,7 @@ export interface FishState {
   lungeZ: number;
   lungeHitDone: number; // 1 once contact damage has been dealt this lunge
   deadTilt: number; // 0→1 belly-flop roll (render rolls the body from this)
+  exhaustTilt: number; // 0..max belly-tilt telegraph (animateFish ramps it, plan 02 §6.2)
 }
 
 export interface GroundState {
@@ -126,6 +186,23 @@ export interface UiState {
   debug: boolean;
 }
 
+export interface WaterPhaseState {
+  // 02 (plan 02 §8, T9): submerged, dragged under. Triggered by a drag-into-deep
+  // while tethered. M2 ships the data + enterWaterPhase API; the timer/verbs are
+  // 03/05's waterPhase system.
+  active: boolean; // submerged, dragged under
+  breath: number; // 15s max, drains underwater
+  breathMax: number; // 15
+  drift: { x: number; z: number }; // small sinusoidal drift to add to movement
+  threatsApproach: boolean; // true when dread tier >= 3 — spawn system hook
+}
+
+export interface LureState {
+  // 02 placeholder lure slot (plan 02 §5.4): the equipped lure; cut/snap lose it.
+  id: string;
+  count: number;
+}
+
 export interface WorldState {
   entities: EntityStore;
   input: InputState;
@@ -140,6 +217,12 @@ export interface WorldState {
   time: Time;
   seed: number; // PCG32 seed (set per run; 03/04 use)
   mode: Mode; // 'boat' | 'foot' (03 drives)
+  tether: TetherState; // 02 — generic anchor fights (Addendum A.2)
+  line: LineStats; // 02 — equipped line
+  tuning: TetherTuning; // 02 — the six dials
+  tetherEvents: TetherEvent[]; // 02 — produced by tetherConstraint, cleared per tick
+  water: WaterPhaseState; // 02 — water-phase state (T9 owns the system)
+  lure: LureState; // 02 — equipped lure slot (cut/snap cost)
 }
 
 export const PLAYER_RADIUS = 0.5;
@@ -169,8 +252,9 @@ export function createWorld(seed = 1): WorldState {
       iframes: 0,
       hp: PLAYER_MAX_HP,
       radius: PLAYER_RADIUS,
+      stagger: 0,
     },
-    boat: { x: 0, y: 0, z: 0, heading: 0, speed: 0 },
+    boat: { x: 0, y: 0, z: 0, heading: 0, speed: 0, atWinchPost: false, atCleat: false },
     combat: {
       comboStage: 0,
       comboWindow: 0,
@@ -189,6 +273,12 @@ export function createWorld(seed = 1): WorldState {
     time: createTime(),
     seed,
     mode: 'boat',
+    tether: { fights: [], nextId: 1 },
+    line: BASE_LINE,
+    tuning: DEFAULT_TUNING,
+    tetherEvents: [],
+    water: { active: false, breath: 15, breathMax: 15, drift: { x: 0, z: 0 }, threatsApproach: false },
+    lure: { id: 'basic-lure', count: 1 },
   };
 }
 
@@ -209,6 +299,22 @@ export function createFish(): FishState {
     spine: new Float32Array(SPINE_SEGMENTS),
     hitFlash: 0,
     radius: FISH_RADIUS,
+    tether: {
+      mass: 1.5,
+      maxStamina: 100,
+      maxSwimSpeed: 6,
+      pullForce: 4,
+      lungeCooldown: 3,
+      lungeStaminaCost: 20,
+      dragSpeed: 4,
+      dragStaminaCostPerM: 2,
+      // M2 capsule routes drags toward the debug islet shoreline (plan 02 §7):
+      // drags deliberately pull the player toward the water.
+      routedDrag: true,
+      patterns: { orbit: 0.4, lunge: 0.3, dive: 0.2, drag: 0.1 },
+      exhausted: false,
+    },
+    ai: null,
     lastHp: 100,
     strafeDir: 1,
     strafeFlipTimer: 0,
@@ -217,6 +323,7 @@ export function createFish(): FishState {
     lungeZ: 0,
     lungeHitDone: 0,
     deadTilt: 0,
+    exhaustTilt: 0,
   };
 }
 

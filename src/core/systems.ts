@@ -9,15 +9,15 @@ import { updateController } from '../game/controller';
 import { updateStamina } from '../game/stamina';
 import { updateCombat } from '../game/combat';
 import { spawnFish, updateFishAI, animateFish } from '../game/fish';
+import { updateTetherFishAI } from '../game/fishAI';
 import { constrainToCircle, separateCircles } from './collision';
+import { updateTetherConstraint } from '../game/tetherConstraint';
+import { updateTetherLog } from '../playtest/tetherLog';
+import { updateDebugPanel } from '../ui/debugPanel';
 
 export type SystemFn = (world: WorldState, dt: number) => void;
 
 // --- stubs / reserved slots (owned by other workers) ----------------------
-
-function tetherConstraint(_w: WorldState, _dt: number): void {
-  // RESERVED (02): distance constraint. Runs AFTER intent, BEFORE movement.
-}
 
 function dread(_w: WorldState, _dt: number): void {
   // RESERVED (05): Dread value; value lives on world.dread.
@@ -25,9 +25,11 @@ function dread(_w: WorldState, _dt: number): void {
 
 function spawn(world: WorldState, dt: number): void {
   // M1: spawn the single hardcoded fish once, then run its land AI. WORKER C
-  // fills both (game/fish.ts); spawnFish is a no-op until then.
+  // fills both (game/fish.ts); spawnFish is a no-op until then. During a tether
+  // fight the tethered-fight AI (fishAI.ts, intent phase) owns the fish — the
+  // land AI steps aside (plan 02 §7 risk note).
   if (!world.fish) spawnFish(world);
-  updateFishAI(world, dt);
+  if (world.fish && world.tether.fights.length === 0) updateFishAI(world, dt);
 }
 
 function animation(world: WorldState, dt: number): void {
@@ -64,8 +66,11 @@ export function movement(world: WorldState, dt: number): void {
   // game/controller.ts). The fish integrates its own x/z inside its AI stub
   // (game/fish.ts, WORKER C) — movement does not touch the fish.
   if (world.mode === 'foot') {
-    world.player.x += world.player.vx * dt;
-    world.player.z += world.player.vz * dt;
+    // Reel stance reads its 0.5 move-speed multiplier here (plan 02 §5.1).
+    const reelActive = world.tether.fights.some((f) => f.reel.active);
+    const speedMult = reelActive ? 0.5 : 1;
+    world.player.x += world.player.vx * speedMult * dt;
+    world.player.z += world.player.vz * speedMult * dt;
   }
 }
 
@@ -111,6 +116,7 @@ function renderSystem(world: WorldState, dt: number): void {
 
 function ui(world: WorldState, _dt: number): void {
   updateDebugOverlay(world);
+  updateDebugPanel(world);
 }
 
 // --- debug overlay (?debug URL flag, plan section 6) -------------------------
@@ -160,7 +166,9 @@ export const debugInfoRef: DebugInfoRef = { current: null };
 export const UPDATE_ORDER: SystemFn[] = [
   input,
   intent,
-  tetherConstraint,
+  updateTetherFishAI, // 02 round 2A: tethered-fight FSM — end of intent phase
+  updateTetherConstraint, // 02: distance constraint — AFTER intent, BEFORE movement
+  updateTetherLog, // 02: playtest instrumentation — consumes the fresh event stream
   movement,
   collision,
   combat,

@@ -43,8 +43,11 @@ export function updateController(world: WorldState, dt: number): void {
 
   // dodge trigger — edge-triggered tap (intent.dodge is true for one step from
   // input.ts). Gated by cooldown first, then stamina: a failed-stamina attempt
-  // does NOT start the cooldown.
-  if (world.intent.dodge && d.cooldownLeft <= EPS && spendStamina(p, DODGE_COST)) {
+  // does NOT start the cooldown. Locked entirely while the tether reel stance is
+  // active (plan 02 §5.1: "dodge is suppressed (controller ignores dodge while
+  // reel.active)").
+  const reelActive = world.tether.fights.some((f) => f.reel.active);
+  if (world.intent.dodge && !reelActive && d.cooldownLeft <= EPS && spendStamina(p, DODGE_COST)) {
     d.active = true;
     d.timeLeft = DODGE_DURATION;
     d.cooldownLeft = DODGE_COOLDOWN;

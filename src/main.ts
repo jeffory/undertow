@@ -3,7 +3,7 @@
 
 import { createWorld, FOOT_SPAWN } from './core/world';
 import { UPDATE_ORDER, debugInfoRef } from './core/systems';
-import { advanceClock } from './core/time';
+import { parseTimescale, frameSimSteps } from './core/time';
 import { createRenderer, resizeRenderer } from './render/renderer';
 import { initInput } from './game/input';
 
@@ -16,6 +16,12 @@ if (!app) throw new Error('missing #app container');
 initInput();
 
 const world = createWorld(1);
+
+// ?timescale=N gate-driver hook (debug only): run N fixed steps per rAF frame
+// so automated gates play faster than real time. FIXED_DT is untouched, so all
+// spec timings and determinism are preserved. Default 1 = production path.
+world.time.timescale =
+  typeof location !== 'undefined' ? parseTimescale(location.search) : 1;
 
 // M1 scaffold: '?mode=foot' URL param boots straight into foot mode (debug
 // ground islet + player). The B key toggles mode live (input.ts). The player
@@ -46,12 +52,12 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 
 // sim systems run at fixed DT; render+ui run once per display frame (plan 01 §3.4)
-const SIM_COUNT = 9; // input..animation (before render)
+const SIM_COUNT = 11; // input..animation (before render); includes fishAI + tetherLog
 const PRESENT_INDEX = SIM_COUNT; // render, ui
 
 function frame(now: number): void {
-  const steps = advanceClock(world.time, now);
-  for (let i = 0; i < steps; i++) {
+  const simSteps = frameSimSteps(world.time, now);
+  for (let i = 0; i < simSteps; i++) {
     for (let s = 0; s < SIM_COUNT; s++) {
       const system = UPDATE_ORDER[s];
       if (system) system(world, world.time.dt);

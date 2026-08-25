@@ -9,6 +9,20 @@ export interface Time {
   elapsed: number; // total simulated time (seconds)
   lastReal: number; // performance.now() of previous frame (ms)
   nightPhase: number; // 0..1 dusk→deep-night stub; owned by 03
+  timescale: number; // ?timescale=N debug multiplier (clamped 1..20, default 1)
+}
+
+// ?timescale=N debug gate-driver hook (plan 06 "Gate-driver speed"). Only honored
+// alongside ?debug; N clamped to 1..MAX_TIMESCALE; default 1 (production path).
+export const MAX_TIMESCALE = 20;
+
+export function parseTimescale(search: string): number {
+  if (!/[?&]debug/.test(search)) return 1;
+  const m = /[?&]timescale=(\d+)/.exec(search);
+  if (!m) return 1;
+  const n = parseInt(m[1]!, 10);
+  if (Number.isNaN(n)) return 1;
+  return Math.min(MAX_TIMESCALE, Math.max(1, n));
 }
 
 export const FIXED_DT = 1 / 60;
@@ -26,6 +40,7 @@ export function createTime(): Time {
     elapsed: 0,
     lastReal: 0,
     nightPhase: 0,
+    timescale: 1,
   };
 }
 
@@ -49,4 +64,19 @@ export function advanceClock(time: Time, realMs: number): number {
   }
   time.step = steps;
   return steps;
+}
+
+// Steps actually due this display frame = base clock steps × timescale (plan 06
+// "Gate-driver speed"). FIXED_DT is untouched, so determinism and all spec
+// timings are preserved — sim time just advances N× faster per wall-clock frame.
+// `elapsed` advances per SIM step (not per base step), so time-sampled behavior
+// (AI rand streams, drag windows) is byte-identical to a real-time run of the
+// same sim steps.
+export function frameSimSteps(time: Time, realMs: number): number {
+  const baseSteps = advanceClock(time, realMs);
+  if (time.timescale > 1) {
+    time.elapsed += baseSteps * (time.timescale - 1) * FIXED_DT;
+  }
+  time.step = baseSteps * time.timescale;
+  return time.step;
 }

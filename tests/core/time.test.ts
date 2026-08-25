@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createTime, advanceClock, FIXED_DT, MAX_STEPS_PER_FRAME } from '../../src/core/time';
+import {
+  createTime,
+  advanceClock,
+  frameSimSteps,
+  parseTimescale,
+  FIXED_DT,
+  MAX_STEPS_PER_FRAME,
+  MAX_TIMESCALE,
+} from '../../src/core/time';
 
 describe('Time (fixed-timestep clock)', () => {
   it('three 16.7ms frames yield three steps at 1/60', () => {
@@ -46,5 +54,53 @@ describe('Time (fixed-timestep clock)', () => {
     expect(t.step).toBe(MAX_STEPS_PER_FRAME);
     advanceClock(t, 1116.7);
     expect(t.step).toBe(1);
+  });
+});
+
+describe('timescale hook (plan 06 "Gate-driver speed")', () => {
+  it('defaults to 1 and is ignored without ?debug', () => {
+    expect(parseTimescale('')).toBe(1);
+    expect(parseTimescale('?mode=foot')).toBe(1);
+    expect(parseTimescale('?timescale=10')).toBe(1); // no ?debug alongside → ignored
+  });
+
+  it('honors ?timescale=N only alongside ?debug', () => {
+    expect(parseTimescale('?debug&timescale=10')).toBe(10);
+    expect(parseTimescale('?debug&timescale=3')).toBe(3);
+  });
+
+  it('clamps N to 1..MAX_TIMESCALE', () => {
+    expect(parseTimescale('?debug&timescale=0')).toBe(1); // below floor
+    expect(parseTimescale('?debug&timescale=-4')).toBe(1);
+    expect(parseTimescale('?debug&timescale=50')).toBe(MAX_TIMESCALE); // above cap
+    expect(parseTimescale('?debug&timescale=999')).toBe(MAX_TIMESCALE);
+  });
+
+  it('non-numeric timescale falls back to the default 1', () => {
+    expect(parseTimescale('?debug&timescale=abc')).toBe(1);
+    expect(parseTimescale('?debug&timescale=')).toBe(1);
+  });
+
+  it('runs N fixed steps per frame at the same FIXED_DT', () => {
+    const t = createTime();
+    t.timescale = 10;
+    advanceClock(t, 1000); // prime lastReal
+    // one ~16.7ms display frame → 1 base clock step → 10 sim steps at timescale 10
+    expect(frameSimSteps(t, 1016.7)).toBe(10);
+    // FIXED_DT untouched — all spec-numbered timings preserved
+    expect(t.dt).toBe(FIXED_DT);
+    // simulated time advanced 10 × 1/60
+    expect(t.elapsed).toBeCloseTo(10 * FIXED_DT, 10);
+  });
+
+  it('default timescale 1 behaves exactly like advanceClock (production path)', () => {
+    const t = createTime();
+    advanceClock(t, 1000); // prime
+    const s1 = advanceClock(t, 1016.7); // one 16.7ms frame → base steps
+
+    const t2 = createTime();
+    advanceClock(t2, 1000); // prime
+    const s2 = frameSimSteps(t2, 1016.7); // timescale defaults to 1
+    expect(s2).toBe(s1);
   });
 });

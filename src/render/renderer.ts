@@ -13,6 +13,7 @@ import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
 import { initPlayer, updatePlayer } from './player';
 import { initFish, updateFishMesh } from './fish';
+import { initLines, updateLines } from './lines';
 import { loadAssets } from './assets';
 
 export interface RenderContext {
@@ -53,6 +54,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initGround(scene);
   initPlayer(scene);
   initFish(scene);
+  initLines(scene);
   initPost();
 
   // Kick off async GLTF loads at boot; render modules swap primitives for the
@@ -84,6 +86,7 @@ export function render(world: WorldState, dt: number): void {
   updateGround(world, dt);
   updatePlayer(world, dt);
   updateFishMesh(world, dt);
+  updateLines(world, dt);
   updatePost(world, dt);
 
   // smooth camera follow — the boat in M0, the player on foot in M1 (same low

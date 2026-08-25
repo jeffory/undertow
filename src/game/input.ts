@@ -5,6 +5,7 @@
 
 import type { WorldState } from '../core/world';
 import { FOOT_SPAWN } from '../core/world';
+import { startTetherFight, M2_SPECIES } from './tether';
 
 // --- raw device state (module-level, updated by listeners) -----------------
 
@@ -30,7 +31,9 @@ const KEY_CODE = new Map<string, string>([
   ['ArrowRight', 'right'],
   ['Space', 'dodge'],
   ['KeyF', 'cut'],
+  ['KeyE', 'land'], // M2 T6: accept the LAND prompt (clean catch)
   ['KeyB', 'mode'], // M1 scaffold: toggle world.mode (boat <-> foot)
+  ['KeyT', 'tether'], // M2 scaffold: start a tether fight (foot mode)
   ['Digit1', 'lure1'],
   ['Digit2', 'lure2'],
   ['Digit3', 'lure3'],
@@ -127,12 +130,18 @@ export function updateInput(world: WorldState): void {
   intent.primary = leftDown;
   intent.secondary = rightDown || held.has('ShiftLeft') || held.has('ShiftRight');
 
-  // edge-triggered taps (dodge, cut, lures)
+  // edge-triggered taps (dodge, lures)
   intent.dodge = consumeTap('Space');
-  intent.cut = consumeTap('KeyF');
   intent.lure1 = consumeTap('Digit1');
   intent.lure2 = consumeTap('Digit2');
   intent.lure3 = consumeTap('Digit3');
+
+  // LAND is a contextual prompt press (E) — a tap, not a hold (plan 02 §5.5).
+  intent.acceptLand = consumeTap('KeyE');
+
+  // CUT is a HOLD action (hold F 0.5s, plan 02 §5.4), not a tap: level, so the
+  // tether cut ring charges while the key is held and resets on release.
+  intent.cut = held.has('KeyF');
 
   // screen-space aim (raw pixels; fine for M0)
   intent.aimX = mouseX;
@@ -148,5 +157,17 @@ export function updateInput(world: WorldState): void {
       world.player.x = FOOT_SPAWN.x;
       world.player.z = FOOT_SPAWN.z;
     }
+  }
+
+  // M2 scaffold temp hook (plan 02 §12): T in foot mode starts a tether fight
+  // with the existing M1 fish (anchor 'entity', player side). The fish's M1 AI
+  // keeps running — real tether AI is round 2. No-op while a fight is active.
+  if (
+    consumeTap('KeyT') &&
+    world.mode === 'foot' &&
+    world.fish &&
+    world.tether.fights.length === 0
+  ) {
+    startTetherFight(world, M2_SPECIES, 'player');
   }
 }

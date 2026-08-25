@@ -59,6 +59,15 @@ export const SPINE_AMP = 0.55; // rad — base per-segment bend
 export const FLOP_DURATION = 0.6; // s — belly-flop: deadTilt 0→1, spine→0
 export const IDLE_SWAY = 0.4; // m/s — gentle idle sway drift
 
+// --- exhaustion telegraph (plan 02 §6.2, T6) -------------------------------------
+// Exhausted fish read as exhausted: sine-spine amplitude ×0.4 (slower, lazier
+// wave) + the capsule belly-tilts ~20° toward its top side (the "flop" tell).
+// Runs off fish.tether.exhausted, so the same telegraph works for the land AI
+// later (04). exhaustTilt is the animation-side value; the render consumes it.
+export const EXHAUST_SPINE_SCALE = 0.4; // spine amplitude multiplier when exhausted
+export const EXHAUST_TILT_MAX = 0.35; // rad — ~20° belly roll
+export const EXHAUST_TILT_RAMP = 0.5; // s — belly-tilt ramp in/out
+
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }
@@ -276,6 +285,16 @@ export function animateFish(world: WorldState, dt: number): void {
   const health = clamp(fish.maxHp > 0 ? fish.hp / fish.maxHp : 0, 0, 1);
   let ampScale = health * 0.5 + 0.5;
   if (fish.state === 'dead') ampScale = Math.max(0, 1 - fish.deadTilt);
+
+  // Exhaustion telegraph (plan 02 §6.2): spine amplitude ×0.4 + belly-tilt. The
+  // tilt ramps toward ~20° over ~0.5s while exhausted and decays back otherwise.
+  const exhausted = fish.tether.exhausted;
+  if (exhausted && fish.state !== 'dead') {
+    ampScale *= EXHAUST_SPINE_SCALE;
+    fish.exhaustTilt = Math.min(EXHAUST_TILT_MAX, fish.exhaustTilt + dt / EXHAUST_TILT_RAMP);
+  } else {
+    fish.exhaustTilt = Math.max(0, fish.exhaustTilt - dt / EXHAUST_TILT_RAMP);
+  }
 
   const t = world.time.elapsed;
   for (let i = 0; i < fish.spine.length; i++) {

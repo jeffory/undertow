@@ -9,7 +9,8 @@ export interface Intent {
   secondary: boolean; // reel stance / gaff heavy hold (RMB)
   dodge: boolean; // space — dodge roll
   cast: boolean; // cast / SET (reserved, 03)
-  cut: boolean; // hold F — cut line (reserved, 02)
+  cut: boolean; // hold F — cut line (02: hold semantics, not a tap)
+  acceptLand: boolean; // contextual LAND prompt press (02, T6 wires the key)
   lure1: boolean;
   lure2: boolean;
   lure3: boolean;
@@ -26,6 +27,7 @@ export function createIntent(): Intent {
     dodge: false,
     cast: false,
     cut: false,
+    acceptLand: false,
     lure1: false,
     lure2: false,
     lure3: false,
