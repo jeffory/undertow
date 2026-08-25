@@ -111,15 +111,32 @@ export async function recordRun(backend: SaveBackend, result: RunResult): Promis
   return persistRun(backend, save, result);
 }
 
+// Serializes recordRun calls against one backend. Two overlapping writes (run
+// end racing a later grade-up / next run end) would otherwise both load the
+// same base save and the second write would silently drop the first result.
+export class SaveWriter {
+  private chain: Promise<unknown> = Promise.resolve();
+  constructor(private readonly backend: SaveBackend) {}
+
+  record(result: RunResult): Promise<SaveGame> {
+    const next = this.chain.then(() => recordRun(this.backend, result));
+    // a failed write must not wedge the queue for every later write
+    this.chain = next.catch(() => {});
+    return next;
+  }
+}
+
 export { exportSave, importSave, SAVE_VERSION };
 
 // --- boot-time singleton (browser wiring) --------------------------------------
 let backend: SaveBackend | null = null;
+let writer: SaveWriter | null = null;
 let currentSave: SaveGame | null = null;
 
 export function initSaveSystem(): void {
   if (backend) return;
   backend = defaultBackend();
+  writer = new SaveWriter(backend);
   void loadSave(backend).then((s) => {
     currentSave = s;
   });
@@ -129,9 +146,13 @@ export function getSave(): SaveGame | null {
   return currentSave;
 }
 
-// The run-end write path (browser): persist and refresh the singleton.
+// The run-end write path (browser): persist and refresh the singleton. Writes
+// are funneled through one SaveWriter so concurrent results never race.
 export async function saveRunResult(result: RunResult): Promise<SaveGame> {
-  if (!backend) backend = defaultBackend();
-  currentSave = await recordRun(backend, result);
+  if (!backend) {
+    backend = defaultBackend();
+    writer = new SaveWriter(backend);
+  }
+  currentSave = await writer!.record(result);
   return currentSave;
 }
