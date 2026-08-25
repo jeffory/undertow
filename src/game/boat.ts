@@ -10,9 +10,8 @@ import type { WorldState } from '../core/world';
 // landed yet, final compile depends on B; the rest of this file is self-contained.
 import { waterHeightAt } from '../render/water';
 // Kinematics (heading/speed integration) live in the pure module boatPhysics.ts
-// so the motion math is unit-testable in Node without three. Behaviour is
-// identical to the inline step it replaces.
-import { stepBoatKinematics, MAX_SPEED } from './boatPhysics';
+// and are stepped by the movement SIM system; this render module only reads.
+import { MAX_SPEED } from './boatPhysics';
 import { getAsset, hasAsset } from '../render/assets';
 
 const HULL_LEN = 3.2; // bow..stern length (z)
@@ -247,7 +246,13 @@ function trySwapRowboat(): void {
   if (!model) return;
   if (primHull) {
     hullPivot.remove(primHull);
+    primHull.geometry.dispose();
+    (primHull.material as THREE.Material).dispose();
     primHull = null;
+    // release the module-level scratch arrays too — they retain ~1000 Vector3/
+    // Color objects for a hull that no longer exists
+    verts.length = 0;
+    idx.length = 0;
   }
   model.scale.setScalar(ROWBOAT_SCALE);
   model.rotation.y = ROWBOAT_YAW;
@@ -268,8 +273,10 @@ export function updateBoat(world: WorldState, dt: number): void {
   const int = world.intent;
   const t = world.time.elapsed;
 
-  // --- kinematics (heading + speed) live in the pure boatPhysics module -------
-  stepBoatKinematics(b, int, dt);
+  // Kinematics (heading + speed) advance in the movement SIM system
+  // (core/systems.ts) at fixed dt — stepping them here ran once per display
+  // frame, making boat feel depend on the refresh rate. This render pass only
+  // reads the state for bob/wake presentation.
 
   // --- bob on the water (sample at bow/stern and port/starboard) -------------
   const fwdZ = 1.1; // bow offset
