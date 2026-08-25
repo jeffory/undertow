@@ -1,24 +1,48 @@
 // WATER — WORKER B OWNS THIS FILE.
-// Water plane + Gerstner vertex waves + depth-gradient fragment shader (plan
-// 01 §3.2, T6). Renderer boot calls initWater(scene); each frame updateWater
-// (world, dt) drives the time/light uniforms. Plain functions + module state,
-// zero textures. One ShaderMaterial, one draw call.
+// Water plane + Gerstner vertex waves + flat-shaded depth/facet fragment shader
+// (plan 01 §3.2, T6; Visual QA round A water-mood pass). Renderer boot calls
+// initWater(scene); each frame updateWater (world, dt) drives the time/light
+// uniforms. Plain functions + module state, zero textures. One ShaderMaterial,
+// one draw call.
 //
-// The Gerstner wave parameters live ONLY in WAVES below (single source of
-// truth): the vertex GLSL is generated from the same table, and the CPU-side
-// waterHeightAt() samples it, so the boat can bob on exactly the rendered
-// surface.
+// Round A changes (VS QA: near-black teal low-poly ocean, not pale grey-blue):
+//   - Palette: near-black teal base (#081014) with a NARROW bone-teal crest
+//     accent (only the top ~55% of the wave range ramps toward it), so the
+//     surface reads near-black and only crest crowns pick up teal.
+//   - Flat shading: the fragment derives per-face normals from
+//     dFdx/dFdy(vWorldPos), so wave facets catch the moon as discrete lit faces
+//     (low-poly look) instead of one smooth gradient. Gerstner motion unchanged.
+//   - Foam: thresholded near-white foam on the highest crests (height >
+//     ~0.75·WAVE_MAX), per-facet jittered so it breaks along the facet grid.
+//
+// The Gerstner wave parameters live ONLY in WAVES (single source of truth):
+// the vertex GLSL is generated from the same table, the CPU-side waterHeightAt()
+// samples it, and WAVE_MAX_HEIGHT drives the crest/foam thresholds here.
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
-import { waveConstsGlsl, waveBodyGlsl } from '../core/waves';
+import { waveConstsGlsl, waveBodyGlsl, WAVE_MAX_HEIGHT } from '../core/waves';
 
 const WATER_SIZE = 400;
 const WATER_SEGMENTS = 112; // 112x112 -> 12,769 verts, 25,088 tris (~well under the 30k water budget)
 
+// Palette (spec 8.1 / plan 01 §3.2 / VS QA round A): near-black teal base,
+// bone-teal crest accent, near-white foam. Thresholds are fractions of
+// WAVE_MAX_HEIGHT so they stay coupled to the wave table.
+const DEEP_COLOR = 0x081014; // near-black, teal-tinted (the surface default)
+const SHALLOW_COLOR = 0x355c66; // deep bone-teal crest accent (narrow, top of range only)
+const FOAM_COLOR = 0xeaf2ee; // near-white bone foam
+const CREST_START_FRAC = 0.45; // crest accent begins at 45% of max wave height
+const FOAM_LO_FRAC = 0.72; // foam threshold: lowest crest that gets foam
+const FOAM_HI_FRAC = 0.92; // foam saturates here (top of the range)
+
+const WAVE_MAX = WAVE_MAX_HEIGHT;
+const CREST_START = CREST_START_FRAC * WAVE_MAX;
+const FOAM_LO = FOAM_LO_FRAC * WAVE_MAX;
+const FOAM_HI = FOAM_HI_FRAC * WAVE_MAX;
+
 const vertexShader = `
 varying vec3 vWorldPos;
-varying vec3 vNormal;
 varying float vHeight;
 
 uniform float uTime;
@@ -35,9 +59,6 @@ void main() {
   float height = 0.0;
 ${waveBodyGlsl()}
 
-  // Surface normal = cross(dPdz, dPdx) (upward for the identity mapping).
-  vec3 n = normalize(cross(dPdz, dPdx));
-  vNormal = normalize(mat3(modelMatrix) * n);
   vHeight = height;
   vWorldPos = vec3(modelMatrix * vec4(transformed, 1.0));
 
@@ -48,7 +69,6 @@ ${waveBodyGlsl()}
 
 const fragmentShader = `
 varying vec3 vWorldPos;
-varying vec3 vNormal;
 varying float vHeight;
 
 uniform vec3 uMoonDir;
@@ -61,21 +81,35 @@ uniform float uLanternRange;
 uniform vec3 uAmbient;
 uniform vec3 uDeepColor;
 uniform vec3 uShallowColor;
+uniform vec3 uFoamColor;
+
+const float FOAM_LO = ${FOAM_LO.toFixed(4)};
+const float FOAM_HI = ${FOAM_HI.toFixed(4)};
+const float CREST_START = ${CREST_START.toFixed(4)};
+const float WAVE_MAX = ${WAVE_MAX.toFixed(4)};
 
 #include <fog_pars_fragment>
 
 void main() {
-  vec3 n = normalize(vNormal);
+  // Flat shading: per-face normal from screen-space derivatives of the
+  // displaced world position (constant across each triangle → discrete facets).
+  vec3 n = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+  if (n.y < 0.0) n = -n;
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
 
-  // Depth/height gradient: troughs (deep) near-black -> crests (shallow)
-  // bone-teal accent. Wave heights span roughly ±1.23.
-  float t = clamp(vHeight * 0.6 + 0.5, 0.0, 1.0);
+  // Depth/crest gradient: near-black base everywhere; only the top ~55% of the
+  // wave range ramps toward the bone-teal crest accent (the old full-range
+  // gradient washed the whole plane pale).
+  float t = clamp((vHeight - CREST_START) / (WAVE_MAX - CREST_START), 0.0, 1.0);
   vec3 base = mix(uDeepColor, uShallowColor, t);
 
-  // Moon directional (Lambert) — rakes the wave slopes.
+  // Moon directional, FACET-gated: discrete lit/unlit facets (low-poly look).
+  // Added (not multiplied through the near-black base) so moon-facing facets
+  // read as cool teal against near-black troughs.
   float ndl = max(dot(n, uMoonDir), 0.0);
-  vec3 moon = uMoonColor * uMoonIntensity * ndl;
+  // narrow window + low gain: lit facets stay dark teal, never ice-white
+  float facet = smoothstep(0.55, 0.98, ndl);
+  vec3 moon = uMoonColor * uMoonIntensity * facet * 0.22;
 
   // Boat lantern point light (cheap distance-squared falloff bounded by the
   // light's cutoff distance=16, same shape as three's physical point lights).
@@ -92,16 +126,31 @@ void main() {
   vec3 hv = normalize(uMoonDir + viewDir);
   float spec = pow(max(dot(n, hv), 0.0), 64.0) * 0.35;
 
-  // Ambient keeps the base from falling flat; moon + lantern light the surface
-  // gradient directly so crests pick up the bone-teal and the lantern pool.
   vec3 color = base * uAmbient * 0.8;
-  color += base * moon * 0.55;
+  color += base * moon;
   color += base * lantern;
-  color += uMoonColor * spec * 1.2;
+  color += uMoonColor * spec;
+
+  // Faceted crest foam: height threshold >~0.75·max, jittered per facet (from
+  // the quantized flat normal) and weighted by how flat-up the facet faces, so
+  // foam breaks into crisp facet patches instead of one smooth blob.
+  float fh =
+    floor(n.x * 5.0 + 0.5) * 0.41 +
+    floor(n.y * 5.0 + 0.5) * 0.57 +
+    floor(n.z * 5.0 + 0.5) * 0.31;
+  // Per-facet brightness jitter: each triangle gets its own shade so the
+  // surface reads as discrete low-poly facets rather than a smooth gradient.
+  color *= 0.88 + 0.24 * fract(fh * 7.31);
+  float foamHash = 0.8 + 0.2 * fract(fh * 1.61803);
+  float upness = 0.55 + 0.45 * max(n.y, 0.0);
+  float foam = smoothstep(FOAM_LO, FOAM_HI, vHeight) * upness * foamHash;
+  color = mix(color, uFoamColor, clamp(foam * 0.85, 0.0, 1.0));
 
   // Cheap fresnel-ish darkening at grazing angles (also fattens the fog blend).
+  // Weakened from the original 0.5 so the darker palette's moonlit facets stay
+  // visible instead of being crushed flat.
   float fres = pow(1.0 - max(dot(viewDir, n), 0.0), 3.0);
-  color *= 1.0 - 0.5 * fres;
+  color *= 1.0 - 0.35 * fres;
 
   gl_FragColor = vec4(color, 1.0);
   #include <colorspace_fragment>
@@ -109,18 +158,6 @@ void main() {
 }
 `;
 
-// Palette (spec 8.1 / plan 01 §3.2): near-black water base, bone-teal accent.
-const DEEP_COLOR = 0x071318; // near-black, teal-tinted (troughs)
-const SHALLOW_COLOR = 0x4e858b; // bone-teal accent (crests)
-
-let sceneRef: THREE.Scene | null = null;
-let plane: THREE.Mesh | null = null;
-let waterMaterial: THREE.ShaderMaterial | null = null;
-let moon: THREE.DirectionalLight | null = null;
-let lantern: THREE.PointLight | null = null;
-
-// Uniform handles held at module scope so updateWater mutates .value in place
-// (indexing material.uniforms under noUncheckedIndexedAccess is messy).
 const uniforms = {
   uTime: { value: 0 },
   uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
@@ -133,8 +170,17 @@ const uniforms = {
   uAmbient: { value: new THREE.Color(0x223344).multiplyScalar(0.5) },
   uDeepColor: { value: new THREE.Color(DEEP_COLOR) },
   uShallowColor: { value: new THREE.Color(SHALLOW_COLOR) },
+  uFoamColor: { value: new THREE.Color(FOAM_COLOR) },
 };
 
+let sceneRef: THREE.Scene | null = null;
+let plane: THREE.Mesh | null = null;
+let waterMaterial: THREE.ShaderMaterial | null = null;
+let moon: THREE.DirectionalLight | null = null;
+let lantern: THREE.PointLight | null = null;
+
+// Uniform handles held at module scope so updateWater mutates .value in place
+// (indexing material.uniforms under noUncheckedIndexedAccess is messy).
 const tmpDir = new THREE.Vector3();
 
 function findLights(): void {

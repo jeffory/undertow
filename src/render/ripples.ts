@@ -10,7 +10,7 @@ import type { WorldState } from '../core/world';
 import { rippleRadiusForTier } from '../run/disturbance';
 
 let root: THREE.Group | null = null;
-const meshes = new Map<number, THREE.Mesh>();
+const groups = new Map<number, THREE.Group>();
 
 // rarity-bucket tints — the plan's "small/medium/large rings + tint by bucket"
 const TIER_COLOR: Record<number, number> = {
@@ -25,23 +25,33 @@ export function initRipples(scene: THREE.Scene): void {
   scene.add(root);
 }
 
-function ensureMesh(id: number, tier: number): THREE.Mesh {
-  const existing = meshes.get(id);
+const RINGS_PER = 3; // concentric expanding ripples per disturbance
+
+function ensureMesh(id: number, tier: number): THREE.Group {
+  const existing = groups.get(id);
   if (existing) return existing;
-  const geo = new THREE.RingGeometry(0.85, 1, 24);
-  const mat = new THREE.MeshBasicMaterial({
-    color: TIER_COLOR[tier] ?? TIER_COLOR[1],
-    transparent: true,
-    opacity: 0.55,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const m = new THREE.Mesh(geo, mat);
-  m.rotation.x = -Math.PI / 2;
-  m.position.y = 0.06;
-  root!.add(m);
-  meshes.set(id, m);
-  return m;
+  const g = new THREE.Group();
+  for (let i = 0; i < RINGS_PER; i++) {
+    // thin ring, expands outward and fades — reads as water, not a UI circle
+    const geo = new THREE.RingGeometry(0.94, 1, 28);
+    const mat = new THREE.MeshBasicMaterial({
+      color: TIER_COLOR[tier] ?? TIER_COLOR[1],
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      // the displaced wave surface (±1.2m) would occlude a flat ring at the
+      // waterline — draw over the water like the tether line does
+      depthTest: false,
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = -Math.PI / 2;
+    g.add(m);
+  }
+  g.position.y = 0.06;
+  root!.add(g);
+  groups.set(id, g);
+  return g;
 }
 
 export function updateRipples(world: WorldState, dt: number): void {
@@ -52,45 +62,47 @@ export function updateRipples(world: WorldState, dt: number): void {
   for (const d of world.disturbances) {
     if (d.state === 'gone') continue;
     live.add(d.id);
-    const mesh = ensureMesh(d.id, d.tier);
+    const group = ensureMesh(d.id, d.tier);
     const base = rippleRadiusForTier(d.tier);
-    // pulse the ring; a prompt flares (the bite is "now")
-    const phase = d.state === 'prompt' ? t * 7 : t * 1.6;
-    const pulse = 1 + 0.12 * Math.sin(phase);
-    const scale = base * pulse;
-    mesh.scale.setScalar(scale);
-    mesh.position.set(d.pos.x, 0.06, d.pos.z);
-    const mat = mesh.material as THREE.MeshBasicMaterial;
-    if (d.state === 'prompt') {
-      mat.opacity = 0.5 + 0.4 * Math.sin(t * 12);
-    } else if (d.state === 'biting') {
-      mat.opacity = 0.4 + 0.2 * Math.sin(t * 3);
-    } else {
-      mat.opacity = 0.45;
+    group.position.set(d.pos.x, 0.06, d.pos.z);
+    // concentric rings expand from the centre and fade out — the classic
+    // something-is-under-there telegraph. Prompt = urgent fast pulses.
+    const speed = d.state === 'prompt' ? 1.6 : d.state === 'biting' ? 0.9 : 0.45;
+    const peak = d.state === 'prompt' ? 0.85 : d.state === 'biting' ? 0.55 : 0.4;
+    for (let i = 0; i < group.children.length; i++) {
+      const ring = group.children[i] as THREE.Mesh;
+      const phase = (t * speed + i / RINGS_PER + d.id * 0.37) % 1;
+      const r = base * (0.25 + 0.85 * phase);
+      ring.scale.setScalar(Math.max(0.001, r));
+      const mat = ring.material as THREE.MeshBasicMaterial;
+      // born faint, brightest at a third out, gone at the rim
+      mat.opacity = peak * Math.sin(Math.min(1, phase) * Math.PI) * (1 - 0.35 * phase);
     }
   }
 
   // hide + recycle meshes for consumed disturbances
   const gone: number[] = [];
-  for (const [id, mesh] of meshes) {
+  for (const [id, group] of groups) {
     if (!live.has(id)) {
-      mesh.visible = false;
+      group.visible = false;
       gone.push(id);
     }
   }
   for (const id of gone) {
-    const mesh = meshes.get(id);
-    if (mesh) {
-      root!.remove(mesh);
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
+    const group = groups.get(id);
+    if (group) {
+      root!.remove(group);
+      for (const child of group.children) {
+        const m = child as THREE.Mesh;
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
     }
-    meshes.delete(id);
+    groups.delete(id);
   }
-  // show fresh ones
   for (const id of live) {
-    const mesh = meshes.get(id);
-    if (mesh) mesh.visible = true;
+    const group = groups.get(id);
+    if (group) group.visible = true;
   }
   void dt;
 }
