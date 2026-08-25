@@ -14,6 +14,11 @@ import { BASE_LINE } from '../game/line';
 import type { TetherTuning } from '../game/tuning';
 import { DEFAULT_TUNING } from '../game/tuning';
 import type { LakeMap } from '../gen/lakeMap';
+import type { CatchRecord } from '../extract/memories';
+import type { ClockPhase, NightClock } from '../game/clock';
+import { createClock } from '../game/clock';
+import type { RunResult } from '../save/schemas';
+import type { Disturbance } from '../run/disturbance';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -23,6 +28,7 @@ export interface InputState {
   mouseX: number;
   mouseY: number;
   mouseDown: boolean;
+  mouseWorld: { x: number; z: number } | null; // 03 — mouse on the water plane (render pick)
 }
 
 export interface DodgeState {
@@ -207,6 +213,66 @@ export interface LureState {
   count: number;
 }
 
+// --- 03 run-loop slots (plan 03 §10: w.clock / w.run / w.disturbances) ---------
+
+// The catch currently being fought, tagged at SET so the run reducer knows what
+// to record when the tether fight ends (plan §3.2 CastEvent / tether/landed).
+export interface ActiveCatch {
+  disturbanceId: number;
+  tier: number;
+  weight: number; // rolled from the LOOT stream at SET
+  species: string;
+}
+
+// Spawn-director bookkeeping (plan §9.2): per-phase refill timer + one-shots.
+export interface SpawnState {
+  refillTimer: number; // s until the next refill attempt
+  lastPhase: ClockPhase; // phase-transition tracking (one-shots)
+  initialSpawned: boolean; // the run's initial ripple field is seeded once
+}
+
+// Extraction hold state (hold E 1.5s at a buoy, plan §7.2).
+export interface ExtractState {
+  held: number; // s E has been held at a live buoy
+  buoyId: number | null;
+}
+
+export interface RunState {
+  startedAt: number; // world.time.elapsed at run start — the Night Clock epoch
+  haul: CatchRecord[]; // landed catches this run (task t12 #1: world.run.haul)
+  activeCatch: ActiveCatch | null; // the SET catch awaiting its tether end
+  ended: boolean; // run over — result frozen
+  result: RunResult | null;
+  dreadPeak: number;
+  startedAtDread: number;
+  nextDisturbanceId: number;
+  castPrev: boolean; // LMB edge tracker for the cast/prompt system
+  secondaryPrev: boolean; // RMB edge tracker for the RELEASE prompt
+  promptId: number | null; // disturbance id in the SET/RELEASE window
+  debugCastPoint: { x: number; z: number } | null; // ?debug aim seam (gate driver)
+  spawn: SpawnState;
+  extract: ExtractState;
+}
+
+export function createRunState(startedAt: number, startedAtDread: number): RunState {
+  return {
+    startedAt,
+    haul: [],
+    activeCatch: null,
+    ended: false,
+    result: null,
+    dreadPeak: startedAtDread,
+    startedAtDread,
+    nextDisturbanceId: 1,
+    castPrev: false,
+    secondaryPrev: false,
+    promptId: null,
+    debugCastPoint: null,
+    spawn: { refillTimer: 0, lastPhase: 'dusk', initialSpawned: false },
+    extract: { held: 0, buoyId: null },
+  };
+}
+
 export interface WorldState {
   entities: EntityStore;
   input: InputState;
@@ -216,7 +282,7 @@ export interface WorldState {
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
-  dread: number; // 0..100 (RESERVED; post reads it, 05 owns)
+  dread: number; // 0..100 — the Dread value (03 owns; post reads it)
   ui: UiState;
   time: Time;
   seed: number; // PCG32 seed (set per run; 03/04 use)
@@ -229,6 +295,9 @@ export interface WorldState {
   lure: LureState; // 02 — equipped lure slot (cut/snap cost)
   lake: LakeMap | null; // 03 — the generated procedural lake (run start sets it)
   dockedIslet: number | null; // 03 — islet index the foot player is on (null = aboard)
+  clock: NightClock; // 03 — the Night Clock (epoch + phase length)
+  run: RunState; // 03 — the run reducer state (haul / cast / result)
+  disturbances: Disturbance[]; // 03 — live disturbance ripples (cast targets)
 }
 
 export const PLAYER_RADIUS = 0.5;
@@ -240,7 +309,7 @@ export const SPINE_SEGMENTS = 8;
 export function createWorld(seed = 1): WorldState {
   return {
     entities: createEntityStore(),
-    input: { keys: new Set(), mouseX: 0, mouseY: 0, mouseDown: false },
+    input: { keys: new Set(), mouseX: 0, mouseY: 0, mouseDown: false, mouseWorld: null },
     intent: createIntent(),
     player: {
       x: 0,
@@ -290,6 +359,9 @@ export function createWorld(seed = 1): WorldState {
     lure: { id: 'basic-lure', count: 1 },
     lake: null,
     dockedIslet: null,
+    clock: createClock(0),
+    run: createRunState(0, 0),
+    disturbances: [],
   };
 }
 
@@ -340,7 +412,9 @@ export function createFish(): FishState {
 
 export function resetWorld(world: WorldState, seed: number): WorldState {
   const fresh = createWorld(seed);
-  // carry over runtime-only fields that should survive a run reset (debug flag)
+  // carry over runtime-only fields that should survive a run reset (debug flag +
+  // the gate-driver timescale — plan 06 keeps the driver's fast loop across runs)
   fresh.ui.debug = world.ui.debug;
+  fresh.time.timescale = world.time.timescale;
   return fresh;
 }

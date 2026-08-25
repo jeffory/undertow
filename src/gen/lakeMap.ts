@@ -102,6 +102,7 @@ export interface Buoy {
   pos: Vec2;
   primary: boolean;
   submerged: boolean;
+  submergeProgress: number; // 0..1 — false-dawn sink (nightClockSystem drives it)
 }
 
 export interface ShrineBuff {
@@ -331,8 +332,8 @@ function buildLake(runSeed: number): LakeMap {
     ? layout.pick(otherWalkable)
     : layout.pick(islets.filter((iso) => iso.id !== 0));
   const buoys: Buoy[] = [
-    { id: 0, pos: shorePoint(layout, startIso, islets, maxIsletRadius, Math.PI / 2), primary: true, submerged: false },
-    { id: 1, pos: shorePoint(layout, secondaryAnchor, islets, maxIsletRadius), primary: false, submerged: false },
+    { id: 0, pos: shorePoint(layout, startIso, islets, maxIsletRadius, Math.PI / 2), primary: true, submerged: false, submergeProgress: 0 },
+    { id: 1, pos: shorePoint(layout, secondaryAnchor, islets, maxIsletRadius), primary: false, submerged: false, submergeProgress: 0 },
   ];
 
   // micro-event: exactly one per map (plan §2.5) — wreck | shrine | bottle-note

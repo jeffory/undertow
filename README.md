@@ -23,7 +23,7 @@ fight is a leash fight.
 | M1 The Fight | ✅ | On-foot combat: dodge, stamina, gaff combo, first fish (automated fight-gate verified) |
 | M1.5 Asset pipeline | ✅ | Tripo3D + Blender → GLTF; keeper/rowboat/lighthouse/rocks in-game |
 | M2 The Line | ✅ | Tether combat: constraint, reel/brace/snap/cut, fish AI, water phase, line render — six-scenario automated gate passing (human feel-pass pending) |
-| M3 The Loop | ⏳ | Procedural lake, Dread, night clock, extraction, saves |
+| M3 The Loop | 🔨 | Playable run loop: cast/SET/fight/land, Dread, night clock, extraction receipts, saves (boat combat + descents remain) |
 | M3–M10 | — | Run loop, fish generator, town, zones, endings ([docs/plan](docs/plan/00-overview.md)) |
 
 ## Quickstart

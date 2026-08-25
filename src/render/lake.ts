@@ -268,9 +268,16 @@ export function updateLake(world: WorldState, _dt: number): void {
   trySwapLighthouse();
   tryAddRocks();
 
-  // buoys bob gently on the surface
+  // buoys bob gently on the surface; a submerging buoy sinks with the false-dawn
+  // clock (nightClockSystem drives buoy.submergeProgress) so it cannot extract
   const t = world.time.elapsed;
-  for (const marker of buoyMarkers) {
-    marker.group.position.y = GROUND_Y + Math.sin(t * 2 + marker.phase) * 0.08;
+  const bIndex = new Map(lake.buoys.map((b) => [b.id, b]));
+  for (let i = 0; i < buoyMarkers.length; i++) {
+    const marker = buoyMarkers[i]!;
+    const buoy = bIndex.get(i);
+    const sink = buoy ? buoy.submergeProgress : 0;
+    marker.group.position.y =
+      GROUND_Y + Math.sin(t * 2 + marker.phase) * 0.08 * (1 - sink) - sink * 5;
+    marker.group.visible = sink < 1;
   }
 }

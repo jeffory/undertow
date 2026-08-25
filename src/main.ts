@@ -2,11 +2,15 @@
 // fixed-timestep loop running UPDATE_ORDER, render at vsync, handle resize.
 
 import { createWorld } from './core/world';
-import { UPDATE_ORDER, debugInfoRef } from './core/systems';
+import { UPDATE_ORDER, SIM_SYSTEMS, debugInfoRef } from './core/systems';
 import { parseTimescale, frameSimSteps } from './core/time';
-import { createRenderer, resizeRenderer } from './render/renderer';
+import { createRenderer, resizeRenderer, currentRenderContext } from './render/renderer';
 import { initInput } from './game/input';
 import { ensureLake, spawnAtLakeStart, dockPlayer } from './gen/lakeWorld';
+import { initRun } from './run/run';
+import { initSaveSystem, getSave } from './core/save';
+import { initSavePanel } from './ui/savePanel';
+import * as THREE from 'three';
 
 const app = document.getElementById('app');
 if (!app) throw new Error('missing #app container');
@@ -27,10 +31,14 @@ function parseRunSeed(q: string): number {
 
 const world = createWorld(parseRunSeed(search));
 
-// M3: the run's world is real — generate the lake and start aboard the boat
-// near the lighthouse islet (task scope 5). The camera follows the boat as before.
+// M3: the run's world is real — generate the lake, start aboard the boat near
+// the lighthouse islet, and stamp the run (clock epoch + initial ripple field).
 ensureLake(world);
 spawnAtLakeStart(world);
+initRun(world);
+
+// Load the save on boot (task t12 #5): IndexedDB row → zod-validated SaveGame.
+initSaveSystem();
 
 // ?timescale=N gate-driver hook (debug only): run N fixed steps per rAF frame
 // so automated gates play faster than real time. FIXED_DT is untouched, so all
@@ -48,6 +56,16 @@ if (/[?&]mode=foot/.test(search)) {
 // automated fight driver (tools/fight.mjs) can read and verify combat state.
 if (/[?&]debug/.test(search)) {
   (window as unknown as { __world: unknown }).__world = world;
+  // the save panel (export/import) + the run-loop probe seams
+  initSavePanel();
+  (window as unknown as { __save: () => unknown }).__save = () => getSave();
+  (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
+    (x: number, z: number) => {
+      const ctx = currentRenderContext();
+      if (!ctx) return { x: 0, y: 0 };
+      const v = new THREE.Vector3(x, 0, z).project(ctx.camera);
+      return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
+    };
 }
 
 const ctx = createRenderer(app);
@@ -63,9 +81,12 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
 
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 
-// sim systems run at fixed DT; render+ui run once per display frame (plan 01 §3.4)
-const SIM_COUNT = 12; // input..animation (before render); includes fishAI + waterPhase + tetherLog
-const PRESENT_INDEX = SIM_COUNT; // render, ui
+// sim systems run at fixed DT; render+ui run once per display frame (plan 01
+// §3.4). The sim/present split is derived from UPDATE_ORDER (SIM_SYSTEMS = the
+// index of the render system) so newly-added sim systems (castFlow, the run
+// terminal, …) always advance on fixed steps — never stuck once-per-frame.
+const SIM_COUNT = SIM_SYSTEMS;
+const PRESENT_INDEX = SIM_COUNT;
 
 function frame(now: number): void {
   const simSteps = frameSimSteps(world.time, now);

@@ -11,6 +11,7 @@ export interface Intent {
   cast: boolean; // cast / SET (reserved, 03)
   cut: boolean; // hold F — cut line (02: hold semantics, not a tap)
   acceptLand: boolean; // contextual LAND prompt press (02, T6 wires the key)
+  extract: boolean; // hold E — extraction at a live buoy (03, held not a tap)
   lure1: boolean;
   lure2: boolean;
   lure3: boolean;
@@ -28,6 +29,7 @@ export function createIntent(): Intent {
     cast: false,
     cut: false,
     acceptLand: false,
+    extract: false,
     lure1: false,
     lure2: false,
     lure3: false,

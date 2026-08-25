@@ -149,6 +149,11 @@ export function updateInput(world: WorldState): void {
   // tether cut ring charges while the key is held and resets on release.
   intent.cut = held.has('KeyF');
 
+  // EXTRACT is a HOLD too: hold E 1.5s at a live buoy to end the run (03 §7.2).
+  // E also tap-fires LAND during a tether fight — the contexts never overlap
+  // (extraction is a boat verb, LAND is a foot verb).
+  intent.extract = held.has('KeyE');
+
   // screen-space aim (raw pixels; fine for M0)
   intent.aimX = mouseX;
   intent.aimY = mouseY;

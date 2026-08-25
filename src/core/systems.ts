@@ -8,32 +8,27 @@ import { updateInput } from '../game/input';
 import { updateController } from '../game/controller';
 import { updateStamina } from '../game/stamina';
 import { updateCombat } from '../game/combat';
-import { spawnFish, updateFishAI, animateFish } from '../game/fish';
+import { animateFish } from '../game/fish';
 import { updateTetherFishAI } from '../game/fishAI';
 import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
 import { constrainToCircle, separateCircles } from './collision';
 import { constrainCircleInConvex, constrainCircleOutsideHull } from './poly';
 import { dockedIslet, BOAT_COLLIDE_RADIUS } from '../gen/lakeWorld';
+import { phaseAt, runElapsedMs } from '../game/clock';
+import { tierFor } from '../game/dread';
 import { updateTetherConstraint } from '../game/tetherConstraint';
 import { updateTetherLog } from '../playtest/tetherLog';
 import { updateDebugPanel } from '../ui/debugPanel';
+import { updateCastFlow } from '../systems/castFlow';
+import { updateDreadSystem } from '../systems/dreadSystem';
+import { updateSpawnDirectorSystem } from '../systems/spawnDirector';
+import { updateNightClockSystem } from '../systems/nightClockSystem';
+import { updateRunTerminal } from '../systems/runTerminal';
+import { updateCastPrompt } from '../ui/castPrompt';
 
 export type SystemFn = (world: WorldState, dt: number) => void;
 
 // --- stubs / reserved slots (owned by other workers) ----------------------
-
-function dread(_w: WorldState, _dt: number): void {
-  // RESERVED (05): Dread value; value lives on world.dread.
-}
-
-function spawn(world: WorldState, dt: number): void {
-  // M1: spawn the single hardcoded fish once, then run its land AI. WORKER C
-  // fills both (game/fish.ts); spawnFish is a no-op until then. During a tether
-  // fight the tethered-fight AI (fishAI.ts, intent phase) owns the fish — the
-  // land AI steps aside (plan 02 §7 risk note).
-  if (!world.fish) spawnFish(world);
-  if (world.fish && world.tether.fights.length === 0) updateFishAI(world, dt);
-}
 
 function animation(world: WorldState, dt: number): void {
   // M1: CPU sine-spine animation params (fish). WORKER C fills (game/fish.ts).
@@ -172,6 +167,7 @@ function ui(world: WorldState, _dt: number): void {
   updateDebugOverlay(world);
   updateDebugPanel(world);
   updateWaterTint(world);
+  updateCastPrompt(world);
 }
 
 // --- underwater screen-inversion hook (T9) -------------------------------------
@@ -229,13 +225,23 @@ export function updateDebugOverlay(world: WorldState): void {
   const dc = info ? info.render.calls : 0;
   const tris = info ? info.render.triangles : 0;
 
+  // 03 run-loop readouts: clock phase, Dread tier, disturbance count
+  const phase = world.run
+    ? phaseAt(runElapsedMs(world.run.startedAt, world.time.elapsed))
+    : 'dusk';
+  const runSec = world.run ? Math.max(0, world.time.elapsed - world.run.startedAt) : 0;
+  const mm = Math.floor(runSec / 60);
+  const ss = Math.floor(runSec % 60);
+
   el.textContent =
     `UNDERTOW\n` +
     `seed ${world.seed}\n` +
     `fps ~${fpsSmooth.toFixed(0)}\n` +
     `draw calls ${dc}\n` +
     `tris ${tris}\n` +
-    `dread ${world.dread.toFixed(0)}`;
+    `dread ${world.dread.toFixed(0)} (tier ${tierFor(world.dread)})\n` +
+    `phase ${phase} · run ${mm}:${ss.toString().padStart(2, '0')}\n` +
+    `ripples ${world.disturbances.length} · haul ${world.run?.haul.length ?? 0}`;
 }
 
 interface DebugInfoRef {
@@ -248,6 +254,7 @@ export const debugInfoRef: DebugInfoRef = { current: null };
 export const UPDATE_ORDER: SystemFn[] = [
   input,
   intent,
+  updateCastFlow, // 03 §3: cast/bite/prompt (after intent, before the tether constraint)
   updateTetherFishAI, // 02 round 2A: tethered-fight FSM — end of intent phase
   updateTetherConstraint, // 02: distance constraint — AFTER intent, BEFORE movement
   updateWaterPhase, // 02 T9: reads the post-pull position (trigger) + sets drift before movement
@@ -255,9 +262,17 @@ export const UPDATE_ORDER: SystemFn[] = [
   movement,
   collision,
   combat,
-  dread,
-  spawn,
+  updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
+  updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
+  updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)
   animation,
+  updateRunTerminal, // 03 §7: extraction / death / run summary — a SIM system (timers scale)
   renderSystem,
   ui,
 ];
+
+// The sim/present split: every system up to (and including) the run terminal
+// advances on fixed sim steps; render + ui present once per display frame.
+// main.ts derives its SIM_COUNT from this index so new sim systems are not left
+// running once-per-frame by a stale hardcoded count.
+export const SIM_SYSTEMS = UPDATE_ORDER.indexOf(renderSystem);

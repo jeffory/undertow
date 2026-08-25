@@ -12,6 +12,8 @@ import { initPost, updatePost, compositeScene } from './post';
 import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
 import { initLake, updateLake } from './lake';
+import { initRipples, updateRipples } from './ripples';
+import { updatePick } from './pick';
 import { initPlayer, updatePlayer } from './player';
 import { initFish, updateFishMesh } from './fish';
 import { initLines, updateLines } from './lines';
@@ -54,6 +56,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initBoat(scene);
   initGround(scene);
   initLake(scene);
+  initRipples(scene);
   initPlayer(scene);
   initFish(scene);
   initLines(scene);
@@ -87,6 +90,7 @@ export function render(world: WorldState, dt: number): void {
   updateBoat(world, dt);
   updateGround(world, dt);
   updateLake(world, dt);
+  updateRipples(world, dt);
   updatePlayer(world, dt);
   updateFishMesh(world, dt);
   updateLines(world, dt);
@@ -104,6 +108,9 @@ export function render(world: WorldState, dt: number): void {
   c.position.z += (tz + 12 - c.position.z) * lerp;
   c.position.y = 14;
   c.lookAt(tx, 0, tz);
+
+  // mouse → world aim point (the cast system reads it next fixed step)
+  updatePick(world, ctx);
 
   // Post pass renders the scene (dread 0 → direct, free) instead of a bare render.
   compositeScene(ctx);
