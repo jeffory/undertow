@@ -3,7 +3,7 @@
 
 import { createWorld } from './core/world';
 import { UPDATE_ORDER, SIM_SYSTEMS, debugInfoRef } from './core/systems';
-import { parseTimescale, frameSimSteps } from './core/time';
+import { parseTimescale, runSimSteps } from './core/time';
 import { createRenderer, resizeRenderer, currentRenderContext } from './render/renderer';
 import { initInput } from './game/input';
 import { ensureLake, spawnAtLakeStart, dockPlayer } from './gen/lakeWorld';
@@ -91,13 +91,15 @@ const SIM_COUNT = SIM_SYSTEMS;
 const PRESENT_INDEX = SIM_COUNT;
 
 function frame(now: number): void {
-  const simSteps = frameSimSteps(world.time, now);
-  for (let i = 0; i < simSteps; i++) {
+  // runSimSteps advances world.time.elapsed per fixed step (not per display
+  // frame), so elapsed-sampling systems behave identically however the steps
+  // batch into frames (determinism, spec 8.3).
+  runSimSteps(world.time, now, (dt) => {
     for (let s = 0; s < SIM_COUNT; s++) {
       const system = UPDATE_ORDER[s];
-      if (system) system(world, world.time.dt);
+      if (system) system(world, dt);
     }
-  }
+  });
   // present at display rate regardless of sim steps
   for (let s = PRESENT_INDEX; s < UPDATE_ORDER.length; s++) {
     const system = UPDATE_ORDER[s];
