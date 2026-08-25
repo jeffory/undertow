@@ -31,7 +31,6 @@ let boat: THREE.Group | null = null;
 let hullPivot: THREE.Group | null = null; // pitch/roll pivot holding hull OR rowboat
 let primHull: THREE.Mesh | null = null; // primitive hull (fallback)
 let rowboatSwapped = false;
-let oar: THREE.Object3D | null = null;
 let wake: THREE.Points | null = null;
 let wakeClock = 0;
 
@@ -222,20 +221,9 @@ export function initBoat(scene: THREE.Scene): void {
   primHull = new THREE.Mesh(hullGeo, hullMat);
   hullPivot.add(primHull);
 
-  // bench (seat) — a thin box across the hull
-  const benchGeo = new THREE.BoxGeometry(HULL_WIDEST * 0.7, 0.06, 0.2);
-  const benchMat = new THREE.MeshLambertMaterial({ color: 0x6b5338 });
-  const bench = new THREE.Mesh(benchGeo, benchMat);
-  bench.position.set(0, 0.32, 0.1);
-  group.add(bench);
-
-  // oar hint — a long thin box lying across a gunwale
-  const oarGeo = new THREE.BoxGeometry(2.6, 0.05, 0.12);
-  const oarMat = new THREE.MeshLambertMaterial({ color: 0x8a6f4a });
-  oar = new THREE.Mesh(oarGeo, oarMat);
-  oar.position.set(HULL_WIDEST * 0.6, 0.3, -0.2);
-  oar.rotation.z = 0.18;
-  group.add(oar);
+  // The generated rowboat.glb carries its own bench and detailing; the old
+  // primitive bench/oar props are gone (the oar read as a plank stuck through
+  // the hull). A proper stowed-oar prop can return with the boat-combat pass.
 
   wake = makeWake();
   wake.visible = false;
@@ -303,12 +291,6 @@ export function updateBoat(world: WorldState, dt: number): void {
   boat.rotation.y = b.heading;
   hullPivot!.rotation.x = pitch;
   hullPivot!.rotation.z = roll;
-
-  // oar dips slightly with motion
-  if (oar) {
-    const row = Math.sin(t * 6) * Math.min(b.speed / MAX_SPEED, 1) * 0.15;
-    oar.rotation.x = row;
-  }
 
   // --- wake / splash hint -----------------------------------------------------
   if (wake) {
