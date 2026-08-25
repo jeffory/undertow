@@ -311,7 +311,20 @@ export function updateLines(world: WorldState, dt: number): void {
   if (!root) return;
   const fights = world.tether.fights;
   root.visible = fights.length > 0; // boat fights (M4) render the line too
-  if (!root.visible) return;
+  if (!root.visible) {
+    // Reap BEFORE the early return: when the last fight ends, the early return
+    // used to skip the reap loop below, so the final rig's geometries/materials
+    // stayed in the Map and the scene until the NEXT fight started — and after
+    // a run reset the recycled fight id 1 silently reattached to the stale rig.
+    if (rigs.size > 0) {
+      for (const [id, rig] of rigs) {
+        root.remove(rig.root);
+        disposeRig(rig);
+        rigs.delete(id);
+      }
+    }
+    return;
+  }
 
   const now = world.time.elapsed;
 

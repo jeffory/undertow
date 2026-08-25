@@ -10,6 +10,7 @@ import type { RunResult } from '../save/schemas';
 import { startNewRun } from '../run/run';
 
 let overlayEl: HTMLDivElement | null = null;
+let styleEl: HTMLStyleElement | null = null; // injected once — reused across runs
 
 const PHASE_LABEL: Record<string, string> = {
   dusk: 'DUSK',
@@ -38,7 +39,10 @@ export function showRunSummary(
   root.id = 'run-summary';
   document.body.appendChild(root);
 
-  const style = document.createElement('style');
+  // The stylesheet targets stable #run-summary selectors, so it is injected
+  // once and reused — appending a fresh copy per run end leaked one ~2.5KB
+  // <style> node into <head> every run, forever.
+  const style = styleEl ?? document.createElement('style');
   style.textContent = `
     #run-summary {
       position: fixed; inset: 0; z-index: 100;
@@ -98,7 +102,10 @@ export function showRunSummary(
     #run-summary .discharge:hover { background: #5c4a30; }
     #run-summary .seed { margin-top: 8px; text-align: center; font-size: 10px; color: #6a5638; }
   `;
-  document.head.appendChild(style);
+  if (!styleEl) {
+    document.head.appendChild(style);
+    styleEl = style;
+  }
 
   const invoice = document.createElement('div');
   invoice.className = 'invoice';

@@ -30,7 +30,7 @@ const ROCK_SCALE = 0.45; // rocks.glb (2.2m) → ~1m shoreline boulders
 let lakeGroup: THREE.Group | null = null;
 let builtFor: LakeMap | null = null;
 
-const buoyMarkers: Array<{ group: THREE.Group; phase: number }> = [];
+const buoyMarkers: Array<{ group: THREE.Group; phase: number; buoyId: number }> = [];
 
 // --- lighthouse glb swap (same pattern as the old sky.ts lighthouse) ----------
 let lighthouseBody: THREE.Object3D | null = null;
@@ -96,7 +96,7 @@ function buildWreck(wreck: Wreck): THREE.Group {
   return g;
 }
 
-function buildBuoy(buoy: Buoy): { group: THREE.Group; phase: number } {
+function buildBuoy(buoy: Buoy): { group: THREE.Group; phase: number; buoyId: number } {
   const g = new THREE.Group();
   const color = buoy.primary ? BUOY_PRIMARY : BUOY_SECONDARY;
   const float = new THREE.Mesh(
@@ -112,7 +112,7 @@ function buildBuoy(buoy: Buoy): { group: THREE.Group; phase: number } {
   top.position.y = 0.55;
   g.add(top);
   g.position.set(buoy.pos.x, GROUND_Y, buoy.pos.z);
-  return { group: g, phase: buoy.id * 2.1 };
+  return { group: g, phase: buoy.id * 2.1, buoyId: buoy.id };
 }
 
 function buildSinkhole(sinkhole: { pos: { x: number; z: number } }): THREE.Mesh {
@@ -145,7 +145,8 @@ function computeRockSpawns(lake: LakeMap): void {
   rockSpawns.length = 0;
   rocksAdded = false;
   for (const iso of lake.islets) {
-    if (iso.kind === 'rock') return; // pure obstacles stay bare
+    if (iso.kind === 'rock') continue; // pure obstacles stay bare (a `return`
+    // here aborted rock placement for every islet after the first rock islet)
     // start islet + every 3rd walkable islet keeps the tri budget well under 450k
     if (iso.id !== 0 && iso.id % 3 !== 0) continue;
     const v = iso.poly[iso.id % iso.poly.length]!;
@@ -200,6 +201,11 @@ function trySwapLighthouse(): void {
   const parent = lighthouseBody.parent;
   if (parent) {
     parent.remove(lighthouseBody);
+    const cone = lighthouseBody as THREE.Mesh;
+    if (cone.isMesh) {
+      cone.geometry.dispose();
+      (cone.material as THREE.Material).dispose();
+    }
     model.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) obj.frustumCulled = false;
     });
@@ -210,16 +216,20 @@ function trySwapLighthouse(): void {
 }
 
 // --- rebuild ------------------------------------------------------------------
-function disposeObject(root: THREE.Object3D): void {
-  root.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh) {
-      mesh.geometry?.dispose();
-      const m = mesh.material;
-      if (Array.isArray(m)) m.forEach((x) => x.dispose());
-      else m?.dispose();
-    }
-  });
+function disposeObject(obj: THREE.Object3D): void {
+  // GLB clones from assets.getAsset() SHARE geometry/materials with the cached
+  // source (tagged sharedAsset) — disposing them would free the cache's GPU
+  // buffers and every later clone (run 2's rocks/lighthouse) would render as
+  // nothing. Skip those subtrees; dispose only geometry this module built.
+  if (obj.userData.sharedAsset) return;
+  const mesh = obj as THREE.Mesh;
+  if (mesh.isMesh) {
+    mesh.geometry?.dispose();
+    const m = mesh.material;
+    if (Array.isArray(m)) m.forEach((x) => x.dispose());
+    else m?.dispose();
+  }
+  for (const child of obj.children) disposeObject(child);
 }
 
 function rebuild(lake: LakeMap): void {
@@ -271,10 +281,12 @@ export function updateLake(world: WorldState, _dt: number): void {
   // buoys bob gently on the surface; a submerging buoy sinks with the false-dawn
   // clock (nightClockSystem drives buoy.submergeProgress) so it cannot extract
   const t = world.time.elapsed;
-  const bIndex = new Map(lake.buoys.map((b) => [b.id, b]));
   for (let i = 0; i < buoyMarkers.length; i++) {
     const marker = buoyMarkers[i]!;
-    const buoy = bIndex.get(i);
+    // match by buoy ID, not by array index — the old Map was keyed by id but
+    // probed with the marker's array index, a silent mismatch if ids ever
+    // diverge from their positions
+    const buoy = lake.buoys.find((b) => b.id === marker.buoyId);
     const sink = buoy ? buoy.submergeProgress : 0;
     marker.group.position.y =
       GROUND_Y + Math.sin(t * 2 + marker.phase) * 0.08 * (1 - sink) - sink * 5;
