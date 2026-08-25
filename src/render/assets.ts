@@ -11,6 +11,7 @@ import manifest from '../../assets/manifest.json';
 export interface AssetEntry {
   url: string;
   height: number;
+  tint?: string; // optional hex color multiplied into the Lambert base color
 }
 
 export type AssetManifest = Record<string, AssetEntry>;
@@ -29,12 +30,16 @@ function makeLoader(): GLTFLoader {
 // Convert a PBR (MeshStandardMaterial) material to the game's flat-shaded look:
 // keep the base-color texture and base color, drop the metalness/roughness maps
 // (the game never uses PBR, and dropping them lightens the fragment cost). Any
-// non-standard material is left untouched.
-function toLambert(src: THREE.Material): THREE.Material {
+// non-standard material is left untouched. An optional per-asset tint (hex,
+// from the manifest) is multiplied into the Lambert base color so a whole
+// model (e.g. the keeper's oilskin coat) can be warmed in-engine without
+// touching the GLB.
+function toLambert(src: THREE.Material, tint: THREE.Color | null): THREE.Material {
   if (src instanceof THREE.MeshStandardMaterial) {
     const lam = new THREE.MeshLambertMaterial();
     lam.name = src.name;
     lam.color.copy(src.color);
+    if (tint) lam.color.multiply(tint);
     if (src.map) lam.map = src.map;
     if (src.vertexColors) lam.vertexColors = true;
     return lam;
@@ -43,14 +48,14 @@ function toLambert(src: THREE.Material): THREE.Material {
 }
 
 // Walk a loaded GLTF scene and swap every mesh's PBR material for a Lambert one.
-function flattenMaterials(root: THREE.Object3D): void {
+function flattenMaterials(root: THREE.Object3D, tint: THREE.Color | null): void {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh || !mesh.material) return;
     if (Array.isArray(mesh.material)) {
-      mesh.material = mesh.material.map(toLambert);
+      mesh.material = mesh.material.map((m) => toLambert(m, tint));
     } else {
-      mesh.material = toLambert(mesh.material);
+      mesh.material = toLambert(mesh.material, tint);
     }
   });
 }
@@ -64,7 +69,8 @@ export function loadAssets(): void {
     makeLoader().load(
       entry.url,
       (gltf) => {
-        flattenMaterials(gltf.scene);
+        const tint = entry.tint ? new THREE.Color(entry.tint) : null;
+        flattenMaterials(gltf.scene, tint);
         loaded.set(id, gltf.scene);
       },
       undefined,

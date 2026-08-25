@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
+import { getAsset, hasAsset } from './assets';
 
 export const GROUND_Y = 0.25; // top surface of the islet, above the water plane
 const GROUND_RADIUS = 20; // must match world.ground.radius (world.ts)
@@ -14,7 +15,30 @@ const GROUND_SEGMENTS = 36; // low-poly rim
 const GROUND_TOP = 0x6a5336; // dark earth, centre (lifted so the moon+ambient shape it — reads as a dark grey-brown islet, not void black)
 const GROUND_EDGE = 0x3a2c1c; // darker rim so the bank reads against the water
 
+// Rocks (generated prop) cloned onto the islet's edge, varied yaw/scale.
+// Radius band keeps them on the bank, clear of the player's foot spawn.
+const ROCK_SPAWNS: Array<{ angle: number; radius: number; scale: number; yaw: number }> = [
+  { angle: Math.PI * 0.08, radius: 16.5, scale: 0.7, yaw: 0.4 },
+  { angle: Math.PI * 0.78, radius: 17.0, scale: 0.55, yaw: 2.1 },
+  { angle: Math.PI * 1.42, radius: 16.0, scale: 0.85, yaw: 4.4 },
+];
+
 let mesh: THREE.Mesh | null = null;
+let props: THREE.Group | null = null;
+let rocksAdded = false;
+
+function addRocks(): void {
+  if (rocksAdded || !props || !hasAsset('rocks')) return;
+  for (const s of ROCK_SPAWNS) {
+    const model = getAsset('rocks');
+    if (!model) return;
+    model.position.set(Math.cos(s.angle) * s.radius, GROUND_Y, Math.sin(s.angle) * s.radius);
+    model.rotation.y = s.yaw;
+    model.scale.setScalar(s.scale);
+    props.add(model);
+  }
+  rocksAdded = true;
+}
 
 function buildGroundGeometry(): THREE.BufferGeometry {
   const positions: number[] = [];
@@ -58,9 +82,17 @@ export function initGround(scene: THREE.Scene): void {
   mesh.position.set(0, GROUND_Y, 0);
   mesh.visible = false; // foot mode only
   scene.add(mesh);
+
+  // Group for the islet props (rocks) — toggled with the ground, foot mode only.
+  props = new THREE.Group();
+  props.visible = false;
+  scene.add(props);
 }
 
 export function updateGround(world: WorldState, _dt: number): void {
-  if (!mesh) return;
-  mesh.visible = world.mode === 'foot';
+  if (!mesh || !props) return;
+  const foot = world.mode === 'foot';
+  mesh.visible = foot;
+  props.visible = foot;
+  if (foot) addRocks();
 }

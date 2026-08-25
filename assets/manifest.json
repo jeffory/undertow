@@ -1,5 +1,5 @@
 {
-  "keeper": { "url": "/assets/keeper.glb", "height": 1.8 },
+  "keeper": { "url": "/assets/keeper.glb", "height": 1.8, "tint": "#ffdf8a" },
   "rowboat": { "url": "/assets/rowboat.glb", "height": 1.1 },
   "lighthouse": { "url": "/assets/lighthouse.glb", "height": 22 },
   "rocks": { "url": "/assets/rocks.glb", "height": 2.2 }

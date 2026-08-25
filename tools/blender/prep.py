@@ -38,6 +38,16 @@ def parse_args(argv):
     ap.add_argument("--review", required=True, help="contact-sheet PNG path")
     ap.add_argument("--height", type=float, default=1.8, help="target bounding height in m")
     ap.add_argument("--faces", type=int, default=5000, help="max face (triangle) budget")
+    ap.add_argument(
+        "--bake-decimate",
+        type=int,
+        default=0,
+        help="Decimate heavy textured meshes WITHOUT scrambling their textures: "
+        "duplicate the mesh, COLLAPSE the COPY to N faces, Smart UV Project it, "
+        "bake DIFFUSE (color only) from the ORIGINAL onto the COPY, assign the "
+        "baked image as baseColor, delete the original. 0 disables (falls back "
+        "to in-place --faces decimation for untextured meshes).",
+    )
     ap.add_argument("--yaw", type=float, default=0.0, help="spin about vertical axis (deg) to fix facing")
     ap.add_argument(
         "--planar-angle",
@@ -163,6 +173,151 @@ def decimate(obj, max_faces, planar_angle):
     apply_modifiers(obj)
 
     print(f"[prep] PLANAR->{after} tris, COLLAPSE to budget; final triangle count: {count_tris(obj)}")
+
+
+def bake_decimate(obj, max_faces):
+    """Bake-based decimation for heavy textured Tripo meshes.
+
+    In-place decimation collapses vertices, which drags neighbouring texture
+    islands across each other and scrambles Tripo's hand-painted textures. The
+    clean recipe is to re-make the UVs and re-sample the colour:
+      1. Duplicate the mesh; the COPY is decimated to --bake-decimate (COLLAPSE).
+      2. Smart UV Project the copy so its triangles get fresh, non-overlapping
+         UV islands (in-place UVs are garbage after vertex collapse).
+      3. Bake DIFFUSE (COLOR only — no direct/indirect light) from the ORIGINAL
+         (selected) onto the COPY (active) with a small cage extrusion so the
+         ray-cast reaches the original surface.
+      4. Assign the baked image as the copy's baseColor, delete the original.
+    """
+    import math
+
+    # Ensure single user so the duplicate is truly independent.
+    obj.data = obj.data.copy()
+
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.duplicate()
+    copy = bpy.context.object  # the duplicate becomes the active object
+
+    # 1. Decimate the COPY (COLLAPSE only — planar would fight the re-UV).
+    if count_tris(copy) > max_faces:
+        coll = copy.modifiers.new("bakedec", "DECIMATE")
+        coll.decimate_type = "COLLAPSE"
+        coll.ratio = max(0.01, max_faces / count_tris(copy))
+        bpy.context.view_layer.update()
+        apply_modifiers(copy)  # applies + triangulates (preserves UVs after we set them)
+    print(f"[prep] bake-decimate: copy at {count_tris(copy)} tris (budget {max_faces})")
+
+    # 2. Smart UV Project the copy so its triangles map cleanly to the new atlas.
+    bpy.ops.object.select_all(action="DESELECT")
+    copy.select_set(True)
+    bpy.context.view_layer.objects.active = copy
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(island_margin=0.02, angle_limit=math.radians(66))
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.view_layer.update()
+
+    # 3. Give the copy an INDEPENDENT material. The exporter only embeds textures
+    #    that hang off the original material's node structure (a brand-new material
+    #    is silently dropped in this build), so we COPY the original material and
+    #    later just repoint its base-color node at the baked image.
+    import PIL.Image
+    import numpy as np
+
+    if copy.data.materials:
+        orig_mat = copy.data.materials[0]
+        copy.data.materials.clear()
+        mat = orig_mat.copy()
+        mat.name = (orig_mat.name or "mat") + "_baked"
+        copy.data.materials.append(mat)
+    else:
+        mat = bpy.data.materials.new("baked_mat")
+        mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    if bsdf is None:
+        bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+
+    # The base-color TEX_IMAGE node (present in Tripo materials: Color -> Base Color).
+    color_node = None
+    for l in nt.links:
+        if l.to_node == bsdf and l.to_socket.name == "Base Color" and l.from_node.type == "TEX_IMAGE":
+            color_node = l.from_node
+            break
+    if color_node is None:
+        color_node = nt.nodes.new("ShaderNodeTexImage")
+
+    # 4. New 1024 bake-target image, wired as the copy's base color (bake target).
+    img = bpy.data.images.new("baked_diffuse", width=1024, height=1024, alpha=True)
+    bake_tex = nt.nodes.new("ShaderNodeTexImage")
+    bake_tex.image = img
+    for l in list(nt.links):
+        if l.to_node == bsdf and l.to_socket.name == "Base Color":
+            nt.links.remove(l)
+    nt.links.new(bake_tex.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.nodes.active = bake_tex
+    nt.nodes.update()
+
+    # 5. Bake DIFFUSE (COLOR only) from ORIGINAL (selected) onto COPY (active).
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    copy.select_set(True)
+    bpy.context.view_layer.objects.active = copy  # bake TARGET = active
+    scn = bpy.context.scene
+    scn.render.engine = "CYCLES"
+    scn.cycles.samples = 8  # albedo needs no denoising; fast
+    scn.render.bake.margin = 4
+    scn.render.bake.use_pass_direct = False
+    scn.render.bake.use_pass_indirect = False
+    bpy.ops.object.bake(
+        type="DIFFUSE",
+        pass_filter={"COLOR"},
+        use_selected_to_active=True,
+        cage_extrusion=0.02,
+    )
+
+    # 6. The bake lives in an internal buffer; save it to a real JPEG and reload
+    #    it so the glTF exporter's passthrough path embeds it (an internal or
+    #    brand-new image is dropped in this build). Repoint the base-color node.
+    tmp_jpg = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".prep_bake_tmp.jpg")
+    w, h = img.size[:2]
+    # img.pixels holds LINEAR (scene-referred) values. glTF baseColor textures are
+    # sRGB, so convert linear -> sRGB before writing the JPEG, or the bytes read
+    # far too dark once three.js decodes them as sRGB (matches the hand-painted
+    # Tripo textures, which are already sRGB).
+    def linear_to_srgb(v):
+        return np.where(
+            v <= 0.0031308,
+            12.92 * v,
+            1.055 * np.power(np.clip(v, 0, 1), 1.0 / 2.4) - 0.055,
+        )
+
+    px = np.array(img.pixels[: w * h * 4], dtype=np.float32).reshape(h, w, 4)
+    srgb = linear_to_srgb(np.clip(px[..., :3], 0, 1))
+    alpha = np.clip(px[..., 3], 0, 1)[..., None]
+    rgb = np.concatenate([srgb, alpha], axis=-1)
+    PIL.Image.fromarray((rgb * 255).astype("uint8"), "RGBA").convert("RGB").save(
+        tmp_jpg, quality=92
+    )
+    baked = bpy.data.images.load(tmp_jpg)
+    baked.name = "baked_diffuse_file"
+    color_node.image = baked
+    for l in list(nt.links):
+        if l.to_node == bsdf and l.to_socket.name == "Base Color":
+            nt.links.remove(l)
+    nt.links.new(color_node.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.nodes.active = color_node
+    nt.nodes.update()
+
+    # 7. Delete the original; keep the baked copy.
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.ops.object.delete()
+    bpy.context.view_layer.update()
+    print(f"[prep] bake-decimate: final triangle count {count_tris(copy)}")
+    return copy
 
 
 def count_tris(obj):
@@ -470,9 +625,13 @@ def main():
         print(f"[prep] normalized: original height {orig_height:.3f} -> {args.height} (scale {scale:.4f})")
 
         ensure_no_geometry_nodes(obj)
-        decimate(obj, args.faces, planar_angle=args.planar_angle)
-
-        albedo_correct(obj, hue_shift, sat_mult, val_mult)
+        if args.bake_decimate > 0:
+            # Bake-based decimation: re-UV + re-bake albedo so Tripo textures stay
+            # clean. Produces the final albedo in the bake — no --saturate-hue here.
+            obj = bake_decimate(obj, args.bake_decimate)
+        else:
+            decimate(obj, args.faces, planar_angle=args.planar_angle)
+            albedo_correct(obj, hue_shift, sat_mult, val_mult)
 
         export_glb(obj, args.out)
         print(f"[prep] exported: {args.out}")

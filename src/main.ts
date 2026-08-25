@@ -1,7 +1,7 @@
 // main.ts — boot (plan 01 §1.3). Create world, renderer/scene/camera, start the
 // fixed-timestep loop running UPDATE_ORDER, render at vsync, handle resize.
 
-import { createWorld } from './core/world';
+import { createWorld, FOOT_SPAWN } from './core/world';
 import { UPDATE_ORDER, debugInfoRef } from './core/systems';
 import { advanceClock } from './core/time';
 import { createRenderer, resizeRenderer } from './render/renderer';
@@ -18,9 +18,12 @@ initInput();
 const world = createWorld(1);
 
 // M1 scaffold: '?mode=foot' URL param boots straight into foot mode (debug
-// ground islet + player). The B key toggles mode live (input.ts).
+// ground islet + player). The B key toggles mode live (input.ts). The player
+// spawns off the parked boat so the two don't overlap on the debug islet.
 if (typeof location !== 'undefined' && /[?&]mode=foot/.test(location.search)) {
   world.mode = 'foot';
+  world.player.x = FOOT_SPAWN.x;
+  world.player.z = FOOT_SPAWN.z;
 }
 
 // '?debug' drivability seam (M1 gate): expose the live world on window so the
@@ -32,6 +35,13 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
 const ctx = createRenderer(app);
 // wire the Three renderer's info counters into the debug overlay
 debugInfoRef.current = ctx.renderer.info;
+
+// debug seam: also expose the live THREE scene + camera so scene-graph probes
+// can read the loaded assets' tri counts / positions and reframe for close-ups.
+if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
+  (window as unknown as { __scene: unknown }).__scene = ctx.scene;
+  (window as unknown as { __camera: unknown }).__camera = ctx.camera;
+}
 
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 

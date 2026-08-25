@@ -4,6 +4,7 @@
 // world.intent. The boat worker consumes the Intent. Plain module state.
 
 import type { WorldState } from '../core/world';
+import { FOOT_SPAWN } from '../core/world';
 
 // --- raw device state (module-level, updated by listeners) -----------------
 
@@ -141,5 +142,11 @@ export function updateInput(world: WorldState): void {
   // the '?mode=foot' URL param at boot and 03's map worker later).
   if (consumeTap('KeyB')) {
     world.mode = world.mode === 'boat' ? 'foot' : 'boat';
+    // When entering foot mode, drop the keeper onto the islet clear of the
+    // parked boat (which sits at the origin) so the two never overlap.
+    if (world.mode === 'foot') {
+      world.player.x = FOOT_SPAWN.x;
+      world.player.z = FOOT_SPAWN.z;
+    }
   }
 }

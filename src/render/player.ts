@@ -14,13 +14,36 @@ import { getAsset, hasAsset } from './assets';
 
 const DODGE_DURATION = 0.25; // seconds; matches the 0.25s i-frame roll window
 
+// The generated keeper GLB faces +Z natively (verified from the model's
+// geometry: the face/skin side of the head sits on +Z), which matches the
+// game's movement convention (facing 0 = +Z). Keep this at 0; raise it only if
+// a re-export ever bakes in a different forward axis — never edit the GLB.
+const KEEPER_BASE_YAW = 0;
+
 // --- palette (dark keeper: coat, head, hands) ---------------------------------
 const COAT = 0x3a4a5a; // deep keeper blue-grey (fallback only)
 const COAT_DARK = 0x2a3644; // limbs
 const HEAD = 0x7a5a42; // weathered skin
 const BOOTS = 0x1e1a16; // near-black boots
 
+// --- warm night fill (task: make the keeper read after dark) ------------------
+// A small, subtle warm point light parented to the player so the loaded keeper
+// pops at night without flattening the cool-moon scene mood. Positioned just
+// ahead of the torso (local +Z is the model's facing) so it grazes the coat
+// from the front — the direction the camera/player tends to face.
+const FILL_COLOR = 0xff9a5e;
+const FILL_INTENSITY = 2.6;
+const FILL_DISTANCE = 4.5;
+const FILL_POS = new THREE.Vector3(0, 0.85, 0.35); // front-chest, on the coat
+
+// Subtle warm emissive lift on the loaded keeper's materials, so the coat
+// reads as oilskin yellow even in shadow under the cool moon. Kept warm and
+// low so it warms rather than flattens.
+const KEEPER_EMISSIVE = 0x4a3818;
+
 let root: THREE.Group | null = null; // holds primitive OR loaded model
+let modelGroup: THREE.Group | null = null; // base-yaw wrapper holding the model
+let fillLight: THREE.PointLight | null = null;
 let primitive: THREE.Group | null = null; // fallback figure
 let swapped = false; // have we swapped primitive -> loaded model?
 
@@ -86,6 +109,17 @@ export function initPlayer(scene: THREE.Scene): void {
   primitive = buildPrimitive();
   root.add(primitive);
 
+  // The model (once loaded) goes in its own group so a corrective base yaw can
+  // be applied without fighting the per-frame facing rotation on `root`.
+  modelGroup = new THREE.Group();
+  modelGroup.rotation.y = KEEPER_BASE_YAW;
+  root.add(modelGroup);
+
+  // Subtle warm fill light so the loaded keeper reads at night.
+  fillLight = new THREE.PointLight(FILL_COLOR, FILL_INTENSITY, FILL_DISTANCE, 2);
+  fillLight.position.copy(FILL_POS);
+  root.add(fillLight);
+
   root.position.y = GROUND_Y;
   root.visible = false; // foot mode only
   scene.add(root);
@@ -102,8 +136,18 @@ function trySwap(): void {
   }
   // Model origin is at the feet and +Y is up (see prep.py normalize); it
   // already matches the keeper's height/radius, so no extra scale is needed
-  // beyond the 1.8m build height. The loaded asset is a group clone.
-  root.add(model);
+  // beyond the 1.8m build height. The loaded asset is a group clone, mounted
+  // inside the base-yaw wrapper. A subtle warm emissive lifts the coat so the
+  // keeper stays readable against the cool moonlit scene.
+  model.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (m instanceof THREE.MeshLambertMaterial) m.emissive.setHex(KEEPER_EMISSIVE);
+    }
+  });
+  modelGroup!.add(model);
   swapped = true;
 }
 

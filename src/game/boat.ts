@@ -13,12 +13,24 @@ import { waterHeightAt } from '../render/water';
 // so the motion math is unit-testable in Node without three. Behaviour is
 // identical to the inline step it replaces.
 import { stepBoatKinematics, MAX_SPEED } from './boatPhysics';
+import { getAsset, hasAsset } from '../render/assets';
 
 const HULL_LEN = 3.2; // bow..stern length (z)
 const HULL_WIDEST = 1.7; // max beam (x)
 
+// Rowboat (generated prop) replaces the primitive hull. The model's long axis
+// is along local X (3.696m) and its pointed bow is at -X, so it needs a +90°
+// base yaw to point the bow toward +Z (the game's forward at heading 0) and a
+// scale to match HULL_LEN. Kinematics / bob / wake / lantern mount all keep
+// riding on the boat group, untouched.
+const ROWBOAT_LENGTH = 3.696;
+const ROWBOAT_SCALE = HULL_LEN / ROWBOAT_LENGTH;
+const ROWBOAT_YAW = Math.PI / 2;
+
 let boat: THREE.Group | null = null;
-let hullMesh: THREE.Mesh | null = null;
+let hullPivot: THREE.Group | null = null; // pitch/roll pivot holding hull OR rowboat
+let primHull: THREE.Mesh | null = null; // primitive hull (fallback)
+let rowboatSwapped = false;
 let oar: THREE.Object3D | null = null;
 let wake: THREE.Points | null = null;
 let wakeClock = 0;
@@ -198,11 +210,17 @@ function makeWake(): THREE.Points {
 export function initBoat(scene: THREE.Scene): void {
   const group = new THREE.Group();
 
+  // Pitch/roll pivot: holds the primitive hull (fallback) and, once loaded, the
+  // rowboat model. The boat group carries position + heading; the pivot carries
+  // the water-bob pitch/roll so they never fight the heading rotation.
+  hullPivot = new THREE.Group();
+  hullPivot.position.y = 0.05; // sit slightly above the waterline sample
+  group.add(hullPivot);
+
   const hullGeo = buildHullGeometry();
   const hullMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-  hullMesh = new THREE.Mesh(hullGeo, hullMat);
-  hullMesh.position.y = 0.05; // sit slightly above the waterline sample
-  group.add(hullMesh);
+  primHull = new THREE.Mesh(hullGeo, hullMat);
+  hullPivot.add(primHull);
 
   // bench (seat) — a thin box across the hull
   const benchGeo = new THREE.BoxGeometry(HULL_WIDEST * 0.7, 0.06, 0.2);
@@ -232,8 +250,28 @@ function sampleWater(x: number, z: number, t: number): number {
   return waterHeightAt(x, z, t);
 }
 
+// Swap the primitive hull for the loaded rowboat once available. The rowboat is
+// scaled to HULL_LEN and yawed so its bow points +Z; it replaces the primitive
+// inside the pitch/roll pivot, so all bob/kinematics/wake logic is unchanged.
+function trySwapRowboat(): void {
+  if (rowboatSwapped || !hullPivot || !hasAsset('rowboat')) return;
+  const model = getAsset('rowboat');
+  if (!model) return;
+  if (primHull) {
+    hullPivot.remove(primHull);
+    primHull = null;
+  }
+  model.scale.setScalar(ROWBOAT_SCALE);
+  model.rotation.y = ROWBOAT_YAW;
+  hullPivot.add(model);
+  rowboatSwapped = true;
+}
+
 export function updateBoat(world: WorldState, dt: number): void {
   if (!boat) return;
+  // Swap the primitive hull for the loaded rowboat as soon as it's available,
+  // in BOTH modes, so the parked boat on the islet also shows the real model.
+  trySwapRowboat();
   // M1 scaffold: on foot the boat stays parked — no kinematics, no bob, no
   // wake. Position integration is already gated in the movement system; this
   // stops the heading/speed state from drifting on intent too.
@@ -263,8 +301,8 @@ export function updateBoat(world: WorldState, dt: number): void {
 
   boat.position.set(b.x, b.y, b.z);
   boat.rotation.y = b.heading;
-  hullMesh!.rotation.x = pitch;
-  hullMesh!.rotation.z = roll;
+  hullPivot!.rotation.x = pitch;
+  hullPivot!.rotation.z = roll;
 
   // oar dips slightly with motion
   if (oar) {

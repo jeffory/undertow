@@ -147,6 +147,10 @@ export const FISH_RADIUS = 0.8;
 export const GROUND_RADIUS = 20;
 export const PLAYER_MAX_HP = 100;
 export const SPINE_SEGMENTS = 8;
+// Foot-mode debug spawn: on the islet a few metres off the parked boat (which
+// sits at the origin) so the player doesn't overlap it when boots or toggles
+// into foot mode.
+export const FOOT_SPAWN = { x: 0, z: 6 };
 
 export function createWorld(seed = 1): WorldState {
   return {
