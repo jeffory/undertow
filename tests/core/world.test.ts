@@ -91,3 +91,17 @@ describe('WorldState M1 shapes', () => {
     expect(r.combat.hits).not.toBe(w.combat.hits);
   });
 });
+describe('shared-default isolation (QA round)', () => {
+  it('mutating one world\'s tuning/line never leaks into module defaults or new worlds', async () => {
+    const { DEFAULT_TUNING } = await import('../../src/game/tuning');
+    const { BASE_LINE } = await import('../../src/game/line');
+    const a = createWorld(1);
+    a.tuning.pullForce = 99;
+    a.line.reelRate = 42;
+    expect(DEFAULT_TUNING.pullForce).not.toBe(99);
+    expect(BASE_LINE.reelRate).not.toBe(42);
+    const b = createWorld(2);
+    expect(b.tuning.pullForce).toBe(DEFAULT_TUNING.pullForce);
+    expect(b.line.reelRate).toBe(BASE_LINE.reelRate);
+  });
+});
