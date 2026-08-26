@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WAVE_MAX_HEIGHT } from '../../src/core/waves';
+import { attenuatedWaterHeightAt } from '../../src/core/shore';
 import { generateLake } from '../../src/gen/lakeMap';
 import { isletPeakRise } from '../../src/gen/isletHeight';
 import { createWorld } from '../../src/core/world';
@@ -15,19 +16,33 @@ const SHORELINE_Y = 0.25;
 const DT = 1 / 60;
 const SEEDS = [1, 42, 2024, 4242];
 
-describe('invariants: wave / terrain clearance (bug B1)', () => {
-  // flip to it() when the shoreline depth mask (T2) lands
-  it.fails('wave crests never exceed the shoreline + islet peak for any seeded islet', () => {
+describe('invariants: wave / terrain clearance (bug B1, fixed by the T2 shore mask)', () => {
+  it('attenuated water height never tops an islet at its rim or interior', () => {
+    // The raw crest bound (WAVE_MAX_HEIGHT = 1.23) exceeds every islet peak
+    // (0.60-1.10), so open-water waves MUST die at the shoreline: the shore
+    // mask (core/shore.ts) is what makes this invariant hold. Sample every
+    // rim vertex, points pulled toward the centre, and the centre itself,
+    // across a sweep of times covering the wave phases.
+    expect(WAVE_MAX_HEIGHT).toBeGreaterThan(SHORELINE_Y); // the hazard is real
     for (const seed of SEEDS) {
       const lake = generateLake(seed);
       for (const iso of lake.islets) {
-        // crest height is bounded by WAVE_MAX_HEIGHT (Σ Gerstner amplitudes,
-        // src/core/waves.ts:31 = 1.23); a crest that tops SHORELINE_Y +
-        // isletPeakRise(iso) would submerge the islet's tallest point (B1).
-        expect(
-          WAVE_MAX_HEIGHT,
-          `seed ${seed} islet ${iso.id} peak=${(SHORELINE_Y + isletPeakRise(iso)).toFixed(3)}`,
-        ).toBeLessThanOrEqual(SHORELINE_Y + isletPeakRise(iso));
+        expect(SHORELINE_Y + isletPeakRise(iso)).toBeGreaterThan(0); // sanity
+        const samples = [iso.center, ...iso.poly];
+        for (const v of iso.poly) {
+          samples.push({
+            x: v.x + (iso.center.x - v.x) * 0.4,
+            z: v.z + (iso.center.z - v.z) * 0.4,
+          });
+        }
+        for (let t = 0; t < 12; t += 0.37) {
+          for (const p of samples) {
+            expect(
+              attenuatedWaterHeightAt(lake.islets, p.x, p.z, t),
+              `seed ${seed} islet ${iso.id} t=${t.toFixed(2)} at (${p.x.toFixed(1)},${p.z.toFixed(1)})`,
+            ).toBeLessThanOrEqual(SHORELINE_Y);
+          }
+        }
       }
     }
   });

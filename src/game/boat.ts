@@ -9,6 +9,8 @@ import type { WorldState } from '../core/world';
 // Worker B (concurrent) adds this export to src/render/water.ts. If it has not
 // landed yet, final compile depends on B; the rest of this file is self-contained.
 import { waterHeightAt } from '../render/water';
+import { shoreAttenAt } from '../core/shore';
+import type { Islet } from '../gen/lakeMap';
 // Kinematics (heading/speed integration) live in the pure module boatPhysics.ts
 // and are stepped by the movement SIM system; this render module only reads.
 import { MAX_SPEED } from './boatPhysics';
@@ -233,8 +235,13 @@ export function initBoat(scene: THREE.Scene): void {
   boat = group;
 }
 
+// Shoreline-aware surface sample (core/shore.ts, T2): the hull bobs on the
+// SAME attenuated height the water shader renders, so the boat can't ride a
+// phantom swell beside a shore where the visible water is flat.
+let lakeIslets: readonly Islet[] = [];
+
 function sampleWater(x: number, z: number, t: number): number {
-  return waterHeightAt(x, z, t);
+  return waterHeightAt(x, z, t) * shoreAttenAt(lakeIslets, x, z);
 }
 
 // Swap the primitive hull for the loaded rowboat once available. The rowboat is
@@ -269,6 +276,7 @@ export function updateBoat(world: WorldState, dt: number): void {
   // wake. Position integration is already gated in the movement system; this
   // stops the heading/speed state from drifting on intent too.
   if (world.mode === 'foot') return;
+  lakeIslets = world.lake?.islets ?? [];
   const b = world.boat;
   const int = world.intent;
   const t = world.time.elapsed;

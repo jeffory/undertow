@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { waveConstsGlsl, waveBodyGlsl, WAVE_MAX_HEIGHT } from '../core/waves';
+import { shoreAttenAt } from '../core/shore';
 
 const WATER_SIZE = 400;
 const WATER_SEGMENTS = 112; // 112x112 -> 12,769 verts, 25,088 tris (~well under the 30k water budget)
@@ -42,8 +43,10 @@ const FOAM_LO = FOAM_LO_FRAC * WAVE_MAX;
 const FOAM_HI = FOAM_HI_FRAC * WAVE_MAX;
 
 const vertexShader = `
+attribute float aShore; // baked shoreline attenuation (core/shore.ts): 0 rim -> 1 open water
 varying vec3 vWorldPos;
 varying float vHeight;
+varying float vShore;
 
 uniform float uTime;
 
@@ -57,9 +60,17 @@ void main() {
   vec3 dPdx = vec3(1.0, 0.0, 0.0);
   vec3 dPdz = vec3(0.0, 0.0, 1.0);
   float height = 0.0;
+  vec3 restPos = transformed;
 ${waveBodyGlsl()}
 
+  // Shoreline depth mask (T2 / bug B1): scale the whole Gerstner displacement
+  // by the baked attenuation so swells die to flat water at every islet rim —
+  // crests can no longer wash over the land. Mirrors attenuatedWaterHeightAt.
+  transformed = restPos + (transformed - restPos) * aShore;
+  height *= aShore;
+
   vHeight = height;
+  vShore = aShore;
   vWorldPos = vec3(modelMatrix * vec4(transformed, 1.0));
 
   #include <project_vertex>
@@ -70,7 +81,9 @@ ${waveBodyGlsl()}
 const fragmentShader = `
 varying vec3 vWorldPos;
 varying float vHeight;
+varying float vShore;
 
+uniform float uTime;
 uniform vec3 uMoonDir;
 uniform vec3 uMoonColor;
 uniform float uMoonIntensity;
@@ -146,7 +159,33 @@ void main() {
   float foamHash = 0.8 + 0.2 * fract(fh * 1.61803);
   float upness = 0.55 + 0.45 * max(n.y, 0.0);
   float foam = smoothstep(FOAM_LO, FOAM_HI, vHeight) * upness * foamHash;
-  color = mix(color, uFoamColor, clamp(foam * 0.5, 0.0, 1.0));
+
+  // Shoreline edge foam (T2): where the depth mask kills the swell, a lapping
+  // near-white band hugs the islet rim — per-facet jittered and slowly pulsed
+  // so it reads as surge, not a painted outline. vShore==0 verts sit under the
+  // islet mesh (skirt covers them), so the visible band is the outer ramp.
+  // Narrow band: foam only inside ~2.3 m of the rim (vShore < 0.25), and the
+  // lap phase travels along the shoreline + drops fully out between surges so
+  // it reads as breathing surf, not a painted white ring. Weight kept low —
+  // at the grazing camera a shoreline band foreshortens into a lot of screen.
+  // Near the camera a smooth 2 m gradient band reads as pale fog, not surf —
+  // so the band is broken into world-anchored clumps (0.7 m hash cells) and
+  // hard-thresholded: crisp foam patches that surge with the lap phase.
+  float edge = 1.0 - vShore;
+  float band = smoothstep(0.78, 0.99, edge);
+  float lap = max(sin(uTime * 1.6 + (vWorldPos.x + vWorldPos.z) * 0.9 + fh * 7.0), 0.0);
+  // fract-based cell hash (sin-hash loses precision at |coord| ~100 and
+  // returns correlated values -> solid white sheets instead of clumps)
+  vec2 cell = floor(vWorldPos.xz * 1.4);
+  vec3 p3 = fract(vec3(cell.x, cell.y, cell.x) * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  float ch = fract((p3.x + p3.y) * p3.z);
+  // hash is a true gate (floor 0.15): low cells stay dark even at full
+  // band*lap, so the shoreline breaks into patches instead of solid sheets
+  float surf = band * (0.25 + 0.75 * lap) * (0.15 + 0.85 * ch);
+  float edgeFoam = smoothstep(0.32, 0.60, surf);
+
+  color = mix(color, uFoamColor, clamp(foam * 0.5 + edgeFoam * 0.45, 0.0, 1.0));
 
   // Cheap fresnel-ish darkening at grazing angles (also fattens the fog blend).
   // Weakened from the original 0.5 so the darker palette's moonlit facets stay
@@ -203,6 +242,11 @@ export function initWater(scene: THREE.Scene): void {
   const geo = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEGMENTS, WATER_SEGMENTS);
   geo.rotateX(-Math.PI / 2); // plane lies in XZ, faces +Y; mesh kept at identity so model == world
 
+  // shoreline attenuation attribute — starts as open water (1) everywhere;
+  // baked from the real islet polygons on the first frame the lake exists.
+  const count = geo.attributes.position!.count;
+  geo.setAttribute('aShore', new THREE.BufferAttribute(new Float32Array(count).fill(1), 1));
+
   waterMaterial = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
@@ -215,9 +259,28 @@ export function initWater(scene: THREE.Scene): void {
   scene.add(plane);
 }
 
+let shoreBaked = false;
+
+// One-time bake: exact polygon-distance shore attenuation (core/shore.ts) per
+// water-grid vertex. ~12.8k verts x ~8 islets once at boot — free thereafter,
+// and the vertex shader scales its displacement by the result.
+function bakeShore(world: WorldState): void {
+  if (shoreBaked || !plane || !world.lake) return;
+  const geo = plane.geometry;
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const shore = geo.attributes.aShore as THREE.BufferAttribute;
+  const islets = world.lake.islets;
+  for (let i = 0; i < pos.count; i++) {
+    shore.setX(i, shoreAttenAt(islets, pos.getX(i), pos.getZ(i)));
+  }
+  shore.needsUpdate = true;
+  shoreBaked = true;
+}
+
 export function updateWater(world: WorldState, _dt: number): void {
   if (!waterMaterial) return;
 
+  bakeShore(world);
   uniforms.uTime.value = world.time.elapsed;
 
   if (!moon || !lantern) findLights();
