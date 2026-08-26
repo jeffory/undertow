@@ -7,6 +7,7 @@ import { createWorld } from '../../src/core/world';
 import { ensureLake } from '../../src/gen/lakeWorld';
 import { stepBoatKinematics, stepBoatMovement } from '../../src/game/boatPhysics';
 import { pointInPolygon } from '../../src/core/poly';
+import { createWake, stepWake } from '../../src/core/wake';
 
 // GROUND_Y (0.25 m above the water plane) is the islet shoreline surface,
 // exported from src/render/lake.ts:32 — but that module imports three, so it is
@@ -86,13 +87,34 @@ describe('invariants: boat never enters an islet hull (bug B2, fixed by the T4 o
   });
 });
 
-// B3 — the wake is a THREE.Points parented to the boat group (src/game/boat.ts:
-// 33, 179, 227-229, 302-311), so it translates/yaws with the hull and there is
-// no sim-side wake state to assert against without three. Do not import three
-// in a test to force it. Once T6 rebuilds the wake in world space (or exposes a
-// sim-side wake particle list), this must assert:
-//
-//   wake particle WORLD position at t+1 === its position at t
-//   for a moving boat — particles are emitted behind the stern and left behind
-//   in world space, never carried along by the boat's transform.
-describe.todo('invariants: wake particles persist in world space (bug B3)');
+// B3 — fixed by T6: the wake is now a pure world-space pool (core/wake.ts);
+// particles are emitted behind the stern and belong to the world thereafter.
+describe('invariants: wake particles persist in world space (bug B3)', () => {
+  it('emitted particles move only by their own drift — never with the boat', () => {
+    const wk = createWake();
+    const boat = { x: 0, z: 0, heading: 0, speed: 3 };
+    // run long enough at full speed to guarantee emissions
+    for (let i = 0; i < 30; i++) stepWake(wk, boat, DT);
+    const live = wk.parts.filter((p) => p.age < p.life);
+    expect(live.length).toBeGreaterThan(0);
+
+    // record each live particle and its expected self-drift-only next position
+    const before = live.map((p) => ({ p, ex: p.x + p.vx * DT, ez: p.z + p.vz * DT }));
+    // teleport the boat far away and keep sailing — a parented wake would jump
+    boat.x = 500;
+    boat.z = -500;
+    stepWake(wk, boat, DT);
+    for (const { p, ex, ez } of before) {
+      expect(p.x).toBeCloseTo(ex, 10);
+      expect(p.z).toBeCloseTo(ez, 10);
+      // and emphatically not near the teleported boat
+      expect(Math.hypot(p.x - boat.x, p.z - boat.z)).toBeGreaterThan(400);
+    }
+  });
+
+  it('a stationary boat emits nothing', () => {
+    const wk = createWake();
+    for (let i = 0; i < 60; i++) stepWake(wk, { x: 0, z: 0, heading: 0, speed: 0 }, DT);
+    expect(wk.parts.every((p) => p.age >= p.life)).toBe(true);
+  });
+});

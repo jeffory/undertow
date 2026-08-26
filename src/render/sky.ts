@@ -173,10 +173,13 @@ function updateBeam(scene: THREE.Scene, phase: ClockPhase, dt: number): void {
 
 export function initSky(scene: THREE.Scene): void {
   // --- Gradient background via a large inverted vertex-colored sphere ---
-  // Radius is big enough that even the far camera never clips it; faces point
-  // inward (scale -1 flips winding). No textures. 32×24 so the horizon band
-  // has enough vertical resolution to stay smooth.
-  const bgeo = new THREE.SphereGeometry(500, 32, 24);
+  // Camera-centered, so the radius must sit INSIDE the far plane (400): far
+  // clipping is by view-axis depth, and a 500-radius sphere was clipped in the
+  // middle of frame (depth 500 > 400) while surviving at the frame edges
+  // (500·cosθ < 400) — the infamous "dark dome with a teal void" was the far
+  // plane's intersection circle, and the real gradient never rendered. 380
+  // keeps every fragment's depth ≤ 380 < 400. Faces point inward (scale -1).
+  const bgeo = new THREE.SphereGeometry(380, 32, 24);
   const bpos = bgeo.attributes.position as THREE.BufferAttribute;
   const bcolors = new Float32Array(bpos.count * 3);
   bgeo.setAttribute('color', new THREE.BufferAttribute(bcolors, 3));
