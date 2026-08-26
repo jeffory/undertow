@@ -1,16 +1,18 @@
 // LAKE RENDER — M3 round 1 (task scope 4) + CRITICAL round B islet terrain
-// (task t2). Renders the procedural lake: every islet as a FLAT-SHADED,
-// FACETED slate-rock mesh with stepped height relief (a deterministic height
-// field from src/gen/isletHeight.ts, low-amplitude noise rising toward the
-// centre) and a beveled skirt dropping below the waterline so the shore reads
-// as a rocky edge, not a paper cutout. Distinct primitive markers for wrecks /
-// buoys / sinkholes, cloned rocks.glb instances scattered on the SHORELINE of
-// eligible islets sitting ON the terrain, and the lighthouse anchored on a
-// crag at the START ISLET'S FAR EDGE (scaled ~1.6x). Perf: islet meshes are a
-// few hundred tris each; markers are 1-2 draw calls each; the heavy geometry is
-// the shared rocks.glb clones (budgeted) and one lighthouse instance. Visible
-// in BOTH modes (the lake is the world; ground.ts's debug disc only shows
-// without a lake).
+// (task t2) + T14 environmental props. Renders the procedural lake: every islet
+// as a FLAT-SHADED, FACETED slate-rock mesh with stepped height relief (a
+// deterministic height field from src/gen/isletHeight.ts, low-amplitude noise
+// rising toward the centre) and a beveled skirt dropping below the waterline so
+// the shore reads as a rocky edge, not a paper cutout. Distinct primitive
+// markers for wrecks / buoys / sinkholes, bell buoys upgraded with caged-lantern
+// tops (emissive warm cube + additive halo), a driftwood field riding the swell
+// (one InstancedMesh), cloned rocks.glb instances scattered on the SHORELINE of
+// eligible islets sitting ON the terrain, and the lighthouse anchored on a crag
+// at the START ISLET'S FAR EDGE (scaled ~1.6x). Perf: islet meshes are a few
+// hundred tris each; markers are 1-4 draw calls each; the driftwood is one draw
+// call; the heavy geometry is the shared rocks.glb clones (budgeted) and one
+// lighthouse instance. Visible in BOTH modes (the lake is the world; ground.ts's
+// debug disc only shows without a lake).
 //
 // groundYAt(world, x, z) is the entity-grounding seam: player / fish / props /
 // tether-line read their feet height from it, sampling the SAME field that
@@ -28,6 +30,8 @@ import {
   isletHash01,
 } from '../gen/isletHeight';
 import { getAsset, hasAsset } from './assets';
+import { attenuatedWaterHeightAt, shoreAttenAt } from '../core/shore';
+import { createRng, LAYOUT } from '../core/rngStreams';
 
 export const GROUND_Y = 0.25; // islet shoreline surface, above the water plane
 
@@ -40,6 +44,21 @@ const WRECK_COLOR = 0x1c1512; // near-black timber
 const BUOY_PRIMARY = 0xffb45e; // warm amber — the extraction buoy near the start
 const BUOY_SECONDARY = 0x9db8d4; // pale bone-teal — the mid-map buoy
 const SINKHOLE_COLOR = 0x04070a; // the descent gap
+
+// Caged-lantern buoy top (T14): emissive warm cube inside a 4-post cage + a
+// faint additive sprite halo — no PointLight per buoy (too many lights).
+const LANTERN_BULB = 0xffd9a0; // warm bulb — matches the boat lantern's hot core
+const CAGE_COLOR = 0x0a0705; // near-black iron struts
+const LANTERN_HALO_SCALE = 0.8;
+
+// Floating timber (driftwood): thin dark stretched boxes in open water.
+const TIMBER_LO = 0x241c12; // dark waterlogged wood band
+const TIMBER_HI = 0x3a2c1c;
+const TIMBER_COUNT_MIN = 10;
+const TIMBER_COUNT_MAX = 14;
+const TIMBER_SALT = 0x54494d42; // salted LAYOUT stream for driftwood placement
+const TIMBER_MARGIN = 14; // keep pieces clear of the lake box edge
+const TIMBER_ATTEMPTS = 20; // placement tries before accepting the last candidate
 
 const LIGHTHOUSE_SCALE = 0.29; // 22m glb → ~6.4m tower (1.6x the old 0.18)
 const LIGHTHOUSE_EDGE_T = 0.9; // how far toward the far edge the tower sits
@@ -56,6 +75,40 @@ let lakeGroup: THREE.Group | null = null;
 let builtFor: LakeMap | null = null;
 
 const buoyMarkers: Array<{ group: THREE.Group; phase: number; buoyId: number }> = [];
+
+// Shared additive halo splat for the buoy lanterns — one texture + material
+// reused by every buoy (a few draw calls, zero per-frame churn).
+let haloTexture: THREE.CanvasTexture | null = null;
+let haloMaterial: THREE.SpriteMaterial | null = null;
+
+interface TimberSpawn {
+  x: number;
+  z: number;
+  len: number;
+  width: number;
+  thick: number;
+  yaw0: number;
+  yawSpeed: number;
+  bobAmp: number;
+  bobFreq: number;
+  bobPhase: number;
+  rollAmp: number;
+  rollFreq: number;
+  rollPhase: number;
+}
+
+let timberSpawns: TimberSpawn[] = [];
+let timberMesh: THREE.InstancedMesh | null = null;
+
+// Scratch objects for the per-frame instance matrices (no per-frame allocation).
+const _axisX = new THREE.Vector3(1, 0, 0);
+const _axisY = new THREE.Vector3(0, 1, 0);
+const _quatRoll = new THREE.Quaternion();
+const _quatYaw = new THREE.Quaternion();
+const _quat = new THREE.Quaternion();
+const _pos = new THREE.Vector3();
+const _scale = new THREE.Vector3();
+const _matrix = new THREE.Matrix4();
 
 // --- lighthouse glb swap (same pattern as the old sky.ts lighthouse) ----------
 let lighthouseBody: THREE.Object3D | null = null;
@@ -222,6 +275,68 @@ function buildWreck(wreck: Wreck): THREE.Group {
   return g;
 }
 
+// Merge axis-aligned boxes into ONE non-indexed-normal BufferGeometry (the
+// cage stays a single draw call instead of one per strut).
+function mergeBoxes(boxes: Array<{ center: THREE.Vector3; size: THREE.Vector3 }>): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  const bPos = box.attributes.position!.array as Float32Array;
+  const bNorm = box.attributes.normal!.array as Float32Array;
+  const bIdx = box.index!.array;
+  const boxVerts = bPos.length / 3;
+  let base = 0;
+  for (const b of boxes) {
+    for (let i = 0; i < bPos.length; i += 3) {
+      positions.push(
+        bPos[i]! * b.size.x + b.center.x,
+        bPos[i + 1]! * b.size.y + b.center.y,
+        bPos[i + 2]! * b.size.z + b.center.z,
+      );
+      normals.push(bNorm[i]!, bNorm[i + 1]!, bNorm[i + 2]!);
+    }
+    for (const idx of bIdx) indices.push(base + idx);
+    base += boxVerts;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
+  geo.setIndex(indices);
+  return geo;
+}
+
+// Soft radial glow billboard (the boat wake's radial-canvas splat technique) —
+// additive over the near-black water, shared by every buoy lantern.
+function makeLanternHalo(): THREE.Sprite {
+  if (!haloTexture) {
+    const cnv = document.createElement('canvas');
+    cnv.width = cnv.height = 64;
+    const g = cnv.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    // saturated amber core — at 0.55-0.8 additive opacity this must read as a
+    // small WARM point on the near-black water, not a washed pale glow
+    grad.addColorStop(0, 'rgba(255, 186, 96, 1.0)');
+    grad.addColorStop(0.25, 'rgba(255, 172, 84, 0.7)');
+    grad.addColorStop(0.55, 'rgba(255, 150, 62, 0.28)');
+    grad.addColorStop(1, 'rgba(255, 140, 50, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    haloTexture = new THREE.CanvasTexture(cnv);
+  }
+  if (!haloMaterial) {
+    haloMaterial = new THREE.SpriteMaterial({
+      map: haloTexture,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+    });
+  }
+  const s = new THREE.Sprite(haloMaterial);
+  s.scale.setScalar(LANTERN_HALO_SCALE);
+  return s;
+}
+
 function buildBuoy(buoy: Buoy): { group: THREE.Group; phase: number; buoyId: number } {
   const g = new THREE.Group();
   const color = buoy.primary ? BUOY_PRIMARY : BUOY_SECONDARY;
@@ -231,14 +346,137 @@ function buildBuoy(buoy: Buoy): { group: THREE.Group; phase: number; buoyId: num
   );
   float.position.y = 0.3;
   g.add(float);
-  const top = new THREE.Mesh(
-    new THREE.SphereGeometry(0.18, 8, 6),
-    new THREE.MeshBasicMaterial({ color }),
+
+  // Caged-lantern top: a small emissive warm cube inside a 4-post cage of thin
+  // dark struts, plus a faint additive halo. No PointLight per buoy.
+  const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, 0.16, 0.16),
+    new THREE.MeshBasicMaterial({ color: LANTERN_BULB }),
   );
-  top.position.y = 0.55;
-  g.add(top);
+  cube.position.y = 0.59;
+  g.add(cube);
+  const post = 0.115; // cage post offset from centre
+  const cage = new THREE.Mesh(
+    mergeBoxes([
+      // 4 vertical posts at the cage corners
+      { center: new THREE.Vector3(-post, 0.59, -post), size: new THREE.Vector3(0.03, 0.34, 0.03) },
+      { center: new THREE.Vector3(post, 0.59, -post), size: new THREE.Vector3(0.03, 0.34, 0.03) },
+      { center: new THREE.Vector3(-post, 0.59, post), size: new THREE.Vector3(0.03, 0.34, 0.03) },
+      { center: new THREE.Vector3(post, 0.59, post), size: new THREE.Vector3(0.03, 0.34, 0.03) },
+      // top cap ring: four short bars joining the post tops
+      { center: new THREE.Vector3(0, 0.75, -post), size: new THREE.Vector3(0.26, 0.03, 0.03) },
+      { center: new THREE.Vector3(0, 0.75, post), size: new THREE.Vector3(0.26, 0.03, 0.03) },
+      { center: new THREE.Vector3(-post, 0.75, 0), size: new THREE.Vector3(0.03, 0.03, 0.26) },
+      { center: new THREE.Vector3(post, 0.75, 0), size: new THREE.Vector3(0.03, 0.03, 0.26) },
+    ]),
+    new THREE.MeshBasicMaterial({ color: CAGE_COLOR }),
+  );
+  g.add(cage);
+
+  const halo = makeLanternHalo();
+  halo.position.y = 0.59;
+  g.add(halo);
+
   g.position.set(buoy.pos.x, GROUND_Y, buoy.pos.z);
   return { group: g, phase: buoy.id * 2.1, buoyId: buoy.id };
+}
+
+// --- floating timber (driftwood) -------------------------------------------------
+
+// Deterministic [0,1) hash folded from the lake seed (same integer-lattice
+// shape as isletHash01) — byte-identical across runs of the same seed.
+function hash01(seed: number, a: number): number {
+  let h = seed >>> 0;
+  h = (h ^ Math.imul((a | 0) + 1, 0x27d4eb2d)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h ^ (h >>> 16), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// Placement from a salted copy of the lake's LAYOUT stream (wreck/buoy
+// convention: seeded, fixed consumption order). Candidates must sit in OPEN
+// water — rejected when shoreAttenAt < 1 (inside/against an islet's shore band).
+export function computeTimberSpawns(lake: LakeMap): TimberSpawn[] {
+  timberSpawns.length = 0;
+  const rng = createRng(lake.seed, LAYOUT, TIMBER_SALT);
+  const count = rng.int(TIMBER_COUNT_MIN, TIMBER_COUNT_MAX);
+  const halfW = lake.bounds.w / 2 - TIMBER_MARGIN;
+  const halfH = lake.bounds.h / 2 - TIMBER_MARGIN;
+  for (let i = 0; i < count; i++) {
+    let x = 0;
+    let z = 0;
+    for (let attempt = 0; attempt < TIMBER_ATTEMPTS; attempt++) {
+      x = rng.range(-halfW, halfW);
+      z = rng.range(-halfH, halfH);
+      if (shoreAttenAt(lake.islets, x, z) >= 1) break; // full open water
+    }
+    timberSpawns.push({
+      x,
+      z,
+      len: rng.range(0.8, 2.2),
+      width: rng.range(0.07, 0.11),
+      thick: rng.range(0.04, 0.07),
+      yaw0: rng.range(0, Math.PI * 2),
+      yawSpeed: rng.range(-0.12, 0.12),
+      bobAmp: rng.range(0.02, 0.05),
+      bobFreq: rng.range(0.5, 1.2),
+      bobPhase: rng.range(0, Math.PI * 2),
+      rollAmp: rng.range(0.04, 0.12),
+      rollFreq: rng.range(0.4, 1.0),
+      rollPhase: rng.range(0, Math.PI * 2),
+    });
+  }
+  return timberSpawns;
+}
+
+function makeTimberGeometry(seed: number): THREE.BufferGeometry {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const colors = new Float32Array(pos.count * 3);
+  const lo = new THREE.Color(TIMBER_LO);
+  const hi = new THREE.Color(TIMBER_HI);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    c.lerpColors(lo, hi, hash01(seed, i));
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
+}
+
+// One InstancedMesh for ALL driftwood — one draw call for the whole lake.
+function buildTimberMesh(seed: number, count: number): THREE.InstancedMesh {
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const mesh = new THREE.InstancedMesh(makeTimberGeometry(seed), mat, count);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.frustumCulled = false; // matrices are written per frame; keep it simple
+  mesh.name = 'lake:timber';
+  return mesh;
+}
+
+// Ride the swell: each log sits on the (shore-attenuated) water surface with a
+// slow yaw drift and a slight roll around its long axis.
+function updateTimber(islets: readonly Islet[], t: number): void {
+  if (!timberMesh) return;
+  for (let i = 0; i < timberSpawns.length; i++) {
+    const sp = timberSpawns[i]!;
+    const yaw = sp.yaw0 + sp.yawSpeed * t;
+    const bob = Math.sin(t * sp.bobFreq + sp.bobPhase) * sp.bobAmp;
+    const y = attenuatedWaterHeightAt(islets, sp.x, sp.z, t) + bob;
+    const roll = Math.sin(t * sp.rollFreq + sp.rollPhase) * sp.rollAmp;
+    _quatRoll.setFromAxisAngle(_axisX, roll);
+    _quatYaw.setFromAxisAngle(_axisY, yaw);
+    _quat.multiplyQuaternions(_quatYaw, _quatRoll);
+    _pos.set(sp.x, y, sp.z);
+    _scale.set(sp.len, sp.thick, sp.width);
+    _matrix.compose(_pos, _quat, _scale);
+    timberMesh.setMatrixAt(i, _matrix);
+  }
+  timberMesh.instanceMatrix.needsUpdate = true;
 }
 
 function buildSinkhole(sinkhole: { pos: { x: number; z: number } }): THREE.Mesh {
@@ -409,9 +647,12 @@ function rebuild(lake: LakeMap): void {
     lakeGroup.remove(child);
   }
   buoyMarkers.length = 0;
+  timberSpawns.length = 0;
+  timberMesh = null;
   lighthouseBody = null;
   lighthouseSwapped = false;
   computeRockSpawns(lake);
+  computeTimberSpawns(lake);
 
   for (const iso of lake.islets) {
     lakeGroup.add(buildIsletMesh(iso));
@@ -423,6 +664,9 @@ function rebuild(lake: LakeMap): void {
     lakeGroup.add(marker.group);
   }
   for (const sinkhole of lake.sinkholes) lakeGroup.add(buildSinkhole(sinkhole));
+  const timber = buildTimberMesh(lake.seed, timberSpawns.length);
+  timberMesh = timber;
+  lakeGroup.add(timber);
   const start = lake.islets[lake.startIslet];
   if (start) lakeGroup.add(buildLighthouse(start));
 }
@@ -452,6 +696,7 @@ export function updateLake(world: WorldState, _dt: number): void {
   // buoys bob gently on the surface; a submerging buoy sinks with the false-dawn
   // clock (nightClockSystem drives buoy.submergeProgress) so it cannot extract
   const t = world.time.elapsed;
+  const islets = lake.islets;
   for (let i = 0; i < buoyMarkers.length; i++) {
     const marker = buoyMarkers[i]!;
     // match by buoy ID, not by array index — the old Map was keyed by id but
@@ -459,8 +704,16 @@ export function updateLake(world: WorldState, _dt: number): void {
     // diverge from their positions
     const buoy = lake.buoys.find((b) => b.id === marker.buoyId);
     const sink = buoy ? buoy.submergeProgress : 0;
+    // ride the shore-attenuated swell (like game/boat.ts sampleWater), not a
+    // fixed GROUND_Y — so buoys sit on the surface the water shader renders
+    const surf = attenuatedWaterHeightAt(islets, marker.group.position.x, marker.group.position.z, t);
     marker.group.position.y =
-      GROUND_Y + Math.sin(t * 2 + marker.phase) * 0.08 * (1 - sink) - sink * 5;
+      surf + Math.sin(t * 2 + marker.phase) * 0.06 * (1 - sink) - sink * 5;
     marker.group.visible = sink < 1;
   }
+  if (haloMaterial) {
+    // gentle shared breath for the buoy lantern halos (one material, no churn)
+    haloMaterial.opacity = 0.62 + 0.15 * Math.sin(t * 1.6);
+  }
+  updateTimber(islets, t);
 }
