@@ -18,7 +18,7 @@ import {
   startBite,
   release,
 } from '../run/disturbance';
-import { rollSpeciesAtSet } from '../run/species';
+import { rollEligibleSpeciesAtSet } from '../run/species';
 import { generateFishParams, type FishParams } from '../gen/fishParams';
 import { recordBestiary } from '../bestiary/bestiary';
 
@@ -36,8 +36,11 @@ export function updateCastFlow(world: WorldState, dt: number): void {
   const rmb = world.intent.secondary && !world.run.secondaryPrev;
   world.run.castPrev = world.intent.primary;
   world.run.secondaryPrev = world.intent.secondary;
-  handlePrompt(world, lmb, rmb);
-  handleCast(world, lmb);
+  // A press that resolves a prompt (SET or RELEASE) is consumed — it must not
+  // also re-cast that same tick (after a declining SET the disturbance is still
+  // idle and in range; without this the one press would SET-decline AND re-cast).
+  const promptConsumed = handlePrompt(world, lmb, rmb);
+  if (!promptConsumed) handleCast(world, lmb);
 }
 
 // bite → prompt → (window lapse → consumed)
@@ -62,29 +65,46 @@ function stepDisturbances(world: WorldState, dt: number): void {
 
 // The 1.2s SET/RELEASE window: a fresh LMB press = SET, a fresh RMB press =
 // RELEASE (plan §3.1). The press you used to cast does not pre-empt the choice —
-// the bite demands a deliberate decision inside the window.
-function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): void {
-  if (world.run.promptId == null) return;
+// the bite demands a deliberate decision inside the window. Returns true when a
+// prompt was consumed (so updateCastFlow skips the cast for this tick).
+function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): boolean {
+  if (world.run.promptId == null) return false;
   const d = world.disturbances.find((x) => x.id === world.run.promptId);
   if (!d || d.state !== 'prompt') {
     world.run.promptId = null;
-    return;
+    return false;
   }
   if (lmbEdge) {
     setCatch(world, d);
+    return true;
   } else if (rmbEdge) {
     release(d);
     world.run.promptId = null;
+    return true;
   }
+  return false;
 }
 
 // SET — roll species/params AT the commit, spawn + scale the fish, start the
-// tether fight, tag the active catch for the run reducer.
+// tether fight, tag the active catch for the run reducer. The species is resolved
+// through the bite-eligibility gate (plan 04 §8.4): an ineligible species is
+// never selected — when nothing in the tier is license-eligible the disturbance
+// DECLINES the tackle (it stays present, "disturbance present but doesn't
+// respond to the cast"), no fight starts and nothing is recorded.
 function setCatch(world: WorldState, d: Disturbance): void {
+  const loot = createRng(world.seed, LOOT, d.id);
+  const preset = rollEligibleSpeciesAtSet(loot, d.tier, world.run.licenseGrade);
+  if (!preset) {
+    // §8.4 decline: the whole tier out-ranks the license — the ripple remains,
+    // re-castable, declining again (same seed → same decline, deterministically).
+    d.state = 'idle';
+    d.biteTimer = 0;
+    d.promptTimer = 0;
+    world.run.promptId = null;
+    return;
+  }
   d.state = 'gone';
   world.run.promptId = null;
-  const loot = createRng(world.seed, LOOT, d.id);
-  const preset = rollSpeciesAtSet(loot, d.tier);
   const params = generateFishParams(preset, loot, { zone: SHALLOWS_ZONE });
   const weight = params.weightKg;
 

@@ -7,10 +7,23 @@
 // Pure logic: no `three` imports.
 
 import type { Rng } from '../core/rng';
-import { rollSpeciesFromTier } from '../data/species';
+import { rollSpeciesFromTier, rollEligibleSpeciesFromTier } from '../data/species';
 import type { SpeciesPreset } from '../data/species';
 
 export function rollSpeciesAtSet(rng: Rng, tier: 1 | 2 | 3 | 4): SpeciesPreset {
   const t = Math.max(1, Math.min(3, tier)) as 1 | 2 | 3;
   return rollSpeciesFromTier(rng, t);
+}
+
+// The bite-eligibility-gated resolution (plan 04 §8.4): same roll, but filtered
+// to species the player's license grade can provoke — the cast/SET flow calls
+// THIS when deciding which species takes the hook. Null = the whole tier
+// declines the tackle (the disturbance is present but does not respond).
+export function rollEligibleSpeciesAtSet(
+  rng: Rng,
+  tier: 1 | 2 | 3 | 4,
+  licenseGrade: number,
+): SpeciesPreset | null {
+  const t = Math.max(1, Math.min(3, tier)) as 1 | 2 | 3;
+  return rollEligibleSpeciesFromTier(rng, t, licenseGrade);
 }

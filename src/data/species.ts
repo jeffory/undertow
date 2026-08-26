@@ -9,6 +9,7 @@
 // (the jitter/wrongness logic lives in gen/fishParams.ts).
 
 import type { FinKind, SpeciesBase } from '../gen/fishParams';
+import { canBite } from '../loot/license';
 
 export interface SpeciesPreset extends SpeciesBase {
   lungeCooldown?: number;
@@ -461,4 +462,27 @@ export function rollSpeciesFromTier(rng: { nextFloat(): number }, tier: 1 | 2 | 
     if (r <= 0) return speciesById(row.id);
   }
   return speciesById(table[table.length - 1]!.id);
+}
+
+// Bite-eligibility gate (plan 04 §8.4): resolve which species takes the hook
+// WITHOUT ever selecting one whose eligibility exceeds the license grade — the
+// filter runs before the weighted draw, so the roll normalises over the eligible
+// rows only (same seed + same tier + same grade → same species). When the whole
+// tier declines (nothing in it is license-eligible) it returns null: the
+// disturbance stays present but does not respond to the cast.
+export function rollEligibleSpeciesFromTier(
+  rng: { nextFloat(): number },
+  tier: 1 | 2 | 3,
+  licenseGrade: number,
+): SpeciesPreset | null {
+  const table = TIER_TABLES[tier] ?? TIER_TABLES[1];
+  const eligible = table.filter((row) => canBite(speciesById(row.id), licenseGrade));
+  if (eligible.length === 0) return null;
+  const total = eligible.reduce((s, r) => s + r.w, 0);
+  let r = rng.nextFloat() * total;
+  for (const row of eligible) {
+    r -= row.w;
+    if (r <= 0) return speciesById(row.id);
+  }
+  return speciesById(eligible[eligible.length - 1]!.id);
 }

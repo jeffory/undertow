@@ -10,10 +10,12 @@ import {
   rollSlot,
   rollCatchDrop,
   rollAffixedTrinket,
+  rollDrownedUnique,
   rarityWeights,
   dropChance,
   type RollCtx,
 } from '../../src/loot/roller';
+import { DROWNED_UNIQUES } from '../../src/loot/items';
 import { SundryItemSchema } from '../../src/save/schemas';
 
 const ctx = (over: Partial<RollCtx> = {}): RollCtx => ({
@@ -148,5 +150,57 @@ describe('rolled items round-trip the save schema', () => {
   it('a full drop round-trips the save schema', () => {
     const item = rollCatchDrop(new Rng(6), ctx());
     if (item) expect(SundryItemSchema.parse(item)).toEqual(item);
+  });
+});
+
+describe('Drowned uniques (plan §7.3: "Drowned rolls a named unique instead of affixes")', () => {
+  it('only the G6-gated ladder ever rolls Drowned — grade 5 never, grade 6 does', () => {
+    const rng5 = new Rng(123);
+    for (let i = 0; i < 500; i++) expect(rollRarity(rng5, ctx({ licenseGrade: 5 }))).not.toBe('Drowned');
+    const rng6 = new Rng(123);
+    const seen = new Set<string>();
+    for (let i = 0; i < 5000; i++) seen.add(rollRarity(rng6, ctx({ licenseGrade: 6 })));
+    expect(seen.has('Drowned')).toBe(true);
+  });
+
+  it('rollDrownedUnique is deterministic and always draws a named unique from the pool', () => {
+    const a = rollDrownedUnique(new Rng(9));
+    const b = rollDrownedUnique(new Rng(9));
+    expect(a).toEqual(b);
+    const names = new Set(DROWNED_UNIQUES.map((u) => u.name));
+    for (let s = 1; s <= 200; s++) {
+      const item = rollDrownedUnique(new Rng(s));
+      expect(item.rarity).toBe('Drowned');
+      expect(names.has(item.name), item.name).toBe(true);
+      const def = DROWNED_UNIQUES.find((u) => u.name === item.name)!;
+      expect(item.slot).toBe(def.slot);
+      expect(item.effects).toEqual([{ key: def.key, value: 0 }]);
+    }
+  });
+
+  it('a Drowned-rarity drop short-circuits the slot roll into a named unique', () => {
+    // search the grade-6 stream for a seed whose rarity roll lands on Drowned,
+    // then confirm the full drop is that unique (never an affixed trinket/inert)
+    const names = new Set(DROWNED_UNIQUES.map((u) => u.name));
+    let landed = 0;
+    for (let s = 1; s <= 3000 && landed < 3; s++) {
+      const item = rollCatchDrop(new Rng(s), ctx({ licenseGrade: 6, qualityBonus: 1 }));
+      if (item?.rarity === 'Drowned') {
+        landed++;
+        expect(names.has(item.name), item.name).toBe(true);
+        expect(item.effects.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+    expect(landed).toBeGreaterThan(0);
+  });
+
+  it('full-drop determinism extends to the Drowned tail (same seed → identical unique)', () => {
+    const a: string[] = [];
+    const b: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      a.push(JSON.stringify(rollCatchDrop(new Rng(424242), ctx({ licenseGrade: 6, qualityBonus: 1 }))));
+      b.push(JSON.stringify(rollCatchDrop(new Rng(424242), ctx({ licenseGrade: 6, qualityBonus: 1 }))));
+    }
+    expect(a).toEqual(b);
   });
 });

@@ -62,6 +62,17 @@ export function gradeUpForRun(save: SaveGame, result: RunResult): GradeUpInfo | 
   return { oldGrade: save.license.grade, newGrade: grade, xp, title: GRADE_TITLES[grade]! };
 }
 
+// Plan 04 §8.4 — bite-eligibility gating:
+//   canBite(species, grade) = species.eligibility ≤ grade
+// Ungraded players still SEE the species (the disturbance is present — ripple /
+// silhouette) but it does not take the hook: the bite gate is applied when the
+// cast/SET flow resolves which species answers the tackle, so an ineligible
+// species is never selected. `eligibility` is optional for legacy records —
+// a species without one reads as grade 1 (always bites).
+export function canBite(species: { eligibility?: number }, grade: number): boolean {
+  return (species.eligibility ?? 1) <= grade;
+}
+
 // Passives applied at run start (a fresh world is mutated in place). Multipliers
 // stack multiplicatively with each other and with trinket effects (applyTrinkets
 // runs after this in applyRunStartPassives).

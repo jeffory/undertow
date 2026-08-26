@@ -17,6 +17,7 @@ import { catchMemories, CONDOLENCE_RATE } from '../../src/extract/memories';
 import { pointInPolygon } from '../../src/core/poly';
 import { createDisturbance, PROMPT_WINDOW, type Disturbance } from '../../src/run/disturbance';
 import { speciesById } from '../../src/data/species';
+import { SundryItemSchema } from '../../src/save/schemas';
 import type { WorldState } from '../../src/core/world';
 
 const DT = FIXED_DT;
@@ -242,9 +243,92 @@ describe('land → haul + Dread gain', () => {
   });
 });
 
+describe('bite-eligibility gating (plan 04 §8.4 — the cast/SET flow consults it)', () => {
+  it('a grade-1 keeper SETs a tier-2 disturbance → only the eligibility-1 species takes the hook', () => {
+    const w = bootWorld(41);
+    expect(w.run.licenseGrade).toBe(1); // no save loaded → Probationary Keeper
+    const d = disturbanceByBoat(w, 2);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w);
+
+    const c = w.run.activeCatch!;
+    expect(c.species).toBe('bottle-post'); // the only tier-2 row with eligibility 1
+    expect(speciesById(c.species).eligibility).toBe(1);
+  });
+
+  it('a tier-3 disturbance DECLINES a grade-1 keeper — present but does not respond', () => {
+    const w = bootWorld(42);
+    const d = disturbanceByBoat(w, 3);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w); // SET → the whole tier out-ranks the license
+
+    expect(w.tether.fights.length).toBe(0);
+    expect(w.fish).toBeNull();
+    expect(w.run.activeCatch).toBeNull();
+    expect(w.run.haul.length).toBe(0);
+    // the disturbance stays present (re-castable, declining again deterministically)
+    expect(d.state).toBe('idle');
+    expect(w.run.promptId).toBeNull();
+  });
+
+  it('the same tier-3 disturbance resolves at grade 3 — and only bites eligible species', () => {
+    const w = bootWorld(43);
+    w.run.licenseGrade = 3;
+    const d = disturbanceByBoat(w, 3);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w);
+
+    expect(w.tether.fights.length).toBe(1);
+    const c = w.run.activeCatch!;
+    expect(speciesById(c.species).eligibility).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('Drowned unique loot (plan 04 §7.3) rides the run result', () => {
+  it('a grade-6 clean land yields a named unique in the inventory and the receipt', () => {
+    const w = bootWorld(76); // seed pinned: the (76, disturbance 9000) land drop is Drowned
+    w.run.licenseGrade = 6; // the §8.2 G6 gate — Drowned weight is 0 below this
+    const d = disturbanceByBoat(w, 2);
+    w.intent.primary = true;
+    updateCastFlow(w, DT);
+    driveToPrompt(w, d);
+    pressSet(w);
+
+    w.fish!.stamina = 0;
+    w.fish!.tether.exhausted = true;
+    w.fish!.x = w.player.x;
+    w.fish!.z = w.player.z;
+    updateTetherConstraint(w, DT);
+    w.intent.acceptLand = true;
+    updateTetherConstraint(w, DT);
+    processRunEvents(w);
+
+    expect(w.run.inventory.length).toBe(1);
+    const unique = w.run.inventory[0]!;
+    expect(unique.rarity).toBe('Drowned');
+    expect(unique.name).toBe("The Founder's Barometer"); // the §7.2 named unique
+    expect(unique.effects).toEqual([{ key: 'founders_quality', value: 0 }]); // unwired gimmick
+
+    // the run result (receipt pipeline) carries it, and it round-trips the box schema
+    const result = buildRunResult(w, true);
+    expect(result.sundries).toEqual(w.run.inventory.map((i) => ({ ...i })));
+    expect(SundryItemSchema.parse(unique)).toEqual(unique);
+  });
+});
+
 describe('run result — extraction vs death', () => {
   function runWithOneCatch(seed: number, tier: 1 | 2 | 3): WorldState {
     const w = bootWorld(seed);
+    // M4 bite-eligibility gate (plan 04 §8.4): the tier-3 table holds only
+    // eligibility ≥ 2 species, so a grade-1 keeper can never SET it — bump the
+    // test world to a licensed grade so the catch resolves.
+    w.run.licenseGrade = 3;
     const d = disturbanceByBoat(w, tier);
     w.intent.primary = true;
     updateCastFlow(w, DT);

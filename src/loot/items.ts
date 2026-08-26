@@ -1,6 +1,7 @@
-// ITEMS (loot) — plan 04 §7.2/§7.3 data: the trinket prefix/suffix affix pools
-// and the inert line/lure/bait/consumable name pools. Logic (rarity ladder, slot
-// roll, affix rolls) lives in roller.ts; effects application in runStart.ts.
+// ITEMS (loot) — plan 04 §7.2/§7.3 data: the trinket prefix/suffix affix pools,
+// the inert line/lure/bait/consumable name pools, and the Drowned named uniques.
+// Logic (rarity ladder, slot roll, affix rolls, the Drowned roll) lives in
+// roller.ts; effects application in runStart.ts.
 //
 // Affix pools (plan §7.2 §6.4): prefixes Barnacled (+HP), Punctual (+reelRate),
 // Spiteful (+gaff), Damp (stamina regen), Municipal (+Memories on extraction);
@@ -14,7 +15,7 @@
 //
 // Pure data + types: no `three` imports.
 
-export const RARITIES = ['C', 'U', 'R', 'E'] as const;
+export const RARITIES = ['C', 'U', 'R', 'E', 'Drowned'] as const;
 export type Rarity = (typeof RARITIES)[number];
 
 export const SLOTS = ['trinket', 'line', 'lure', 'bait', 'consumable'] as const;
@@ -61,8 +62,9 @@ export const SUFFIXES: AffixDef[] = [
 ];
 
 // Higher rarities favour the stronger affixes (plan §7.3 "rarity-weighted,
-// higher rarity favours stronger entries").
-export const RARITY_AFFIX_MULT: Record<Rarity, number> = { C: 1, U: 1.3, R: 1.7, E: 2.2 };
+// higher rarity favours stronger entries"). Drowned never rolls affixes — a
+// Drowned tier drops a named unique instead — so its mult is a 0 placeholder.
+export const RARITY_AFFIX_MULT: Record<Rarity, number> = { C: 1, U: 1.3, R: 1.7, E: 2.2, Drowned: 0 };
 
 // --- inert slot pools (non-trinket sundries — rolled, no wired effects yet) ----
 
@@ -79,4 +81,29 @@ export const SLOT_POOLS: Record<Exclude<Slot, 'trinket'>, string[]> = {
 };
 
 // rarity rank → pool index (better rarities pull from the deeper end of a pool)
-export const RARITY_RANK: Record<Rarity, number> = { C: 0, U: 1, R: 2, E: 3 };
+export const RARITY_RANK: Record<Rarity, number> = { C: 0, U: 1, R: 2, E: 3, Drowned: 3 };
+
+// --- Drowned uniques (plan §7.2/§7.3) -------------------------------------------
+//
+// "Drowned rolls a named unique instead of affixes." A Drowned-tier catch drop
+// draws one named unique from this pool (the §7.2 uniques — Founder's Barometer,
+// Dam Key Spare, the Hymnal, the Wedding Band — plus the §6.2/6.3 Drowned tackle:
+// Widow's Hair, the Baby Shoe, Maren's Thimble). Each carries its gimmick id as
+// an unwired effect (collected, silent until its hook registry exists — same
+// convention as the unwired trinket affixes). Drowned weight is 0 below license
+// grade 6 (§8.2 G6), so these only surface on a grade-6+ ladder.
+export interface DrownedUniqueDef {
+  key: string; // gimmick id (unwired hook)
+  name: string;
+  slot: Slot;
+}
+
+export const DROWNED_UNIQUES: DrownedUniqueDef[] = [
+  { key: 'founders_quality', name: "The Founder's Barometer", slot: 'trinket' },
+  { key: 'dam_key_rescue', name: 'Dam Key Spare', slot: 'trinket' },
+  { key: 'hymnal_dread_vent', name: 'The Hymnal (Waterlogged)', slot: 'trinket' },
+  { key: 'wedding_band', name: 'Wedding Band (Yours)', slot: 'trinket' },
+  { key: 'widows_hair', name: "Widow's Hair", slot: 'line' },
+  { key: 'baby_shoe', name: 'The Baby Shoe', slot: 'lure' },
+  { key: 'marens_thimble', name: "Maren's Thimble", slot: 'lure' },
+];

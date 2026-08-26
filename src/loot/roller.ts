@@ -1,9 +1,10 @@
 // LOOT ROLLER (loot) — plan 04 §7.1/§7.3, task t19. The rarity ladder
-// C/U/R/E (Drowned gated until license grade 6, per §8.2 G6 — its weight is 0
-// below that), the slot roll on landed catches by catch-tier + Dread weights,
-// the affixed-trinket roller (one prefix + one suffix), and the inert-slot
-// fallback items. Every draw is pure over the passed PCG32 stream — same seed +
-// same ctx → same drop (spec 8.3, plan 04 §2).
+// C/U/R/E/Drowned (Drowned gated until license grade 6, per §8.2 G6 — its weight
+// is 0 below that), the slot roll on landed catches by catch-tier + Dread
+// weights, the affixed-trinket roller (one prefix + one suffix), the inert-slot
+// fallback items, and the Drowned named-unique roll (§7.3 "Drowned rolls a named
+// unique instead of affixes"). Every draw is pure over the passed PCG32 stream —
+// same seed + same ctx → same drop (spec 8.3, plan 04 §2).
 //
 // ctx is built from the run reducer: zoneDepth (Shallows = 1), the landed
 // catch's tier, the current Dread tier, the equipped license grade, and the
@@ -16,6 +17,7 @@ import type { Rng } from '../core/rng';
 import {
   PREFIXES,
   SUFFIXES,
+  DROWNED_UNIQUES,
   RARITY_AFFIX_MULT,
   SLOT_POOLS,
   RARITY_RANK,
@@ -38,8 +40,8 @@ const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > 
 // Base rarity weights per zone depth (plan §7.1 "base rarity weights per zone
 // depth shift with dreadTier and qualityBonus"). Drowned weight is 0 until the
 // G6 gate (license grade 6) — the ladder includes the slot so deeper-zone runs
-// can light it up later; no Drowned item is rolled this round.
-const ZONE_BASE: Record<number, Record<Rarity, number>> = {
+// can light it up later; below grade 6 the Drowned tail simply never rolls.
+const ZONE_BASE: Record<number, Record<Exclude<Rarity, 'Drowned'>, number>> = {
   1: { C: 62, U: 24, R: 11, E: 3 },
   2: { C: 46, U: 30, R: 18, E: 6 },
   3: { C: 32, U: 30, R: 26, E: 12 },
@@ -74,8 +76,8 @@ export function rarityWeights(ctx: RollCtx): Record<Rarity | 'Drowned', number> 
   return { ...base, Drowned: ctx.licenseGrade >= DROWNED_GATE_GRADE ? DROWNED_WEIGHT : 0 };
 }
 
-// Roll one of the four real rarities (Drowned is gated and never rolled this
-// round — its weight is 0 for grades 1..5 and the slot is reserved).
+// Roll the rarity ladder C/U/R/E (+ Drowned once the G6 gate lifts its weight —
+// grade 6+ adds the Drowned tail, plan §8.2 G6).
 export function rollRarity(rng: Rng, ctx: RollCtx): Rarity {
   const w = rarityWeights(ctx);
   const ladder: [Rarity, number][] = [
@@ -84,6 +86,7 @@ export function rollRarity(rng: Rng, ctx: RollCtx): Rarity {
     ['R', w.R],
     ['E', w.E],
   ];
+  if (w.Drowned > 0) ladder.push(['Drowned', w.Drowned]);
   const total = ladder.reduce((s, [, v]) => s + v, 0);
   let r = rng.nextFloat() * total;
   for (const [rar, v] of ladder) {
@@ -181,11 +184,28 @@ export function rollInertItem(rng: Rng, rarity: Rarity, slot: Exclude<Slot, 'tri
   };
 }
 
+// A Drowned-tier drop (plan §7.3 "Drowned rolls a named unique instead of
+// affixes"): one named unique from the §7.2 pool, its gimmick id carried as an
+// unwired effect (collected, silent until its hook registry exists). Seeded over
+// the passed stream — same seed → same unique.
+export function rollDrownedUnique(rng: Rng): SundryItem {
+  const def = DROWNED_UNIQUES[Math.floor(rng.nextFloat() * DROWNED_UNIQUES.length)]!;
+  return {
+    id: `drowned-${(rng.nextU32() >>> 0).toString(36)}`,
+    name: def.name,
+    rarity: 'Drowned',
+    slot: def.slot,
+    effects: [{ key: def.key, value: 0 }],
+  };
+}
+
 // The full landed-catch drop: roll the slot, then rarity, then the item. Returns
-// null when nothing surfaces ("the boat recovers nothing but the line").
+// null when nothing surfaces ("the boat recovers nothing but the line"). A
+// Drowned rarity short-circuits the slot roll — it drops a named unique.
 export function rollCatchDrop(rng: Rng, ctx: RollCtx): SundryItem | null {
   if (!rng.chance(dropChance(ctx))) return null;
   const rarity = rollRarity(rng, ctx);
+  if (rarity === 'Drowned') return rollDrownedUnique(rng);
   const slot = rollSlot(rng, ctx);
   if (slot === 'trinket') return rollAffixedTrinket(rng, rarity);
   return rollInertItem(rng, rarity, slot);

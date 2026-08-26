@@ -30,7 +30,7 @@ export type ItemEffect = z.infer<typeof ItemEffectSchema>;
 export const SundryItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  rarity: z.enum(['C', 'U', 'R', 'E']),
+  rarity: z.enum(['C', 'U', 'R', 'E', 'Drowned']),
   slot: z.enum(['trinket', 'line', 'lure', 'bait', 'consumable']),
   prefix: z.string().optional(),
   suffix: z.string().optional(),
