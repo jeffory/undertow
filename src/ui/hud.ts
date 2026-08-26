@@ -11,6 +11,7 @@
 import type { WorldState } from '../core/world';
 import { phaseAt, runElapsedMs } from '../game/clock';
 import { tierFor } from '../game/dread';
+import { zoneName } from '../core/zones';
 
 // --- palette (matches render/lines.ts: COLOR_CALM / COLOR_WARN / COLOR_DANGER) -
 const COLOR_CALM = '#33ff88';
@@ -31,6 +32,10 @@ let styleEl: HTMLStyleElement | null = null;
 let chipPhaseVal: HTMLSpanElement | null = null;
 let chipHaulVal: HTMLSpanElement | null = null;
 let chipDreadVal: HTMLSpanElement | null = null;
+let chipZoneVal: HTMLSpanElement | null = null;
+let chipHullVal: HTMLSpanElement | null = null;
+let lastZone: string | null = null;
+let lastHull: string | null = null;
 let gaugeEl: HTMLDivElement | null = null;
 let gaugeFill: HTMLDivElement | null = null;
 let lastPhase: string | null = null;
@@ -141,8 +146,10 @@ function buildDom(): void {
   }
 
   chipPhaseVal = chip('PHASE');
+  chipZoneVal = chip('ZONE');
   chipHaulVal = chip('HAUL');
   chipDreadVal = chip('DREAD');
+  chipHullVal = chip('HULL');
 
   gaugeEl = document.createElement('div');
   gaugeEl.id = 'hud-gauge';
@@ -181,6 +188,22 @@ export function updateHud(world: WorldState): void {
   if (haul !== lastHaul) {
     lastHaul = haul;
     if (chipHaulVal) chipHaulVal.textContent = String(haul);
+  }
+
+  // M3 round 3: the zone you are fishing and what is left of the boat.
+  const zoneLabel = zoneName(world.run?.zone ?? 1).toUpperCase();
+  if (zoneLabel !== lastZone) {
+    lastZone = zoneLabel;
+    if (chipZoneVal) chipZoneVal.textContent = zoneLabel;
+  }
+
+  const bc = world.boatCombat;
+  const hullLabel = bc.swamped
+    ? 'SWAMPED'
+    : `${Math.round(bc.hull.hp)}/${Math.round(bc.hull.maxHp)}${bc.active ? ' !' : ''}`;
+  if (hullLabel !== lastHull) {
+    lastHull = hullLabel;
+    if (chipHullVal) chipHullVal.textContent = hullLabel;
   }
 
   const tier = tierFor(world.dread);

@@ -67,3 +67,44 @@ export function refillTimerForPhase(phase: ClockPhase): number {
 export function refillActive(phase: ClockPhase, phaseProgress01: number): boolean {
   return phase !== 'falseDawn' || phaseProgress01 < 0.6;
 }
+
+// --- night gating table (plan §5.3, the phase-effects table at line 341) --------
+// | Dusk       | no ambushes below Dread 40 | Safe traversal (NO Draggers) | ×1.0  |
+// | Night      | rare bias                  | Boat combat ENABLED          | ×1.25 |
+// | Deep night | Whistler/Courier eligible  | Dragger rate ×1.5            | ×1.25 |
+// | False dawn | spawns thin out            | Safe again, if it floats     | ×1.25 |
+//
+// plan §6.3 acceptance is the tie-breaker on dusk: "No Dragger spawns, hooks, or
+// boat damage before `night` phase" — dusk is Dragger-free at ANY Dread (the
+// "below Dread 40" clause on that row governs land AMBUSHES, a different
+// producer; `ambushEligible` below is that rule). plan.md §3.3 says the same in
+// fiction: "Daytime/dusk boats are strictly traversal."
+
+// Base seconds between Dragger spawn attempts at `night` (the ×1 rate).
+export const DRAGGER_BASE_INTERVAL_S = 75;
+
+export function draggerEligible(phase: ClockPhase): boolean {
+  return phase === 'night' || phase === 'deepNight';
+}
+
+// Deep night hunts you: rate ×1.5 → the interval divides by 1.5.
+export function draggerRateMult(phase: ClockPhase): number {
+  switch (phase) {
+    case 'night': return 1;
+    case 'deepNight': return 1.5;
+    default: return 0; // dusk: never; false dawn: "safe again, if it still floats"
+  }
+}
+
+export function draggerIntervalFor(phase: ClockPhase): number {
+  const mult = draggerRateMult(phase);
+  return mult <= 0 ? Infinity : DRAGGER_BASE_INTERVAL_S / mult;
+}
+
+// Land ambushes (the OTHER half of the dusk row): none at dusk below Dread 40.
+// The ambush producers themselves are M4/M5; this is the gate they will read.
+export const DUSK_AMBUSH_DREAD_FLOOR = 40;
+
+export function ambushEligible(phase: ClockPhase, dread: number): boolean {
+  return phase === 'dusk' ? dread >= DUSK_AMBUSH_DREAD_FLOOR : true;
+}

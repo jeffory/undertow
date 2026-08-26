@@ -23,7 +23,7 @@
 import type { WorldState } from '../core/world';
 import { enterWaterPhase } from './tether';
 import type { TetherEvent } from './tether';
-import { dockedIslet } from '../gen/lakeWorld';
+import { dockedIslet, nearestDockableIslet, dockPlayer } from '../gen/lakeWorld';
 import { circleOutOfHull, polygonCentroid } from '../core/poly';
 
 // --- tuning constants ---------------------------------------------------------
@@ -33,6 +33,14 @@ export const WATER_DAMP = 0.85; // movement velocity damp while under (plan §8 
 export const DRIFT_AMP = 0.3; // m/s — sinusoidal drift magnitude (plan §8 "small drift")
 export const DRIFT_FREQ_X = 0.7; // rad/s — drift wave along x
 export const DRIFT_FREQ_Z = 0.5; // rad/s — drift wave along z
+
+// --- swamp (extended water phase, plan 03 §6.1) --------------------------------
+// A hull swamp drops the keeper in the water with the haul sinking around them.
+// There is no tether fight holding them under any more, breath IS lethal, and
+// the only exit is a walkable shore.
+export const SWAMP_PICKUP_RANGE = 2.5; // m — reach for a sinking CatchRecord
+export const SWAMP_PICKUP_BREATH = 2; // s of breath per pickup ("each pickup costs breath seconds")
+export const SWAMP_SHORE_RANGE = 1.5; // m — close enough to a walkable hull to climb out
 
 // The player is "in deep water" once their circle pokes past the walkable islet
 // they are docked to (the islet's convex hull — plan 03 §2.6). So the only way
@@ -73,15 +81,63 @@ function surface(world: WorldState): void {
   world.water.breath = world.water.breathMax;
   world.water.drift.x = 0;
   world.water.drift.z = 0;
+  world.water.sinkingHaul = false;
+  world.water.lethal = false;
   world.ui.underwater = false;
+  // Anything still sinking when the keeper climbs out is lost from the run haul
+  // (plan §6.1: "extraction yields what you actually carried out").
+  world.run.sinking = [];
   const ev: TetherEvent = { type: 'surfaced', breathSec: world.water.breathMax };
   world.tetherEvents.push(ev);
+}
+
+// The swamp variant of the phase (plan §6.1). Pickups cost breath seconds;
+// breath 0 drowns (the run terminal reads hp 0); reaching a walkable islet hull
+// climbs out and ends it, losing whatever is still sinking.
+function updateSwampPhase(world: WorldState, dt: number): void {
+  const water = world.water;
+  const p = world.player;
+
+  water.breath = Math.max(0, water.breath - BREATH_DRAIN * dt);
+  updateDrift(world);
+  updateTowardShore(world);
+
+  // Grab what you can — nearest first, one per step, each paying breath.
+  for (let i = 0; i < world.run.sinking.length; i++) {
+    const item = world.run.sinking[i]!;
+    if (Math.hypot(item.x - p.x, item.z - p.z) <= SWAMP_PICKUP_RANGE) {
+      world.run.sinking.splice(i, 1);
+      world.run.haul.push(item.record);
+      water.breath = Math.max(0, water.breath - SWAMP_PICKUP_BREATH);
+      break;
+    }
+  }
+
+  // Shore = out. Climb onto the nearest walkable islet (the run continues on
+  // foot; the boat is gone for good).
+  const iso = nearestDockableIslet(world, p.x, p.z, SWAMP_SHORE_RANGE);
+  if (iso) {
+    surface(world);
+    dockPlayer(world, iso.id, { x: p.x, z: p.z });
+    return;
+  }
+
+  // Out of breath in a swamped boat's wake: the water-phase timer runs out
+  // (plan §7.2 death path). hp 0 → the run terminal ends the run at 30%.
+  if (water.breath <= 0 && water.lethal) {
+    p.hp = 0;
+  }
 }
 
 export function updateWaterPhase(world: WorldState, dt: number): void {
   const water = world.water;
 
   if (water.active) {
+    // The swamp variant has no fight holding it open — it runs on breath alone.
+    if (water.sinkingHaul) {
+      updateSwampPhase(world, dt);
+      return;
+    }
     // A fight ending while under (cut / land / snap / butcher removes it from
     // world.tether.fights) surfaces the player — treading water at wade pace.
     if (world.tether.fights.length === 0) {
@@ -99,7 +155,11 @@ export function updateWaterPhase(world: WorldState, dt: number): void {
   }
 
   // Trigger: a drag displaced the player past the shoreline while tethered.
-  if (world.tether.fights.length > 0 && inDeepWater(world)) {
+  // FOOT mode only: aboard the boat the keeper is not in the water at all, and
+  // the M1 ground-circle fallback would otherwise read every boat-anchored
+  // fight (and every cast made from the boat, which parks the keeper at the
+  // boat) as "past the shoreline" and submerge them on open water.
+  if (world.mode === 'foot' && world.tether.fights.length > 0 && inDeepWater(world)) {
     enterWaterPhase(world, { breathSec: BREATH_MAX, occupied: false });
     world.ui.underwater = true;
     world.tetherEvents.push({

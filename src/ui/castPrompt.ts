@@ -5,6 +5,8 @@
 
 import type { WorldState } from '../core/world';
 import { PROMPT_WINDOW } from '../run/disturbance';
+import { DESCEND_HOLD_SECONDS, canDescend, nearestSinkhole } from '../run/descent';
+import { zoneName } from '../core/zones';
 
 let el: HTMLDivElement | null = null;
 let bar: HTMLDivElement | null = null;
@@ -61,4 +63,66 @@ export function updateCastPrompt(world: WorldState): void {
   const frac = Math.max(0, Math.min(1, d.promptTimer / PROMPT_WINDOW));
   const fill = bar!.querySelector('div');
   if (fill) fill.style.width = `${frac * 100}%`;
+}
+
+// --- descent prompt (M3 round 3, plan 03 §2.5) ---------------------------------
+// The contextual hold over a sinkhole's mouth. Same shape as the SET/RELEASE
+// card so the two read as one verb family; the bar FILLS (a commitment) rather
+// than draining (a window closing).
+
+let descEl: HTMLDivElement | null = null;
+let descFill: HTMLDivElement | null = null;
+let descTitle: HTMLDivElement | null = null;
+
+function ensureDescEl(): void {
+  if (descEl) return;
+  descEl = document.createElement('div');
+  descEl.id = 'descend-prompt';
+  document.body.appendChild(descEl);
+  const style = document.createElement('style');
+  style.textContent = `
+    #descend-prompt {
+      position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+      z-index: 40; width: 300px; padding: 10px 14px;
+      background: rgba(4, 7, 10, 0.88); border: 1px solid #2b4a52;
+      color: #cfe0dc; font: 12px/1.5 ui-monospace, monospace; text-align: center;
+      letter-spacing: 0.12em; pointer-events: none; user-select: none;
+    }
+    #descend-prompt .title { color: #8fd0c4; font-weight: bold; margin-bottom: 6px; }
+    #descend-prompt .bar { height: 4px; background: #16242a; margin: 8px 0 6px; }
+    #descend-prompt .bar > div { height: 100%; background: #8fd0c4; width: 0%; }
+    #descend-prompt .hint { font-size: 10px; color: #6d8b92; letter-spacing: 0.06em; }
+  `;
+  document.head.appendChild(style);
+  descTitle = document.createElement('div');
+  descTitle.className = 'title';
+  descEl.appendChild(descTitle);
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  descFill = document.createElement('div');
+  bar.appendChild(descFill);
+  descEl.appendChild(bar);
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'HOLD E — ONE WAY';
+  descEl.appendChild(hint);
+}
+
+export function updateDescentPrompt(world: WorldState): void {
+  const show =
+    world.mode === 'boat' &&
+    !world.run.ended &&
+    world.tether.fights.length === 0 &&
+    !world.boatCombat.active &&
+    canDescend(world) &&
+    nearestSinkhole(world, world.boat.x, world.boat.z) !== null;
+  if (!show) {
+    if (descEl) descEl.style.display = 'none';
+    return;
+  }
+  ensureDescEl();
+  descEl!.style.display = 'block';
+  if (descTitle) descTitle.textContent = `DESCEND · ${zoneName(world.run.zone + 1).toUpperCase()}`;
+  const p = Math.min(1, world.run.descend.held / DESCEND_HOLD_SECONDS);
+  if (descFill) descFill.style.width = `${(p * 100).toFixed(1)}%`;
 }

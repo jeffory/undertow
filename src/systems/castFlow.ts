@@ -26,7 +26,9 @@ import { recordBestiary } from '../bestiary/bestiary';
 // (loot stream) and the FishParams carry the stats that scale the tether fight
 // — replacing the M3 FISH_TIER_SCALE capsule. The wrongness curve is zone 1
 // (Shallows) for now = mild.
-const SHALLOWS_ZONE = 1;
+// The zone the fight is generated for. Round 3 wires the RUN's zone depth
+// (world.run.zone) through, so a descended lake rolls wronger fish from the same
+// presets (plan 04 §3 wrongness curve w(zone)).
 
 export function updateCastFlow(world: WorldState, dt: number): void {
   stepDisturbances(world, dt);
@@ -105,7 +107,7 @@ function setCatch(world: WorldState, d: Disturbance): void {
   }
   d.state = 'gone';
   world.run.promptId = null;
-  const params = generateFishParams(preset, loot, { zone: SHALLOWS_ZONE });
+  const params = generateFishParams(preset, loot, { zone: world.run.zone });
   const weight = params.weightKg;
 
   const fish = world.fish ?? createFish();
@@ -141,7 +143,8 @@ function setCatch(world: WorldState, d: Disturbance): void {
 
 // Apply the species FishParams to the catch's combat-facing stats (the species
 // replaces the M3 tier capsule — dial 6 fishStaminaPool still multiplies).
-function applySpeciesParams(
+// Exported: the boat fight (03 §6) builds its Dragger through the same seam.
+export function applySpeciesParams(
   world: WorldState,
   fish: WorldState['fish'],
   params: FishParams,

@@ -86,9 +86,18 @@ function drainGaffHits(world: WorldState, fish: FishState): void {
 
 // --- direction helpers ----------------------------------------------------------
 
-// "Mostly away from the player with jitter" (plan §7) — the leash play.
-function awayDir(world: WorldState, fish: FishState, ai: FishState['ai']) {
-  const p = world.player;
+// The anchor end of the fight — what the catch orbits and pulls away from. A
+// player fight leashes to the keeper; a BOAT fight (03 §6.1, anchor 'boat')
+// leashes to the boat, so the whole FSM works at boat scale unchanged.
+function anchorPos(world: WorldState, fight: TetherFight): { x: number; z: number } {
+  return fight.anchor === 'boat'
+    ? { x: world.boat.x, z: world.boat.z }
+    : { x: world.player.x, z: world.player.z };
+}
+
+// "Mostly away from the anchor with jitter" (plan §7) — the leash play.
+function awayDir(world: WorldState, fight: TetherFight, fish: FishState, ai: FishState['ai']) {
+  const p = anchorPos(world, fight);
   const dx = fish.x - p.x;
   const dz = fish.z - p.z;
   const len = Math.hypot(dx, dz) || 1e-6;
@@ -114,6 +123,46 @@ function shorelineDir(world: WorldState) {
   return { x: dx / len, z: dz / len };
 }
 
+// 03 §6.1 — the boat fight's routed drag: "Dragger lunges yaw the boat toward
+// hazards (rocks, wrecks, other disturbances)". The hazard is the nearest islet
+// centre / wreck to the boat; the drag direction is boat → hazard, so a routed
+// pull genuinely steers the hull into something. `yawTarget` on the
+// DraggerInstance is set from this by the boat-combat system (§6.1). No RNG —
+// pure geometry, so it never perturbs the fight's seeded stream.
+function boatHazardDir(world: WorldState): { x: number; z: number } | null {
+  const lake = world.lake;
+  if (!lake) return null;
+  const b = world.boat;
+  let bestX = 0;
+  let bestZ = 0;
+  let bestD = Infinity;
+  for (const iso of lake.islets) {
+    const d = Math.hypot(iso.center.x - b.x, iso.center.z - b.z);
+    if (d < bestD) {
+      bestD = d;
+      bestX = iso.center.x;
+      bestZ = iso.center.z;
+    }
+  }
+  for (const wreck of lake.wrecks) {
+    const d = Math.hypot(wreck.pos.x - b.x, wreck.pos.z - b.z);
+    if (d < bestD) {
+      bestD = d;
+      bestX = wreck.pos.x;
+      bestZ = wreck.pos.z;
+    }
+  }
+  if (!Number.isFinite(bestD) || bestD < 1e-6) return null;
+  return { x: (bestX - b.x) / bestD, z: (bestZ - b.z) / bestD };
+}
+
+// The routed-drag direction for a fight: the boat fight steers toward lake
+// hazards, the foot fight toward the islet shoreline (the water).
+function routeDir(world: WorldState, fight: TetherFight) {
+  if (fight.anchor === 'boat') return boatHazardDir(world) ?? shorelineDir(world);
+  return shorelineDir(world);
+}
+
 // --- state transitions ----------------------------------------------------------
 
 function enterOrbit(fish: FishState, ai: FishState['ai']): void {
@@ -137,7 +186,7 @@ function enterLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: 
   // otherwise skip the countdown branch and the lunge would silently never fire.
   ai!.telegraph = Math.max(EPS, world.tuning.lungeTelegraph);
   ai!.telegraphKind = 'lunge';
-  const d = awayDir(world, fish, ai);
+  const d = awayDir(world, fight, fish, ai);
   ai!.pullDirX = d.x;
   ai!.pullDirZ = d.z;
   fish.state = 'idle';
@@ -149,11 +198,11 @@ function enterLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: 
   });
 }
 
-function enterDive(world: WorldState, fish: FishState, ai: FishState['ai']): void {
+function enterDive(world: WorldState, fight: TetherFight, fish: FishState, ai: FishState['ai']): void {
   ai!.mode = 'dive';
   ai!.telegraph = 0;
   ai!.telegraphKind = null;
-  const d = fish.tether.routedDrag ? shorelineDir(world) : awayDir(world, fish, ai);
+  const d = fish.tether.routedDrag ? routeDir(world, fight) : awayDir(world, fight, fish, ai);
   ai!.pullDirX = d.x;
   ai!.pullDirZ = d.z;
   ai!.timer = DIVE_MAX_DURATION;
@@ -165,7 +214,7 @@ function enterDrag(world: WorldState, fight: TetherFight, fish: FishState, ai: F
   ai!.mode = 'drag';
   ai!.pullBy = 'lunge';
   const routed = fish.tether.routedDrag;
-  const d = routed ? shorelineDir(world) : awayDir(world, fish, ai);
+  const d = routed ? routeDir(world, fight) : awayDir(world, fight, fish, ai);
   ai!.pullDirX = d.x;
   ai!.pullDirZ = d.z;
   fish.state = 'idle';
@@ -222,7 +271,7 @@ function rollTransition(world: WorldState, fight: TetherFight, fish: FishState, 
           enterLunge(world, fight, fish, ai);
           break;
         case 'dive':
-          enterDive(world, fish, ai);
+          enterDive(world, fight, fish, ai);
           break;
         case 'drag':
           enterDrag(world, fight, fish, ai);
@@ -237,7 +286,7 @@ function rollTransition(world: WorldState, fight: TetherFight, fish: FishState, 
       enterLunge(world, fight, fish, ai);
       break;
     case 'dive':
-      enterDive(world, fish, ai);
+      enterDive(world, fight, fish, ai);
       break;
     case 'drag':
       enterDrag(world, fight, fish, ai);
@@ -257,7 +306,7 @@ function orbitStep(world: WorldState, fight: TetherFight, fish: FishState, ai: F
     rollTransition(world, fight, fish, ai);
     return;
   }
-  const p = world.player;
+  const p = anchorPos(world, fight);
   const dx = fish.x - p.x;
   const dz = fish.z - p.z;
   const dist = Math.hypot(dx, dz) || 1e-6;

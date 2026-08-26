@@ -25,8 +25,10 @@ import { updateCastFlow } from '../systems/castFlow';
 import { updateDreadSystem } from '../systems/dreadSystem';
 import { updateSpawnDirectorSystem } from '../systems/spawnDirector';
 import { updateNightClockSystem } from '../systems/nightClockSystem';
+import { updateBoatCombat } from '../systems/boatCombat';
+import { updateDescent } from '../systems/descent';
 import { updateRunTerminal } from '../systems/runTerminal';
-import { updateCastPrompt } from '../ui/castPrompt';
+import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -175,6 +177,7 @@ function ui(world: WorldState, _dt: number): void {
   updateWaterTint(world);
   updateHud(world);
   updateCastPrompt(world);
+  updateDescentPrompt(world);
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -269,7 +272,11 @@ export function updateDebugOverlay(world: WorldState): void {
     `tris ${tris}\n` +
     `dread ${world.dread.toFixed(0)} (tier ${tierFor(world.dread)})\n` +
     `phase ${phase} · run ${mm}:${ss.toString().padStart(2, '0')}\n` +
-    `ripples ${world.disturbances.length} · haul ${world.run?.haul.length ?? 0}`;
+    `ripples ${world.disturbances.length} · haul ${world.run?.haul.length ?? 0}\n` +
+    `zone ${world.run?.zone ?? 1} (floor ${world.run?.zoneFloor ?? 0}) · descents ${world.run?.sinkholesDescended ?? 0}\n` +
+    `hull ${world.boatCombat.hull.hp.toFixed(0)}/${world.boatCombat.hull.maxHp} ` +
+    `(${world.boatCombat.hull.segments} seg)${world.boatCombat.active ? ' · DRAGGER' : ''}` +
+    `${world.boatCombat.swamped ? ' · SWAMPED' : ''}`;
 }
 
 interface DebugInfoRef {
@@ -291,9 +298,11 @@ export const UPDATE_ORDER: SystemFn[] = [
   movement,
   collision,
   combat,
+  updateBoatCombat, // 03 §6: night Dragger fight — hull damage, cleat cut, swamp
   updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
   updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)
+  updateDescent, // 03 §2.5: sinkhole descent (zoneFloor rises; the clock does not reset)
   animation,
   updateRunTerminal, // 03 §7: extraction / death / run summary — a SIM system (timers scale)
   renderSystem,

@@ -10,6 +10,7 @@
 //   placements: wrecks / sinkholes / micro-event / buoys (§2.5) → LakeMap.
 
 import { createRng, LAYOUT } from '../core/rngStreams';
+import { MAX_ZONE, clampZone, zoneSalt } from '../core/zones';
 import type { Vec2 } from '../core/poly';
 import {
   convexHull,
@@ -92,7 +93,12 @@ export interface Wreck {
 
 export interface Sinkhole {
   id: number;
-  pos: Vec2;
+  pos: Vec2; // the gap itself — the far islet's centre (plan §2.5 "at the far islets")
+  // The water-side descent point: the boat cannot row onto the islet, so the
+  // mouth is the reachable lip of the gap, just off that islet's shore facing
+  // back toward the start. Computed WITHOUT the layout RNG (a pure angular
+  // sweep) so adding it left every other placement byte-identical.
+  mouth: Vec2;
   zoneFrom: number;
   zoneTo: number;
 }
@@ -123,6 +129,7 @@ export interface DisturbanceSpawn {
 
 export interface LakeMap {
   seed: number;
+  zone: number; // 1..5 zone depth this surface was generated for (plan §2.4)
   bounds: { w: number; h: number };
   poissonRadius: number; // the radius actually used (after the ladder)
   startIslet: number; // the lighthouse islet the run begins at
@@ -144,6 +151,7 @@ function buildIslet(
   center: Vec2,
   id: number,
   maxRadius: number,
+  zone: number,
 ): Islet {
   const n = rng.int(ISLET_VERT_MIN, ISLET_VERT_MAX);
   const base = rng.range(ISLET_RADIUS_MIN, ISLET_RADIUS_MAX);
@@ -170,7 +178,7 @@ function buildIslet(
     hull: convexHull(poly),
     baseRadius: base,
     kind: 'walkable',
-    zone: 0, // Shallows only for M3 (plan §2.4: the generator takes `zone` as input)
+    zone, // plan §2.4: the generator takes `zone` as an input so zones 2-5 reuse it
     features: [],
     hasSinkhole: false,
   };
@@ -224,8 +232,30 @@ function shorePoint(
   return last;
 }
 
-function buildLake(runSeed: number): LakeMap {
-  const layout = createRng(runSeed, LAYOUT);
+// The water-side lip of a sinkhole: `maxRadius + 5` off the gap islet's shore,
+// swept from the bearing back toward `toward` (the start islet) outward in
+// alternating ±30° steps until the point clears every islet. Pure trigonometry —
+// it draws NOTHING from the layout stream, so bolting the mouth on left every
+// other placement in an existing seed's lake byte-identical.
+function sinkholeMouth(iso: Islet, islets: Islet[], maxRadius: number, toward: Vec2): Vec2 {
+  const base = Math.atan2(toward.z - iso.center.z, toward.x - iso.center.x);
+  const off = maxRadius + 5;
+  let fallback: Vec2 = { x: iso.center.x + Math.cos(base) * off, z: iso.center.z + Math.sin(base) * off };
+  for (let k = 0; k < 12; k++) {
+    const step = Math.ceil(k / 2) * (Math.PI / 6);
+    const ang = base + (k % 2 === 0 ? step : -step);
+    const p: Vec2 = { x: iso.center.x + Math.cos(ang) * off, z: iso.center.z + Math.sin(ang) * off };
+    if (k === 0) fallback = p;
+    if (clearOfIslets(p, islets)) return p;
+  }
+  return fallback;
+}
+
+function buildLake(runSeed: number, zone: number): LakeMap {
+  // The zone salt is the whole of "a deeper zone is a different lake from the
+  // same run seed" (plan §2.4 / task 2): zone 1 salts with 0, so the Shallows
+  // surface of a seed is unchanged from round 1.
+  const layout = createRng(runSeed, LAYOUT, zoneSalt(zone));
   const bounds = LAKE_BOUNDS;
   const box = {
     minX: -bounds.w / 2,
@@ -262,15 +292,19 @@ function buildLake(runSeed: number): LakeMap {
   const edges = prunedPathGraph(points, MAX_EDGE);
 
   // --- step 3: islet polygons (plan §2.4) --------------------------------------
-  const islets = points.map((center, id) => buildIslet(layout, center, id, maxIsletRadius));
+  const islets = points.map((center, id) => buildIslet(layout, center, id, maxIsletRadius, zone));
 
-  // sinkhole islet = the graph-furthest from the start (the descent journey)
+  // sinkhole islets = the graph-furthest from the start (the descent journey).
+  // 1 in the Shallows, 2 in the deeper zones (plan §2.5); The Mouth (zone 5) has
+  // none — it is the descent cap (plan §12.7), there is nowhere deeper to go.
   const dist = graphDistances(edges, islets.length, 0);
-  let furthest = 0;
-  for (let i = 0; i < dist.length; i++) {
-    if (dist[i]! > dist[furthest]!) furthest = i;
-  }
-  islets[furthest]!.hasSinkhole = true;
+  const sinkholeCount = zone >= MAX_ZONE ? 0 : zone === 1 ? 1 : 2;
+  const byDistance = islets
+    .map((iso) => iso.id)
+    .filter((id) => id !== 0)
+    .sort((a, b) => (dist[b]! - dist[a]!) || (a - b));
+  const gapIslets = byDistance.slice(0, sinkholeCount);
+  for (const id of gapIslets) islets[id]!.hasSinkhole = true;
 
   // rock vs walkable split (plan §2.4): start + sinkhole islets stay walkable
   let rockCount = 0;
@@ -311,7 +345,7 @@ function buildLake(runSeed: number): LakeMap {
       id: i,
       pos,
       kind,
-      zone: 0,
+      zone,
       ...(anchorIslet !== undefined ? { anchorIslet } : {}),
       lootTier: layout.int(1, 3),
       marked: false,
@@ -320,9 +354,16 @@ function buildLake(runSeed: number): LakeMap {
   // one wreck is pre-tagged as the marked wreck (plan §2.5 / §6.7 slot)
   wrecks[layout.int(0, wrecks.length - 1)]!.marked = true;
 
-  const sinkholes: Sinkhole[] = [
-    { id: 0, pos: islets[furthest]!.center, zoneFrom: 0, zoneTo: 1 },
-  ];
+  // plan §2.5: "each stores zoneTo = zoneFrom + 1. Descending sets
+  // dread.zoneFloor (§5) and does NOT touch the Night Clock (§3.3)."
+  const startCentre = islets[0]!.center;
+  const sinkholes: Sinkhole[] = gapIslets.map((id, i) => ({
+    id: i,
+    pos: islets[id]!.center,
+    mouth: sinkholeMouth(islets[id]!, islets, maxIsletRadius, startCentre),
+    zoneFrom: zone,
+    zoneTo: Math.min(MAX_ZONE, zone + 1),
+  }));
 
   // buoys: primary near the start (submerges LAST at false dawn), secondary
   // mid-map (submerges FIRST) — plan §2.5 / §5.3
@@ -367,6 +408,7 @@ function buildLake(runSeed: number): LakeMap {
 
   return {
     seed: runSeed,
+    zone,
     bounds,
     poissonRadius: radius,
     startIslet: 0,
@@ -380,6 +422,10 @@ function buildLake(runSeed: number): LakeMap {
   };
 }
 
-export function generateLake(runSeed: number): LakeMap {
-  return buildLake(runSeed >>> 0);
+// `zone` (1..5, default 1 = the Shallows) selects the zone depth: it salts the
+// LAYOUT stream (a different lake from the same run seed), stamps the islets /
+// wrecks, and decides how many sinkholes lead deeper. `(runSeed, zone)` is the
+// full determinism key: same run seed + same zone → byte-identical lake.
+export function generateLake(runSeed: number, zone = 1): LakeMap {
+  return buildLake(runSeed >>> 0, clampZone(zone));
 }

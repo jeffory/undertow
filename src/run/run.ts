@@ -14,6 +14,7 @@ import { haulMemories, CONDOLENCE_RATE } from '../extract/memories';
 import { phaseAt, createClock, runElapsedMs } from '../game/clock';
 import type { RunResult } from '../save/schemas';
 import { applyRunStartPassives } from '../loot/runStart';
+import { MIN_ZONE } from '../core/zones';
 
 // The one non-deterministic step of a run (plan §1.3: the only Math.random).
 export function newRunSeed(): number {
@@ -31,6 +32,11 @@ export function initRun(world: WorldState): void {
   world.run.startedAtDread = world.dread;
   world.run.promptId = null;
   world.run.extract = { held: 0, buoyId: null };
+  world.run.descend = { held: 0, buoyId: null };
+  world.run.zone = MIN_ZONE;
+  world.run.zoneFloor = 0;
+  world.run.sinkholesDescended = 0;
+  world.run.sinking = [];
   world.run.spawn = { refillTimer: 0, lastPhase: 'dusk', initialSpawned: false };
   world.clock = createClock(world.time.elapsed * 1000);
   world.disturbances = [];
@@ -75,9 +81,9 @@ export function buildRunResult(world: WorldState, extracted: boolean): RunResult
     xpTotal,
     dreadPeak: run.dreadPeak,
     startedAtDread: run.startedAtDread,
-    draggersLand: 0,
+    draggersLand: world.boatCombat.landed,
     bagmanCaught: false,
-    sinkholesDescended: 0,
+    sinkholesDescended: run.sinkholesDescended,
     bestiary: run.bestiaryEvents.map((e) => ({ ...e })),
     sundries: run.inventory.map((i) => ({ ...i })),
   };

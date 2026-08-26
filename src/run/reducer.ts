@@ -17,6 +17,7 @@ import { rollCatchDrop, rollAffixedTrinket, type RollCtx } from '../loot/roller'
 import type { SundryItem } from '../save/schemas';
 import type { Rarity } from '../loot/items';
 import { recordBestiary } from '../bestiary/bestiary';
+import { DRAGGER_SPECIES_ID } from '../data/species';
 
 export function currentPhase(world: WorldState): ClockPhase {
   return phaseAt(runElapsedMs(world.run.startedAt, world.time.elapsed));
@@ -79,9 +80,13 @@ export function butcherCatch(world: WorldState): CatchRecord | null {
 function rollDropForCatch(world: WorldState, qualityBonus: number): SundryItem | null {
   const c = world.run.activeCatch;
   if (!c) return null;
+  // A landed Dragger is paid for by the boat-combat system instead (03 §6.1:
+  // "guaranteed Rare+" + repair materials + Teeth). Rolling here as well would
+  // hand out two drops for one animal.
+  if (c.species === DRAGGER_SPECIES_ID) return null;
   const rng = createRng(world.seed, LOOT, c.disturbanceId);
   const ctx: RollCtx = {
-    zoneDepth: 1, // Shallows (the wrongness/loot base for this milestone)
+    zoneDepth: world.run.zone, // 1 Shallows … 5 Mouth — descents raise the ladder
     catchTier: c.tier,
     dreadTier: tierFor(world.dread),
     licenseGrade: world.run.licenseGrade,

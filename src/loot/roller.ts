@@ -210,3 +210,17 @@ export function rollCatchDrop(rng: Rng, ctx: RollCtx): SundryItem | null {
   if (slot === 'trinket') return rollAffixedTrinket(rng, rarity);
   return rollInertItem(rng, rarity, slot);
 }
+
+// A guaranteed drop with a rarity FLOOR — the boat-tier loot of a landed Dragger
+// (plan 03 §6.1: "guaranteed Rare+"). Same ladder, same slot roll; the rarity is
+// simply lifted to `minRarity` when the draw comes in under it, and the
+// drop-chance gate is skipped (a Dragger always pays).
+export function rollGuaranteedDrop(rng: Rng, ctx: RollCtx, minRarity: Rarity = 'R'): SundryItem {
+  const rolled = rollRarity(rng, ctx);
+  const rarity: Rarity =
+    RARITY_RANK[rolled] < RARITY_RANK[minRarity] ? minRarity : rolled;
+  if (rarity === 'Drowned') return rollDrownedUnique(rng);
+  const slot = rollSlot(rng, ctx);
+  if (slot === 'trinket') return rollAffixedTrinket(rng, rarity);
+  return rollInertItem(rng, rarity, slot);
+}

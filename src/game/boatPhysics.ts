@@ -59,5 +59,12 @@ export function stepBoatMovement(world: WorldState, dt: number): void {
   const res = resolveBoatObstacles(lake, { x: boat.x, z: boat.z }, { x: toX, z: toZ });
   boat.x = res.x;
   boat.z = res.z;
-  if (res.hit) boat.speed *= BOAT_THUD_KEEP;
+  if (res.hit) {
+    // 03 §6.1 — a Dragger yaws the hull toward hazards; the boat-combat system
+    // prices the thud in hull hp. Recording the speed here (the only place the
+    // impact is observable) keeps that system a pure consumer.
+    const bc = world.boatCombat;
+    if (bc) bc.impactSpeed = Math.max(bc.impactSpeed, Math.abs(boat.speed));
+    boat.speed *= BOAT_THUD_KEEP;
+  }
 }

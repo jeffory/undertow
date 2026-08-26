@@ -202,9 +202,12 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
   if (reel.active) {
     const exhausted = fishExhausted(world, fight);
     const floor = Math.max(fight.a.radius, fight.b.radius); // L never below the hook radius
+    // The boat fight reels at the winch's rate (03 §6.1 `winch.rate`); every
+    // other fight uses the equipped line's hand-reel rate.
+    const rate = fight.reelRate ?? line.reelRate;
     fight.L = Math.max(
       floor,
-      fight.L - line.reelRate * (exhausted ? reel.exhaustedMult : 1) * dt,
+      fight.L - rate * (exhausted ? reel.exhaustedMult : 1) * dt,
     );
     if (drainPlayer) {
       player.stamina = Math.max(0, player.stamina - reel.drain * dt);
@@ -236,8 +239,10 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
   }
   cut.progress = Math.min(1, cut.held / CUT_HOLD_SECONDS);
 
-  // 3. LAND (plan §3 branch 3) — primary (player) fight only, eligibility set below.
-  if (fight.anchor === 'player' && fight.land.eligible && world.intent.acceptLand) {
+  // 3. LAND (plan §3 branch 3) — the contextual prompt at the gunwale. A boat
+  // fight lands the same way (03 §6.1 "landing a Dragger"): winched in and
+  // exhausted, accepted with the same verb, firing the same event.
+  if (fight.land.eligible && world.intent.acceptLand) {
     world.tetherEvents.push({ type: 'landed', clean: true });
     world.fish = null; // the catch is despawned as caught (T6)
     return true;
@@ -290,8 +295,13 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
     bPos.write(pb.x - nx * corrB, pb.z - nz * corrB);
     fight.tension += excess * tuning.kTension * dt;
 
-    // Drag detection (plan §4.2): displacement actually applied to the PLAYER end.
-    const playerCorr = fight.a.owner === 'player' ? corrA : fight.b.owner === 'player' ? corrB : 0;
+    // Drag detection (plan §4.2): displacement actually applied to the HAULED
+    // end — the endpoint that is not the catch. For an M2 player fight that is
+    // the keeper (unchanged); for a boat fight (03 §6.1) it is the hull, which
+    // is what makes `drag` fire with `anchor: 'boat'` at all. Without this the
+    // boat-anchored fight produced no drag events and a Dragger could never
+    // take a bite of boat.
+    const playerCorr = fight.a.owner === 'enemy' ? corrB : corrA;
     const drag = fight.drag;
     // Slide the window FIRST, then accumulate. Plan §4.2: "a single huge lunge
     // can exceed 1.5m in one frame — the window logic treats that as an
@@ -356,8 +366,10 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
     }
   }
 
-  // 6. EXHAUST / LAND eligibility (plan §3 branch 6) — primary fight only.
-  if (fight.anchor === 'player' && catchFishPtr) {
+  // 6. EXHAUST / LAND eligibility (plan §3 branch 6) — player and boat fights
+  // alike; the only difference is which endpoint the 2m gunwale gap is measured
+  // from, and `len` above is already endpoint-to-endpoint.
+  if (catchFishPtr) {
     if (catchFishPtr.stamina <= 0) catchFishPtr.tether.exhausted = true;
     fight.land.eligible = catchFishPtr.tether.exhausted && len < LAND_DISTANCE;
   }

@@ -25,6 +25,9 @@ import type { FishParams } from '../gen/fishParams';
 import { makeParams } from '../gen/fishParams';
 import type { SplashState } from './splash';
 import { createSplash } from './splash';
+import type { BoatCombatState } from '../boat/boatCombat';
+import { createBoatCombat } from '../boat/boatCombat';
+import { MIN_ZONE } from './zones';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -219,6 +222,19 @@ export interface WaterPhaseState {
   drift: { x: number; z: number }; // small sinusoidal drift to add to movement
   towardShore: { x: number; z: number }; // struggle vector (player → islet centre)
   threatsApproach: boolean; // true when dread tier >= 3 — spawn system hook
+  // 03 §6.1 — the EXTENDED water phase after a hull swamp: no tether fight holds
+  // the keeper under any more, the haul is sinking around them (run.sinking),
+  // breath is lethal, and the only exit is a walkable shore.
+  sinkingHaul: boolean;
+  lethal: boolean; // breath 0 ends the run (a swamp), instead of merely clamping
+}
+
+// One catch sinking out of a swamped boat (plan §6.1: "your whole haul sinks
+// around you; each pickup costs breath seconds"). Unrecovered records are lost.
+export interface SinkingCatch {
+  record: CatchRecord;
+  x: number;
+  z: number;
 }
 
 export interface LureState {
@@ -274,6 +290,12 @@ export interface RunState {
   forceDrop: boolean; // ?debug gate-driver seam — always surface a sundry on land
   spawn: SpawnState;
   extract: ExtractState;
+  // --- M3 round 3: sinkhole descents (plan §2.5 / §4.1 / §5.1) ---------------
+  zone: number; // 1..5 zone depth — descending increments it, capped at MAX_ZONE
+  zoneFloor: number; // the Dread floor the current zone clamps to (plan §4.1)
+  sinkholesDescended: number; // RunResult.sinkholesDescended
+  descend: ExtractState; // hold-verb state at a sinkhole mouth (mirrors extract)
+  sinking: SinkingCatch[]; // haul spilled by a swamp, recoverable at breath cost
 }
 
 export function createRunState(startedAt: number, startedAtDread: number): RunState {
@@ -297,6 +319,11 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     forceDrop: false,
     spawn: { refillTimer: 0, lastPhase: 'dusk', initialSpawned: false },
     extract: { held: 0, buoyId: null },
+    zone: MIN_ZONE,
+    zoneFloor: 0,
+    sinkholesDescended: 0,
+    descend: { held: 0, buoyId: null },
+    sinking: [],
   };
 }
 
@@ -306,6 +333,7 @@ export interface WorldState {
   intent: Intent;
   player: PlayerState;
   boat: BoatState;
+  boatCombat: BoatCombatState; // 03 §6 — hull / winch / Dragger (night boat fight)
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
@@ -362,6 +390,7 @@ export function createWorld(seed = 1): WorldState {
       stagger: 0,
     },
     boat: { x: 0, y: 0, z: 0, heading: 0, speed: 0, atWinchPost: false, atCleat: false },
+    boatCombat: createBoatCombat(),
     combat: {
       comboStage: 0,
       comboWindow: 0,
@@ -396,6 +425,8 @@ export function createWorld(seed = 1): WorldState {
       drift: { x: 0, z: 0 },
       towardShore: { x: 0, z: 0 },
       threatsApproach: false,
+      sinkingHaul: false,
+      lethal: false,
     },
     lure: { id: 'basic-lure', count: 1 },
     lake: null,

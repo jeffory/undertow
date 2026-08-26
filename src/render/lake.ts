@@ -44,6 +44,8 @@ const WRECK_COLOR = 0x1c1512; // near-black timber
 const BUOY_PRIMARY = 0xffb45e; // warm amber — the extraction buoy near the start
 const BUOY_SECONDARY = 0x9db8d4; // pale bone-teal — the mid-map buoy
 const SINKHOLE_COLOR = 0x04070a; // the descent gap
+const SINKHOLE_RIM = 0x2b4a52; // the vortex rings drawn on the water above it
+const SINKHOLE_RADIUS = 3.4; // m — the visible mouth disc
 
 // Caged-lantern buoy top (T14): emissive warm cube inside a 4-post cage + a
 // faint additive sprite halo — no PointLight per buoy (too many lights).
@@ -75,6 +77,7 @@ let lakeGroup: THREE.Group | null = null;
 let builtFor: LakeMap | null = null;
 
 const buoyMarkers: Array<{ group: THREE.Group; phase: number; buoyId: number }> = [];
+const sinkholeMarkers: SinkholeMarker[] = [];
 
 // Shared additive halo splat for the buoy lanterns — one texture + material
 // reused by every buoy (a few draw calls, zero per-frame churn).
@@ -479,17 +482,47 @@ function updateTimber(islets: readonly Islet[], t: number): void {
   timberMesh.instanceMatrix.needsUpdate = true;
 }
 
-function buildSinkhole(sinkhole: { pos: { x: number; z: number } }): THREE.Mesh {
-  const geo = new THREE.CircleGeometry(2.2, 10);
-  geo.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshBasicMaterial({
-    color: SINKHOLE_COLOR,
-    transparent: true,
-    opacity: 0.9,
-  });
-  const m = new THREE.Mesh(geo, mat);
-  m.position.set(sinkhole.pos.x, 0.02, sinkhole.pos.z);
-  return m;
+// The descent marker (M3 round 3): a dark vortex disc with two counter-rotating
+// rings, sat on the water at the sinkhole's MOUTH — the water-side lip of the
+// gap, which is where the boat can actually reach it. Three cheap ring/circle
+// meshes, no new assets, no lights (task constraint: keep it cheap).
+interface SinkholeMarker {
+  group: THREE.Group;
+  inner: THREE.Mesh;
+  outer: THREE.Mesh;
+}
+
+function buildSinkhole(sinkhole: { mouth: { x: number; z: number } }): SinkholeMarker {
+  const g = new THREE.Group();
+
+  const discGeo = new THREE.CircleGeometry(SINKHOLE_RADIUS, 16);
+  discGeo.rotateX(-Math.PI / 2);
+  const disc = new THREE.Mesh(
+    discGeo,
+    new THREE.MeshBasicMaterial({ color: SINKHOLE_COLOR, transparent: true, opacity: 0.92 }),
+  );
+  g.add(disc);
+
+  const innerGeo = new THREE.RingGeometry(SINKHOLE_RADIUS * 0.42, SINKHOLE_RADIUS * 0.62, 18);
+  innerGeo.rotateX(-Math.PI / 2);
+  const inner = new THREE.Mesh(
+    innerGeo,
+    new THREE.MeshBasicMaterial({ color: SINKHOLE_RIM, transparent: true, opacity: 0.42 }),
+  );
+  inner.position.y = 0.012;
+  g.add(inner);
+
+  const outerGeo = new THREE.RingGeometry(SINKHOLE_RADIUS * 0.78, SINKHOLE_RADIUS * 0.94, 22);
+  outerGeo.rotateX(-Math.PI / 2);
+  const outer = new THREE.Mesh(
+    outerGeo,
+    new THREE.MeshBasicMaterial({ color: SINKHOLE_RIM, transparent: true, opacity: 0.3 }),
+  );
+  outer.position.y = 0.008;
+  g.add(outer);
+
+  g.position.set(sinkhole.mouth.x, 0.02, sinkhole.mouth.z);
+  return { group: g, inner, outer };
 }
 
 // --- rocks (rocks.glb clones scattered ON the terrain at the shoreline) --------
@@ -647,6 +680,7 @@ function rebuild(lake: LakeMap): void {
     lakeGroup.remove(child);
   }
   buoyMarkers.length = 0;
+  sinkholeMarkers.length = 0;
   timberSpawns.length = 0;
   timberMesh = null;
   lighthouseBody = null;
@@ -663,7 +697,11 @@ function rebuild(lake: LakeMap): void {
     buoyMarkers.push(marker);
     lakeGroup.add(marker.group);
   }
-  for (const sinkhole of lake.sinkholes) lakeGroup.add(buildSinkhole(sinkhole));
+  for (const sinkhole of lake.sinkholes) {
+    const marker = buildSinkhole(sinkhole);
+    sinkholeMarkers.push(marker);
+    lakeGroup.add(marker.group);
+  }
   const timber = buildTimberMesh(lake.seed, timberSpawns.length);
   timberMesh = timber;
   lakeGroup.add(timber);
@@ -715,5 +753,14 @@ export function updateLake(world: WorldState, _dt: number): void {
     // gentle shared breath for the buoy lantern halos (one material, no churn)
     haloMaterial.opacity = 0.62 + 0.15 * Math.sin(t * 1.6);
   }
+  // the vortex turns — counter-rotating rings on the swell, so the gap reads as
+  // moving water rather than a decal
+  for (const marker of sinkholeMarkers) {
+    marker.inner.rotation.y = t * 0.55;
+    marker.outer.rotation.y = -t * 0.32;
+    const surf = attenuatedWaterHeightAt(islets, marker.group.position.x, marker.group.position.z, t);
+    marker.group.position.y = surf + 0.02;
+  }
+
   updateTimber(islets, t);
 }

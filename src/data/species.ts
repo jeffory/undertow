@@ -405,7 +405,57 @@ export const BOSS_AND_BAGMAN: SpeciesPreset[] = [
   },
 ];
 
-export const ALL_SPECIES: SpeciesPreset[] = [...SHALLOWS_SPECIES, ...BOSS_AND_BAGMAN];
+// The night boat-scale hostile (plan 03 §6, plan 04 §4 "Dragger" row): scale
+// ×8-20 over a normal catch, finCount 5-9, dark palette, jawSplit 0.6, huge mass
+// → huge yaw, and a slow heavy low-frequency wave (plan 04 §117 "Draggers get a
+// slow, heavy, low-frequency wave"). It is never in the disturbance tier tables:
+// the spawn director hooks it to the BOAT at night (03 §6.1), never to a ripple.
+// Rarity E → tier 4, so landing one pays the Dread gain table's Epic rate (+12).
+export const NIGHT_SPECIES: SpeciesPreset[] = [
+  {
+    id: 'dragger',
+    name: 'Dragger',
+    rarity: 'E',
+    eligibility: 1, // it chooses you; the license never gates being hooked
+    category: 'dragger',
+    tier: 4,
+    lengthM: 9,
+    spineSegments: 14,
+    girthCurve: [
+      0.18, 0.3, 0.44, 0.58, 0.7, 0.78, 0.82, 0.82, 0.78, 0.7, 0.6, 0.5, 0.42, 0.34,
+    ],
+    snout: 0.35, // blunt, broad — a head built to take a gunwale off
+    finCount: 7, // odd, wrong (plan 04: 5-9)
+    finKinds: [D(), P(), 'ridge'],
+    eyeCount: 2,
+    eyeSize: 0.16, // small eyes on a very large animal
+    jawSplit: 0.6, // plan 04's Dragger row, exactly
+    limbBudget: 0,
+    humanRatio: 0.1,
+    swimFreq: 0.8, // slow, heavy, low-frequency
+    swimAmp: 0.75,
+    // Countershaded like a real deep-water animal: dark slate dorsal (the E
+    // rarity tone deepens it another 20%), pale underside. Palette 5's near-black
+    // belly would have made it a silhouette with no two-tone read at all.
+    palette: 2,
+    stats: { mass: 9, stamina: 340, pullForce: 8.5, swimSpeed: 5.2, hp: 520 },
+    patterns: { orbit: 0.3, lunge: 0.35, dive: 0.1, drag: 0.25 },
+    wrongnessInfluence: 0.6,
+    lungeCooldown: 3.2,
+    lungeStaminaCost: 26,
+    dragSpeed: 3.4,
+    dragStaminaCostPerM: 2.5,
+    routedDrag: true, // it yaws the boat toward hazards (plan 03 §6.1)
+  },
+];
+
+export const DRAGGER_SPECIES_ID = 'dragger';
+
+export const ALL_SPECIES: SpeciesPreset[] = [
+  ...SHALLOWS_SPECIES,
+  ...BOSS_AND_BAGMAN,
+  ...NIGHT_SPECIES,
+];
 
 const BY_ID = new Map<string, SpeciesPreset>(ALL_SPECIES.map((s) => [s.id, s]));
 

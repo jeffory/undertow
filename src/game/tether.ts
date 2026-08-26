@@ -82,6 +82,9 @@ export interface TetherFight {
   a: TetherEndpoint;
   b: TetherEndpoint;
   L: number;                  // current line length (m); only shrinks via reel
+  // Per-fight reel-rate override (03 §6.1): the boat fight reels at the WINCH's
+  // rate, not the hand-line's. Undefined → line.reelRate (the M2 default).
+  reelRate?: number;
   tension: number;            // 0..line.tensionCeiling
   reel: ReelState;
   cut: CutState;
@@ -199,7 +202,7 @@ export function startTetherFight(
   world: WorldState,
   species: SpeciesId,
   anchor: 'player' | 'boat',
-  opts?: Partial<{ a: TetherEndpoint; b: TetherEndpoint; L: number }>,
+  opts?: Partial<{ a: TetherEndpoint; b: TetherEndpoint; L: number; reelRate: number }>,
 ): TetherFight | null {
   const fish = world.fish;
 
@@ -226,7 +229,9 @@ export function startTetherFight(
       cut: { kind: 'none' },
     };
   } else {
-    // boat (03): a = winch post on the boat, b = the dragger. Data-only for M2.
+    // boat (03 §6.1): a = the winch post on the boat, b = the Dragger. The
+    // Dragger rides the single catch slot (world.fish) — it IS a species, so it
+    // reuses the whole fish pipeline (params, tethered-fight FSM, mesh).
     a = {
       anchor: { kind: 'boat' },
       owner: 'world',
@@ -236,10 +241,10 @@ export function startTetherFight(
       cut: { kind: 'hull-segment' },
     };
     b = {
-      anchor: { kind: 'entity', entityId: FISH_ENTITY }, // 03 wires the dragger id
+      anchor: { kind: 'entity', entityId: FISH_ENTITY },
       owner: 'enemy',
-      mass: 8,
-      radius: 2,
+      mass: fish ? fish.tether.mass : 8,
+      radius: fish ? fish.radius : 2,
       reel: { kind: 'none' },
       cut: { kind: 'none' },
     };
@@ -263,6 +268,7 @@ export function startTetherFight(
     a,
     b,
     L,
+    ...(opts?.reelRate !== undefined ? { reelRate: opts.reelRate } : {}),
     tension: 0,
     reel: {
       hold: false,

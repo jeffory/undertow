@@ -18,6 +18,9 @@ import { toggleBestiary } from './ui/bestiaryScreen';
 import { initHud } from './ui/hud';
 import { applyRunStartPassives } from './loot/runStart';
 import { gradeForXp } from './loot/license';
+import { descend } from './run/descent';
+import { hookDragger, swampBoat } from './systems/boatCombat';
+import { PHASE_LENGTH_S } from './game/clock';
 import * as THREE from 'three';
 
 const app = document.getElementById('app');
@@ -79,6 +82,28 @@ if (/[?&]debug/.test(search)) {
   };
   (window as unknown as { __setForceDrop: (on: boolean) => void }).__setForceDrop = (on: boolean) => {
     world.run.forceDrop = on;
+  };
+  // M3 round 3 gate seams (tools/m3r3-probe.mjs): jump the Night Clock to a
+  // phase (by moving the run epoch back — the clock is a pure function of
+  // elapsed, so this is exactly "time passed"), hook a Dragger on demand,
+  // swamp the hull, and descend a sinkhole.
+  (window as unknown as { __setPhase: (p: string) => number }).__setPhase = (p: string) => {
+    const idx = ['dusk', 'night', 'deepNight', 'falseDawn'].indexOf(p);
+    const back = Math.max(0, idx) * PHASE_LENGTH_S + 1;
+    world.run.startedAt = world.time.elapsed - back;
+    world.clock.runStartMs = world.run.startedAt * 1000;
+    return back;
+  };
+  (window as unknown as { __hookDragger: () => boolean }).__hookDragger = () => hookDragger(world);
+  (window as unknown as { __swamp: () => void }).__swamp = () => swampBoat(world);
+  (window as unknown as { __descend: () => number }).__descend = () => descend(world);
+  (window as unknown as { __toSinkhole: () => unknown }).__toSinkhole = () => {
+    const s = world.lake?.sinkholes[0];
+    if (!s) return null;
+    world.boat.x = s.mouth.x;
+    world.boat.z = s.mouth.z;
+    world.boat.speed = 0;
+    return s;
   };
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
     (x: number, z: number) => {
