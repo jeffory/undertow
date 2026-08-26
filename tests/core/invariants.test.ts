@@ -5,7 +5,7 @@ import { generateLake } from '../../src/gen/lakeMap';
 import { isletPeakRise } from '../../src/gen/isletHeight';
 import { createWorld } from '../../src/core/world';
 import { ensureLake } from '../../src/gen/lakeWorld';
-import { stepBoatKinematics } from '../../src/game/boatPhysics';
+import { stepBoatKinematics, stepBoatMovement } from '../../src/game/boatPhysics';
 import { pointInPolygon } from '../../src/core/poly';
 
 // GROUND_Y (0.25 m above the water plane) is the islet shoreline surface,
@@ -48,9 +48,8 @@ describe('invariants: wave / terrain clearance (bug B1, fixed by the T2 shore ma
   });
 });
 
-describe('invariants: boat never enters an islet hull (bug B2)', () => {
-  // flip when boat collision (T4) lands
-  it.fails('full-throttle run into an islet keeps the boat outside its hull polygon', () => {
+describe('invariants: boat never enters an islet hull (bug B2, fixed by the T4 obstacle response)', () => {
+  it('full-throttle run into an islet keeps the boat outside its hull polygon', () => {
     for (const seed of SEEDS) {
       const w = createWorld(seed);
       ensureLake(w);
@@ -72,11 +71,11 @@ describe('invariants: boat never enters an islet hull (bug B2)', () => {
           // obstacle rejection, not the turn rate
           w.boat.heading = Math.atan2(c.x - w.boat.x, c.z - w.boat.z);
           stepBoatKinematics(w.boat, w.intent, DT);
-          // replicate movement()'s position integration (src/core/systems.ts)
-          w.boat.x += Math.sin(w.boat.heading) * w.boat.speed * DT;
-          w.boat.z += Math.cos(w.boat.heading) * w.boat.speed * DT;
-          // boatPhysics has zero obstacle terms (B2) and no sim collision runs
-          // here, so the position is accepted — this fails today.
+          // the real movement-system integration + obstacle resolution
+          // (src/core/systems.ts movement → stepBoatMovement) — slides the boat
+          // along the shore and drops its speed; it never accepts a position
+          // inside an islet polygon.
+          stepBoatMovement(w, DT);
           expect(
             pointInPolygon({ x: w.boat.x, z: w.boat.z }, iso.poly),
             `seed ${seed} islet ${iso.id} step ${i}`,

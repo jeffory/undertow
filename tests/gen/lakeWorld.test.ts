@@ -11,9 +11,10 @@ import {
   DOCK_RANGE,
 } from '../../src/gen/lakeWorld';
 import { collision } from '../../src/core/systems';
+import { stepBoatMovement } from '../../src/game/boatPhysics';
 import { updateWaterPhase } from '../../src/game/waterPhase';
 import { startTetherFight, M2_SPECIES } from '../../src/game/tether';
-import { pointInConvex } from '../../src/core/poly';
+import { pointInConvex, pointInPolygon } from '../../src/core/poly';
 
 describe('lake world integration (plan 03 §2 + task scope 3)', () => {
   it('ensureLake generates the lake deterministically from world.seed', () => {
@@ -65,15 +66,17 @@ describe('lake world integration (plan 03 §2 + task scope 3)', () => {
     expect(pointInConvex({ x: w.player.x, z: w.player.z }, start.hull)).toBe(true);
   });
 
-  it('collision pushes the boat out of islet hulls in boat mode (islets as land)', () => {
+  it('boat obstacle response pushes the boat out of an islet polygon (islets as land)', () => {
     const w = createWorld(4242);
     ensureLake(w);
     spawnAtLakeStart(w);
     const someIslet = w.lake!.islets[0]!;
     w.boat.x = someIslet.center.x;
     w.boat.z = someIslet.center.z; // dead centre of an islet
-    collision(w, 1 / 60);
-    expect(pointInConvex({ x: w.boat.x, z: w.boat.z }, someIslet.hull)).toBe(false);
+    // the movement system's collision-resolution path (T4): a position inside a
+    // hull polygon is rejected and the boat is slid back out to hull clearance
+    stepBoatMovement(w, 1 / 60);
+    expect(pointInPolygon({ x: w.boat.x, z: w.boat.z }, someIslet.poly)).toBe(false);
   });
 
   it('nearestDockableIslet: docks within DOCK_RANGE of an edge, null when far', () => {

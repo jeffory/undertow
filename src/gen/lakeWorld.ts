@@ -13,7 +13,6 @@ import type { Vec2 } from '../core/poly';
 import { polygonCentroid, constrainCircleInConvex, distanceToHull } from '../core/poly';
 
 export const DOCK_RANGE = 2; // m — approach within this of an islet edge to dock
-export const BOAT_COLLIDE_RADIUS = 1.8; // m — the boat stays this clear of islet hulls
 
 // Run start: the boat spawns off the lighthouse islet, in the water, facing the
 // lake — just past the islet's maximum reach so it can never sit on land.

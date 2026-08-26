@@ -12,9 +12,9 @@ import { animateFish } from '../game/fish';
 import { updateTetherFishAI } from '../game/fishAI';
 import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
 import { constrainToCircle, separateCircles } from './collision';
-import { constrainCircleInConvex, constrainCircleOutsideHull } from './poly';
-import { dockedIslet, BOAT_COLLIDE_RADIUS } from '../gen/lakeWorld';
-import { stepBoatKinematics } from '../game/boatPhysics';
+import { constrainCircleInConvex } from './poly';
+import { dockedIslet } from '../gen/lakeWorld';
+import { stepBoatKinematics, stepBoatMovement } from '../game/boatPhysics';
 import { phaseAt, runElapsedMs } from '../game/clock';
 import { tierFor } from '../game/dread';
 import { updateTetherConstraint } from '../game/tetherConstraint';
@@ -60,14 +60,12 @@ function intent(world: WorldState, dt: number): void {
 }
 
 export function movement(world: WorldState, dt: number): void {
-  // Boat (M0): integrate position from heading/speed. Only in boat mode — the
-  // boat stays parked while on foot (M1 scaffold). Heading/speed themselves
-  // advance in the intent phase (stepBoatKinematics), per fixed step.
+  // Boat (M0): integrate position from heading/speed, resolving islet/wreck/buoy
+  // obstacles at the integration point (task T4 — see stepBoatMovement). Only in
+  // boat mode — the boat stays parked while on foot (M1 scaffold). Heading/speed
+  // themselves advance in the intent phase (stepBoatKinematics), per fixed step.
   if (world.mode === 'boat') {
-    if (world.boat.speed !== 0) {
-      world.boat.x += Math.sin(world.boat.heading) * world.boat.speed * dt;
-      world.boat.z += Math.cos(world.boat.heading) * world.boat.speed * dt;
-    }
+    stepBoatMovement(world, dt);
   }
 
   // Player (M1 foot): integrate vx/vz set by the on-foot controller (WORKER A,
@@ -95,8 +93,10 @@ export function collision(world: WorldState, _dt: number): void {
   // the player is docked to (the procedural lake's islet hull — plan 03 §2.6
   // "collision uses the convex hull approximation"), and keep a live fish off
   // the player's circle. When no lake is generated (legacy debug world) the M1
-  // ground circle is the fallback. In boat mode the islets are LAND — the boat
-  // is pushed out of every islet hull (task scope 3 "islets as land").
+  // ground circle is the fallback. The boat has NO branch here: its obstacle
+  // response (islets/wrecks/buoys, slide + thud) is resolved at the movement
+  // integration point in stepBoatMovement (task T4), so it stays in sync with
+  // the fixed-step position integration.
   //
   // T9 water-phase hooks:
   //  - a hooked fish (tether fight active) is IN the water — it is not clamped
@@ -105,19 +105,10 @@ export function collision(world: WorldState, _dt: number): void {
   //  - a submerged player is swimming in the deep — collision stops clamping
   //    them back to the shore (waterPhase exits when they reach it).
 
-  // Boat mode: islets are land.
-  if (world.mode === 'boat') {
-    const lake = world.lake;
-    if (!lake) return;
-    const b = world.boat;
-    const r = BOAT_COLLIDE_RADIUS;
-    for (const iso of lake.islets) {
-      const q = constrainCircleOutsideHull({ x: b.x, z: b.z, radius: r }, iso.hull);
-      b.x = q.x;
-      b.z = q.z;
-    }
-    return;
-  }
+  // Boat mode: the foot collision below does not apply (the player is aboard);
+  // the boat's own obstacle response runs in the movement system via
+  // stepBoatMovement (task T4), so this system stays a no-op for the boat.
+  if (world.mode === 'boat') return;
 
   const g = world.ground;
   const p = world.player;
