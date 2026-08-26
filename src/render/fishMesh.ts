@@ -31,7 +31,12 @@ const RING_RADIAL = 8; // verts around a spine ring (matches the M1 low-poly)
 
 // Shared materials — every fish is one draw call on one Lambert material.
 // The hurt-flash emissive lives here (only one fish is ever alive at a time).
-export const FISH_MATERIAL = new THREE.MeshLambertMaterial({ vertexColors: true });
+// DoubleSide: the fins are flat single-quad/tri sheets in the Y-Z plane —
+// front-face culling made every dorsal/pectoral fin invisible from one flank.
+export const FISH_MATERIAL = new THREE.MeshLambertMaterial({
+  vertexColors: true,
+  side: THREE.DoubleSide,
+});
 FISH_MATERIAL.emissive.setRGB(1, 0.25, 0.2);
 FISH_MATERIAL.emissiveIntensity = 0;
 
@@ -353,11 +358,20 @@ export function buildFishRig(params: FishParams): FishRig {
 
   // eyes — a dark glassy pupil with a pale rim, proud of the head ring
   if (eyeCount > 0) {
-    const eyeZ = segZ[n]! + snoutLen * 0.3;
-    const eyeRad = headR * 1.15;
-    const eyeS = Math.max(0.09, params.eyeSize * headR * 3.4);
+    // just behind the head ring — an eye forward on the snout reads as a nose
+    const eyeZ = segZ[n]! - snoutLen * 0.2;
+    const eyeRad = headR * 1.08;
+    // Eye size is proportional to the HEAD, never absolute: the old 0.09 m
+    // floor exceeded small species' entire head radius and rendered as a giant
+    // box frame swallowing the face.
+    const eyeS = headR * clamp(params.eyeSize * 2.2, 0.24, 0.48);
+    // slightly above the midline, like a real fish — not on the equator
     const eyeAngles =
-      eyeCount === 1 ? [Math.PI / 2] : eyeCount === 3 ? [Math.PI, 0, Math.PI / 2] : [Math.PI, 0];
+      eyeCount === 1
+        ? [Math.PI / 2]
+        : eyeCount === 3
+          ? [Math.PI * 0.9, Math.PI * 0.1, Math.PI / 2]
+          : [Math.PI * 0.9, Math.PI * 0.1];
     for (let e = 0; e < eyeCount; e++) {
       const theta = eyeAngles[e] ?? 0;
       const nx = Math.cos(theta);
@@ -367,16 +381,18 @@ export function buildFishRig(params: FishParams): FishRig {
       const px = nx * eyeRad + nx * eyeS * 0.45;
       const py = ny * eyeRad + ny * eyeS * 0.45;
       const q = eyeS * 1.55;
+      // diamond (45°-rotated) quads — a square rim read as a picture frame;
+      // the diamond matches the game's low-poly language and reads organic
       const rim = slot(4);
-      putAt(rim, px + ux * q, py + uy * q, eyeZ - q, eyeRim, n - 1);
-      putAt(rim + 1, px - ux * q, py - uy * q, eyeZ - q, eyeRim, n - 1);
-      putAt(rim + 2, px - ux * q, py - uy * q, eyeZ + q, eyeRim, n - 1);
-      putAt(rim + 3, px + ux * q, py + uy * q, eyeZ + q, eyeRim, n - 1);
+      putAt(rim, px + ux * q, py + uy * q, eyeZ, eyeRim, n - 1);
+      putAt(rim + 1, px, py, eyeZ - q, eyeRim, n - 1);
+      putAt(rim + 2, px - ux * q, py - uy * q, eyeZ, eyeRim, n - 1);
+      putAt(rim + 3, px, py, eyeZ + q, eyeRim, n - 1);
       const pupil = slot(4);
-      putAt(pupil, px + ux * eyeS, py + uy * eyeS, eyeZ - eyeS, eyeC, n - 1);
-      putAt(pupil + 1, px - ux * eyeS, py - uy * eyeS, eyeZ - eyeS, eyeC, n - 1);
-      putAt(pupil + 2, px - ux * eyeS, py - uy * eyeS, eyeZ + eyeS, eyeC, n - 1);
-      putAt(pupil + 3, px + ux * eyeS, py + uy * eyeS, eyeZ + eyeS, eyeC, n - 1);
+      putAt(pupil, px + ux * eyeS, py + uy * eyeS, eyeZ, eyeC, n - 1);
+      putAt(pupil + 1, px, py, eyeZ - eyeS, eyeC, n - 1);
+      putAt(pupil + 2, px - ux * eyeS, py - uy * eyeS, eyeZ, eyeC, n - 1);
+      putAt(pupil + 3, px, py, eyeZ + eyeS, eyeC, n - 1);
       tri(rim, rim + 1, pupil + 1);
       tri(rim, pupil + 1, pupil);
       tri(rim + 1, rim + 2, pupil + 2);
