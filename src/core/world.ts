@@ -27,6 +27,8 @@ import type { SplashState } from './splash';
 import { createSplash } from './splash';
 import type { BoatCombatState } from '../boat/boatCombat';
 import { createBoatCombat } from '../boat/boatCombat';
+import type { CongregationState } from '../bosses/congregation';
+import { createCongregationState } from '../bosses/congregation';
 import { MIN_ZONE } from './zones';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
@@ -296,6 +298,10 @@ export interface RunState {
   sinkholesDescended: number; // RunResult.sinkholesDescended
   descend: ExtractState; // hold-verb state at a sinkhole mouth (mirrors extract)
   sinking: SinkingCatch[]; // haul spilled by a swamp, recoverable at breath cost
+  // --- M6 (plan 05 §2.1): the zone-2 boss ripple is seeded ONCE per run, the
+  // first time the run reaches the Kelp Graves. The flag lives on the run, not
+  // on the lake, so a re-generated zone-2 surface never re-seeds it.
+  bossSeeded: boolean;
 }
 
 export function createRunState(startedAt: number, startedAtDread: number): RunState {
@@ -324,6 +330,7 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     sinkholesDescended: 0,
     descend: { held: 0, buoyId: null },
     sinking: [],
+    bossSeeded: false,
   };
 }
 
@@ -374,6 +381,7 @@ export interface WorldState {
   player: PlayerState;
   boat: BoatState;
   boatCombat: BoatCombatState; // 03 §6 — hull / winch / Dragger (night boat fight)
+  congregation: CongregationState; // 05 §2.1 — the Kelp Graves boss (swarm + mass pool)
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
@@ -433,6 +441,7 @@ export function createWorld(seed = 1): WorldState {
     },
     boat: { x: 0, y: 0, z: 0, heading: 0, speed: 0, atWinchPost: false, atCleat: false },
     boatCombat: createBoatCombat(),
+    congregation: createCongregationState(),
     combat: {
       comboStage: 0,
       comboWindow: 0,

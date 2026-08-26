@@ -449,12 +449,174 @@ export const NIGHT_SPECIES: SpeciesPreset[] = [
   },
 ];
 
+// --- M6: THE KELP GRAVES (zone 2) ------------------------------------------------
+// The four zone-2 story species (docs/story/kelp-graves.md §6) plus the zone's
+// boss, THE CONGREGATION (plan 05 §2.1). These rows are deliberately NOT in
+// TIER_TABLES: the disturbance tables are the Shallows' bite pool and widening
+// them would change what a zone-1 (and a non-boss zone-2) ripple rolls. The
+// kelp roster is drawn from directly — by the Congregation's landing burst
+// (bosses/congregation.ts), which is the only producer of these ids this round.
+export const KELP_SPECIES: SpeciesPreset[] = [
+  {
+    id: 'shroud-ribbon',
+    name: 'Shroud-Ribbon',
+    rarity: 'C',
+    eligibility: 2,
+    category: 'catch',
+    tier: 1,
+    lengthM: 1.6,
+    spineSegments: 12,
+    // a flat blade: shallow, even girth the whole length, tapering at both ends
+    girthCurve: [0.12, 0.2, 0.28, 0.33, 0.35, 0.35, 0.34, 0.32, 0.29, 0.25, 0.2, 0.15],
+    snout: 0.35,
+    finCount: 3,
+    finKinds: [D(), P()],
+    eyeCount: 2,
+    eyeSize: 0.14,
+    jawSplit: 0.1,
+    limbBudget: 0,
+    humanRatio: 0,
+    swimFreq: 3.4,
+    swimAmp: 0.7,
+    palette: 2,
+    stats: { mass: 0.9, stamina: 80, pullForce: 3.4, swimSpeed: 6.5, hp: 70 },
+    patterns: { orbit: 0.45, lunge: 0.2, dive: 0.3, drag: 0.05 },
+    wrongnessInfluence: 0.5,
+    lungeCooldown: 2.4,
+  },
+  {
+    id: 'net-choked-gudgeon',
+    name: 'Net-Choked Gudgeon',
+    rarity: 'U',
+    eligibility: 2,
+    category: 'snatcher',
+    tier: 2,
+    lengthM: 1.1,
+    spineSegments: 8,
+    girthCurve: [0.32, 0.55, 0.8, 0.95, 0.9, 0.72, 0.55, 0.42], // heavy-bellied
+    snout: 0.3,
+    finCount: 4,
+    finKinds: [D(), P(), 'ridge'],
+    eyeCount: 2,
+    eyeSize: 0.22,
+    jawSplit: 0.4,
+    limbBudget: 0,
+    humanRatio: 0.05,
+    swimFreq: 2.4,
+    swimAmp: 0.5,
+    palette: 3,
+    stats: { mass: 2.6, stamina: 130, pullForce: 4.6, swimSpeed: 5.4, hp: 160 },
+    patterns: { orbit: 0.3, lunge: 0.3, dive: 0.1, drag: 0.3 },
+    wrongnessInfluence: 0.6,
+    lungeCooldown: 2.9,
+    routedDrag: true, // it wants the line in the weed (story: "it wants you to get in")
+  },
+  {
+    id: 'cenotaph-perch',
+    name: 'Cenotaph Perch',
+    rarity: 'U',
+    eligibility: 2,
+    category: 'crawler',
+    tier: 2,
+    lengthM: 1.0,
+    spineSegments: 7,
+    girthCurve: [0.34, 0.6, 0.78, 0.82, 0.72, 0.55, 0.4], // blocky slate marker
+    snout: 0.2,
+    finCount: 4,
+    finKinds: [D(), 'ridge'],
+    eyeCount: 2,
+    eyeSize: 0.2,
+    jawSplit: 0.25,
+    limbBudget: 0,
+    humanRatio: 0,
+    swimFreq: 2.0,
+    swimAmp: 0.42,
+    palette: 0,
+    stats: { mass: 2.4, stamina: 120, pullForce: 5, swimSpeed: 4.8, hp: 150 },
+    patterns: { orbit: 0.35, lunge: 0.45, dive: 0.1, drag: 0.1 },
+    wrongnessInfluence: 0.55,
+    lungeCooldown: 2.4,
+  },
+  {
+    id: 'pew-shad',
+    name: 'Pew-Shad',
+    rarity: 'R',
+    eligibility: 2,
+    category: 'catch',
+    tier: 3,
+    lengthM: 1.15,
+    spineSegments: 9,
+    girthCurve: [0.22, 0.38, 0.55, 0.66, 0.68, 0.62, 0.52, 0.42, 0.32],
+    snout: 0.45,
+    finCount: 3,
+    finKinds: [D(), P()],
+    eyeCount: 2,
+    eyeSize: 0.2,
+    jawSplit: 0.15,
+    limbBudget: 0,
+    humanRatio: 0.1,
+    swimFreq: 3,
+    swimAmp: 0.5,
+    palette: 1,
+    stats: { mass: 1.6, stamina: 140, pullForce: 5.4, swimSpeed: 7.2, hp: 130 },
+    patterns: { orbit: 0.5, lunge: 0.25, dive: 0.15, drag: 0.1 },
+    wrongnessInfluence: 0.6,
+    lungeCooldown: 2.6,
+  },
+  {
+    // THE CONGREGATION (plan 05 §2.1): "a school that fights as one mass on one
+    // hook". This preset is the SWARM CENTRE — the single body the tether is
+    // actually attached to. The 20-40 members that orbit it are instanced
+    // render/sim state owned by bosses/congregation.ts, not fish rigs.
+    id: 'the-congregation',
+    name: 'The Congregation',
+    rarity: 'Boss',
+    eligibility: 1, // it does not ask to see your licence
+    category: 'boss',
+    tier: 5,
+    lengthM: 2.6,
+    spineSegments: 12,
+    girthCurve: [0.24, 0.4, 0.56, 0.68, 0.76, 0.78, 0.76, 0.7, 0.62, 0.52, 0.42, 0.32],
+    snout: 0.4,
+    finCount: 6,
+    finKinds: [D(), P(), 'ridge'],
+    eyeCount: 3, // the wrong number, on purpose
+    eyeSize: 0.16,
+    jawSplit: 0.5,
+    limbBudget: 1,
+    humanRatio: 0.3, // forty-seven parishioners, averaged
+    swimFreq: 1.8,
+    swimAmp: 0.6,
+    palette: 3,
+    stats: { mass: 5.5, stamina: 300, pullForce: 7.2, swimSpeed: 6.2, hp: 600 },
+    patterns: { orbit: 0.4, lunge: 0.3, dive: 0.1, drag: 0.2 },
+    wrongnessInfluence: 0.75,
+    lungeCooldown: 3,
+    lungeStaminaCost: 18,
+    dragSpeed: 3,
+    dragStaminaCostPerM: 1.6,
+    routedDrag: true,
+  },
+];
+
+export const CONGREGATION_SPECIES_ID = 'the-congregation';
+
+// The roster the Congregation's landing burst itemises (the boss itself is not
+// one of its own accounts). Weights bias the shower toward the commons.
+export const KELP_BURST_ROSTER: TierRow[] = [
+  { id: 'shroud-ribbon', w: 5 },
+  { id: 'cenotaph-perch', w: 3 },
+  { id: 'net-choked-gudgeon', w: 3 },
+  { id: 'pew-shad', w: 2 },
+];
+
 export const DRAGGER_SPECIES_ID = 'dragger';
 
 export const ALL_SPECIES: SpeciesPreset[] = [
   ...SHALLOWS_SPECIES,
   ...BOSS_AND_BAGMAN,
   ...NIGHT_SPECIES,
+  ...KELP_SPECIES,
 ];
 
 const BY_ID = new Map<string, SpeciesPreset>(ALL_SPECIES.map((s) => [s.id, s]));

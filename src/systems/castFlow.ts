@@ -21,6 +21,10 @@ import {
 import { rollEligibleSpeciesAtSet } from '../run/species';
 import { generateFishParams, type FishParams } from '../gen/fishParams';
 import { recordBestiary } from '../bestiary/bestiary';
+import { phaseAt, runElapsedMs } from '../game/clock';
+import { speciesById, CONGREGATION_SPECIES_ID } from '../data/species';
+import { buildSwarm, pullForceMultFor } from '../bosses/congregation';
+import { emitTownEvent } from '../meta/townEvents';
 
 // M4 round 1: the species is rolled AT SET from the disturbance-tier table
 // (loot stream) and the FishParams carry the stats that scale the tether fight
@@ -94,6 +98,13 @@ function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): bo
 // DECLINES the tackle (it stays present, "disturbance present but doesn't
 // respond to the cast"), no fight starts and nothing is recorded.
 function setCatch(world: WorldState, d: Disturbance): void {
+  // M6 (plan 05 §2.1): a boss ripple hooks its boss instead of rolling the tier
+  // table. The gate and the hook are the only two branches the cast flow needs
+  // — everything after the hook is the ordinary fight.
+  if (d.boss === 'congregation') {
+    hookCongregation(world, d);
+    return;
+  }
   const loot = createRng(world.seed, LOOT, d.id);
   const preset = rollEligibleSpeciesAtSet(loot, d.tier, world.run.licenseGrade);
   if (!preset) {
@@ -205,4 +216,91 @@ function handleCast(world: WorldState, lmbEdge: boolean): void {
 
   startBite(target);
   target.biteTimer = biteDelaySeconds(target.seed, world.seed);
+}
+
+// --- M6: hooking THE CONGREGATION (plan 05 §2.1) ---------------------------------
+//
+// "ONE TetherState whose 'fish' is a swarm centre." The swarm centre rides the
+// single catch slot exactly like any other species — same FishParams generator,
+// same applySpeciesParams, same startTetherFight — so the constraint, the reel,
+// the brace, the cut, the snap and the LAND prompt are unchanged. The only two
+// additions are the fight-level pull multiplier (the mass pool's lever) and the
+// swarm state the boss system then drives.
+//
+// THE PHASE GATE: the congregation does not assemble before dark. At dusk or
+// false dawn the SET is refused through the SAME decline path the license gate
+// uses (plan 04 §8.4) — the ripple stays, re-castable, declining again.
+
+export const CONGREGATION_PHASES = new Set(['night', 'deepNight']);
+
+export function congregationBiteEligible(world: WorldState): boolean {
+  const phase = phaseAt(runElapsedMs(world.run.startedAt, world.time.elapsed));
+  return CONGREGATION_PHASES.has(phase);
+}
+
+// Exported: this IS the SET path, and the ?debug gate driver hooks the boss
+// through it rather than through a parallel construction of its own.
+export function hookCongregation(world: WorldState, d: Disturbance): void {
+  if (!congregationBiteEligible(world)) {
+    // §8.4 decline, verbatim: the ripple remains, and it declines again.
+    d.state = 'idle';
+    d.biteTimer = 0;
+    d.promptTimer = 0;
+    world.run.promptId = null;
+    return;
+  }
+  d.state = 'gone';
+  world.run.promptId = null;
+
+  const loot = createRng(world.seed, LOOT, d.id);
+  const preset = speciesById(CONGREGATION_SPECIES_ID);
+  const params = generateFishParams(preset, loot, { zone: world.run.zone });
+
+  const fish = world.fish ?? createFish();
+  world.fish = fish;
+  fish.x = d.pos.x;
+  fish.z = d.pos.z;
+
+  const fight =
+    world.mode === 'boat'
+      ? startTetherFight(world, preset.id, 'boat', {
+          a: {
+            anchor: { kind: 'boat' },
+            owner: 'player',
+            mass: BOAT_MASS_DEFAULT,
+            radius: BOAT_RADIUS_DEFAULT,
+            reel: { kind: 'player-stance' },
+            cut: { kind: 'lure' },
+          },
+        })
+      : startTetherFight(world, preset.id, 'player');
+  if (!fight) {
+    world.run.activeCatch = null;
+    return;
+  }
+  applySpeciesParams(world, fish, params);
+
+  const swarm = buildSwarm(world.seed, fight.id);
+  world.congregation = swarm;
+  fight.pullForceMult = pullForceMultFor(swarm);
+
+  // The receipt tier: the Congregation is priced at the epic band (tier 4 — the
+  // top of TIER_MULT / the Dread gain table). Its own preset tier is 5, the
+  // bestiary Boss rank, which those two tables do not reach.
+  world.run.activeCatch = {
+    disturbanceId: d.id,
+    tier: 4,
+    weight: params.weightKg,
+    species: preset.id,
+    name: preset.name,
+  };
+  recordBestiary(world, preset.id, 'hooked');
+  emitTownEvent({
+    type: 'boss.started',
+    bossId: 'congregation',
+    zone: world.run.zone,
+    fightId: fight.id,
+    members: swarm.members.length,
+    massPool: swarm.massPool,
+  });
 }

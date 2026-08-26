@@ -29,6 +29,11 @@ import { decant, decantsRemaining, useBottledLight } from './meta/bottledLight';
 import { applyHubMeta } from './render/hubAtmosphere';
 import { hubBeamState, setBeamAngle } from './render/sky';
 import { kelpRenderState } from './render/kelp';
+import { congregationRenderState } from './render/congregation';
+import { hookCongregation } from './systems/castFlow';
+import { seedCongregation } from './spawn/director';
+import { massFraction, pullForceMultFor, attachedCount, gaffTearFor } from './bosses/congregation';
+import { HEAVY_STAGGER } from './game/combat';
 import { siltRenderState } from './render/silt';
 import { zoneFogMultiplier } from './core/zones';
 import { setShoreRestoration, shoreWarmth } from './render/water';
@@ -352,6 +357,90 @@ if (/[?&]debug/.test(search)) {
       world.fish.z = col.z;
     }
     return { column: col.id, at: { x: col.x, z: col.z }, boat: { x: world.boat.x, z: world.boat.z } };
+  };
+
+  // t25 / M6 BOSS seams (tools/m6boss-probe.mjs): read what THE CONGREGATION is
+  // worth right now, park the boat on its ripple, hook it through the real SET
+  // path, land a gaff on the swarm centre, and drain the centre's pool so the
+  // LAND prompt arms without a five-minute fight at 1x.
+  (window as unknown as { __congregation: () => unknown }).__congregation = () => {
+    const c = world.congregation;
+    const ripple = world.disturbances.find((d) => d.boss === 'congregation') ?? null;
+    return {
+      zone: world.run.zone,
+      seeded: world.run.bossSeeded,
+      ripple: ripple ? { id: ripple.id, pos: ripple.pos, state: ripple.state } : null,
+      active: c.active,
+      landed: c.landed,
+      fightId: c.fightId,
+      members: c.members.length,
+      attached: attachedCount(c),
+      massPool: c.massPool,
+      massPoolMax: c.massPoolMax,
+      massFraction: massFraction(c),
+      gaffTears: c.gaffTears,
+      pullForceMult: c.active ? pullForceMultFor(c) : null,
+      burstCount: c.burstCount,
+      fightPullMult: world.tether.fights[0]?.pullForceMult ?? null,
+      haul: world.run.haul.length,
+      invoice: {
+        active: c.invoice.active,
+        rowIndex: c.invoice.rowIndex,
+        done: c.invoice.done,
+        fillers: c.invoice.fillers,
+      },
+      render: congregationRenderState(),
+    };
+  };
+  (window as unknown as { __seedCongregation: () => boolean }).__seedCongregation = () =>
+    seedCongregation(world);
+  (window as unknown as { __toCongregation: () => unknown }).__toCongregation = () => {
+    const d = world.disturbances.find((x) => x.boss === 'congregation');
+    if (!d) return null;
+    world.boat.x = d.pos.x;
+    world.boat.z = d.pos.z + 5;
+    world.boat.speed = 0;
+    world.boat.heading = Math.PI;
+    world.run.debugCastPoint = { x: d.pos.x, z: d.pos.z };
+    return { id: d.id, pos: d.pos, boat: { x: world.boat.x, z: world.boat.z } };
+  };
+  (window as unknown as { __hookCongregation: () => unknown }).__hookCongregation = () => {
+    const d = world.disturbances.find((x) => x.boss === 'congregation');
+    if (!d) return null;
+    hookCongregation(world, d);
+    const c = world.congregation;
+    return { active: c.active, members: c.members.length, massPool: c.massPool, fightId: c.fightId };
+  };
+  (window as unknown as { __congregationGaff: (heavy?: boolean) => number }).__congregationGaff = (
+    heavy = false,
+  ) => {
+    // A gaff landing on the swarm centre, through the SAME rule the system
+    // applies to a real swing (gaffTearFor). It does not push a HitEvent: an
+    // out-of-band hit injected between frames is drained by fishAI at the top of
+    // the next tick, before the boss system's slot ever sees it — the in-play
+    // producer is world.combat.hits inside a tick, which the unit tests drive.
+    world.congregation.gaffTears += gaffTearFor(heavy ? HEAVY_STAGGER : 0);
+    return world.congregation.gaffTears;
+  };
+  (window as unknown as { __congregationExhaust: (frac?: number) => number }).__congregationExhaust =
+    (frac = 0) => {
+      const f = world.fish;
+      if (!f) return -1;
+      f.stamina = Math.max(0, f.tether.maxStamina * frac);
+      if (f.stamina <= 0) f.tether.exhausted = true;
+      return f.stamina;
+    };
+  // Bring the hooked swarm to the gunwale so the ordinary LAND prompt arms.
+  (window as unknown as { __congregationToGunwale: () => unknown }).__congregationToGunwale = () => {
+    const fight = world.tether.fights[0];
+    const f = world.fish;
+    if (!fight || !f) return null;
+    fight.L = 1.2;
+    fight.tension = 0;
+    const at = fight.anchor === 'boat' ? world.boat : world.player;
+    f.x = at.x + 0.9;
+    f.z = at.z;
+    return { L: fight.L, eligible: fight.land.eligible };
   };
 
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =

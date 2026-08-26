@@ -13,6 +13,12 @@ import type { Vec2 } from '../core/poly';
 
 export type DisturbanceState = 'idle' | 'biting' | 'prompt' | 'gone';
 
+// M6 (plan 05 §2.1): a boss ripple. The disturbance lifecycle is untouched —
+// cast, bite, SET/RELEASE window, all of it — but a marked ripple hooks its boss
+// instead of rolling the tier table, and it draws oversized so it reads as
+// something other than a fish before you commit.
+export type BossId = 'congregation';
+
 export interface Disturbance {
   id: number;
   pos: Vec2;
@@ -21,6 +27,9 @@ export interface Disturbance {
   biteTimer: number; // s until the bite (seeded 1-4s)
   promptTimer: number; // s left in the SET/RELEASE window
   seed: number; // per-disturbance AI-stream seed (deterministic bite delay)
+  // M6: set only on the zone-2 boss ripple (undefined on every ordinary one, so
+  // zone 1 and the rest of zone 2 are byte-identical to before the boss).
+  boss?: BossId;
 }
 
 export const CAST_RANGE = 10; // m — cast reaches a disturbance within this
@@ -32,8 +41,18 @@ export const BITE_DELAY_MAX = 4; // s — seeded (task t12 #1 "1-4s")
 // Ripple radius by tier — pure, species-free.
 export const RIPPLE_RADIUS: Record<1 | 2 | 3, number> = { 1: 1.2, 2: 2.2, 3: 3.4 };
 
+// The boss ripple is an oversized cluster — half again the biggest ordinary
+// ring, which is the only pre-SET tell that this one is not a fish (plan 05
+// §2.1's swarm reads as a disturbance the size of a congregation).
+export const BOSS_RIPPLE_RADIUS = 5.2;
+
 export function rippleRadiusForTier(tier: 1 | 2 | 3): number {
   return RIPPLE_RADIUS[tier] ?? RIPPLE_RADIUS[1];
+}
+
+// The radius a given disturbance draws at — boss ripples override the tier.
+export function rippleRadiusFor(d: Disturbance): number {
+  return d.boss ? BOSS_RIPPLE_RADIUS : rippleRadiusForTier(d.tier);
 }
 
 export function createDisturbance(
@@ -41,8 +60,11 @@ export function createDisturbance(
   pos: Vec2,
   tier: 1 | 2 | 3,
   seed: number,
+  boss?: BossId,
 ): Disturbance {
-  return { id, pos, tier, state: 'idle', biteTimer: 0, promptTimer: 0, seed };
+  const d: Disturbance = { id, pos, tier, state: 'idle', biteTimer: 0, promptTimer: 0, seed };
+  if (boss) d.boss = boss;
+  return d;
 }
 
 export function withinRange(a: Vec2, b: Vec2, range: number): boolean {

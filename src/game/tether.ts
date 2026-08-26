@@ -85,6 +85,10 @@ export interface TetherFight {
   // Per-fight reel-rate override (03 §6.1): the boat fight reels at the WINCH's
   // rate, not the hand-line's. Undefined → line.reelRate (the M2 default).
   reelRate?: number;
+  // Per-fight pull-force multiplier (05 §2.1): the Congregation's mass pool
+  // "scales pullForce so the fight starts heavy and lightens". Same seam shape
+  // as reelRate — undefined → ×1, so every other fight is untouched.
+  pullForceMult?: number;
   tension: number;            // 0..line.tensionCeiling
   reel: ReelState;
   cut: CutState;
@@ -210,7 +214,13 @@ export function startTetherFight(
   world: WorldState,
   species: SpeciesId,
   anchor: 'player' | 'boat',
-  opts?: Partial<{ a: TetherEndpoint; b: TetherEndpoint; L: number; reelRate: number }>,
+  opts?: Partial<{
+    a: TetherEndpoint;
+    b: TetherEndpoint;
+    L: number;
+    reelRate: number;
+    pullForceMult: number;
+  }>,
 ): TetherFight | null {
   const fish = world.fish;
 
@@ -277,6 +287,7 @@ export function startTetherFight(
     b,
     L,
     ...(opts?.reelRate !== undefined ? { reelRate: opts.reelRate } : {}),
+    ...(opts?.pullForceMult !== undefined ? { pullForceMult: opts.pullForceMult } : {}),
     tension: 0,
     reel: {
       hold: false,

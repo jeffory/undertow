@@ -13,7 +13,7 @@
 export interface BestiaryRecord {
   id: string;
   name: string;
-  zone: 1;
+  zone: 1 | 2;
   rarity: 'C' | 'U' | 'R' | 'E' | 'Drowned' | 'Boss';
   eligibility: 1 | 2 | 3;
   category: 'catch' | 'crawler' | 'caller' | 'snatcher' | 'dragger' | 'bagman' | 'boss';
@@ -177,7 +177,74 @@ export const BESTIARY_TEXT: BestiaryRecord[] = [
   },
 ];
 
-const BY_ID = new Map<string, BestiaryRecord>(BESTIARY_TEXT.map((r) => [r.id, r]));
+// --- M6: the Kelp Graves (zone 2) ------------------------------------------------
+// The four zone-2 story records (docs/story/kelp-graves.md §6, transcribed
+// verbatim) plus the zone boss. Kept in their own array so the zone-1 roster —
+// and the id-coverage test that pins it — stays exactly what it was; both
+// arrays feed the one lookup below, so the ledger resolves either roster.
+export const KELP_BESTIARY_TEXT: BestiaryRecord[] = [
+  {
+    id: 'shroud-ribbon',
+    name: 'Shroud-Ribbon',
+    zone: 2,
+    rarity: 'C',
+    eligibility: 2,
+    category: 'catch',
+    silhouette: 'A flat, black blade of kelp that swims against the current.',
+    entryFought:
+      'It weaves dead kelp into funeral bands and drags them behind its tail. It has enough linen for everybody.',
+    entryWilling:
+      "It wraps itself gently around your wrist like a mourner's armband, ice-cold and smelling of river mud.",
+  },
+  {
+    id: 'net-choked-gudgeon',
+    name: 'Net-Choked Gudgeon',
+    zone: 2,
+    rarity: 'U',
+    eligibility: 2,
+    category: 'snatcher',
+    silhouette: 'A scarred, heavy-bellied silhouette trailing tattered hemp twine.',
+    entryFought:
+      'It has lived in the same gill-net since the valley went under. It does not want to be cut free; it wants you to get in.',
+  },
+  {
+    id: 'cenotaph-perch',
+    name: 'Cenotaph Perch',
+    zone: 2,
+    rarity: 'U',
+    eligibility: 2,
+    category: 'crawler',
+    silhouette: 'A blocky, stone-grey shape resting upright upon sunken headstones.',
+    entryFought:
+      "Its dorsal spines are chiseled flat like slate markers. If you scrape the silt away, you can read the initials of the town's last mason.",
+  },
+  {
+    id: 'pew-shad',
+    name: 'Pew-Shad',
+    zone: 2,
+    rarity: 'R',
+    eligibility: 2,
+    category: 'catch',
+    silhouette: 'A dense, rhythmic cluster of dark shapes hovering in disciplined rows.',
+    entryFought:
+      'It refuses to swim alone. When hooked, the rest of the school holds its place in line, waiting for the dismissal hymn.',
+  },
+  {
+    id: 'the-congregation',
+    name: 'The Congregation',
+    zone: 2,
+    rarity: 'Boss',
+    eligibility: 1,
+    category: 'boss',
+    silhouette: 'One shape, at this distance. It resolves, closer, into a great many.',
+    entryFought:
+      'Forty-seven accounts sharing a single hook, which the Office regards as an efficiency. They do not struggle so much as deliberate.',
+  },
+];
+
+const BY_ID = new Map<string, BestiaryRecord>(
+  [...BESTIARY_TEXT, ...KELP_BESTIARY_TEXT].map((r) => [r.id, r]),
+);
 
 export function bestiaryById(id: string): BestiaryRecord | null {
   return BY_ID.get(id) ?? null;

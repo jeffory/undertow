@@ -356,7 +356,9 @@ function orbitStep(world: WorldState, fight: TetherFight, fish: FishState, ai: F
 
 function fireLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: FishState['ai']): void {
   const f = fish.tether;
-  const force = world.tuning.pullForce; // dial 1 — live
+  // dial 1 — live, scaled by the fight's own pull multiplier (05 §2.1: the
+  // Congregation's mass pool). Undefined on every ordinary fight → ×1.
+  const force = world.tuning.pullForce * (fight.pullForceMult ?? 1);
   if (f.exhausted) return; // plan 02 §3 edge case: exhausted fish never lunge
   fish.vx = ai!.pullDirX * force;
   fish.vz = ai!.pullDirZ * force;

@@ -26,6 +26,7 @@ import { updateDreadSystem } from '../systems/dreadSystem';
 import { updateSpawnDirectorSystem } from '../systems/spawnDirector';
 import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateBoatCombat } from '../systems/boatCombat';
+import { updateCongregation } from '../systems/congregation';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
 import { updateBottledLight } from '../systems/bottledLight';
@@ -36,6 +37,7 @@ import { updateFightTutorial } from '../ui/fightTutorial';
 import { updateVerbHints } from '../ui/verbHints';
 import { updateRestorationUI } from '../ui/restorationUI';
 import { updateBarkOverlay } from '../ui/barkOverlay';
+import { updateCongregationInvoice } from '../ui/congregationInvoice';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -204,6 +206,7 @@ function ui(world: WorldState, _dt: number): void {
   updateVerbHints(world);
   updateRestorationUI(world);
   updateBarkOverlay(world);
+  updateCongregationInvoice(world); // 05 §2.1 — the Congregation's ledger
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -325,6 +328,10 @@ export const UPDATE_ORDER: SystemFn[] = [
   collision,
   combat,
   updateBoatCombat, // 03 §6: night Dragger fight — hull damage, cleat cut, swamp
+  // 05 §2.1: the Kelp Graves boss. AFTER combat (this tick's gaff hits are what
+  // tears members off) and BEFORE the run reducer (so the landing is a burst of
+  // 12-18 records, never one boss-sized catch).
+  updateCongregation,
   updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
   updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)

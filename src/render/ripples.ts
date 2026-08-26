@@ -7,7 +7,8 @@
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
-import { rippleRadiusForTier } from '../run/disturbance';
+import { rippleRadiusFor } from '../run/disturbance';
+import type { Disturbance } from '../run/disturbance';
 
 let root: THREE.Group | null = null;
 const groups = new Map<number, THREE.Group>();
@@ -19,6 +20,16 @@ const TIER_COLOR: Record<number, number> = {
   3: 0xd8906a, // rare — warm
 };
 
+// M6 (plan 05 §2.1): the boss ripple. Not a rarity tint — a colder, greener
+// bone-teal than any of the three, so an oversized cluster in the Kelp Graves
+// reads as a different KIND of disturbance rather than a bigger fish.
+const BOSS_COLOR = 0x8fd0b4;
+
+function rippleColor(d: Disturbance): number {
+  if (d.boss) return BOSS_COLOR;
+  return TIER_COLOR[d.tier] ?? TIER_COLOR[1] ?? 0x9db8d4;
+}
+
 export function initRipples(scene: THREE.Scene): void {
   root = new THREE.Group();
   root.renderOrder = 5;
@@ -28,7 +39,7 @@ export function initRipples(scene: THREE.Scene): void {
 
 const RINGS_PER = 3; // concentric expanding ripples per disturbance
 
-function ensureMesh(id: number, tier: number): THREE.Group {
+function ensureMesh(id: number, color: number): THREE.Group {
   const existing = groups.get(id);
   if (existing) return existing;
   const g = new THREE.Group();
@@ -36,7 +47,7 @@ function ensureMesh(id: number, tier: number): THREE.Group {
     // thin ring, expands outward and fades — reads as water, not a UI circle
     const geo = new THREE.RingGeometry(0.94, 1, 28);
     const mat = new THREE.MeshBasicMaterial({
-      color: TIER_COLOR[tier] ?? TIER_COLOR[1],
+      color,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -63,8 +74,8 @@ export function updateRipples(world: WorldState, dt: number): void {
   for (const d of world.disturbances) {
     if (d.state === 'gone') continue;
     live.add(d.id);
-    const group = ensureMesh(d.id, d.tier);
-    const base = rippleRadiusForTier(d.tier);
+    const group = ensureMesh(d.id, rippleColor(d));
+    const base = rippleRadiusFor(d);
     group.position.set(d.pos.x, 0.06, d.pos.z);
     // concentric rings expand from the centre and fade out — the classic
     // something-is-under-there telegraph. Prompt = urgent fast pulses.
