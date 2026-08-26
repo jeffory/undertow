@@ -21,11 +21,11 @@ const HULL_LEN = 3.2; // bow..stern length (z)
 const HULL_WIDEST = 1.7; // max beam (x)
 
 // Rowboat (generated prop) replaces the primitive hull. The model's long axis
-// is along local X (3.696m) and its pointed bow is at -X, so it needs a +90°
+// is along local X (3.698m) and its pointed bow is at -X, so it needs a +90°
 // base yaw to point the bow toward +Z (the game's forward at heading 0) and a
 // scale to match HULL_LEN. Kinematics / bob / wake / lantern mount all keep
 // riding on the boat group, untouched.
-const ROWBOAT_LENGTH = 3.696;
+const ROWBOAT_LENGTH = 3.698;
 const ROWBOAT_SCALE = HULL_LEN / ROWBOAT_LENGTH;
 const ROWBOAT_YAW = Math.PI / 2;
 
