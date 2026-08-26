@@ -43,8 +43,10 @@ export function createRenderer(container: HTMLElement): RenderContext {
     0.1,
     400
   );
-  // low top-down angle (plan 01 §3.1)
-  camera.position.set(0, 14, 12);
+  // low chase angle (~25° above the waterline): low enough that the horizon,
+  // fog band, and wave silhouettes are in frame (qa-issues T1), high enough
+  // that the flat ripple telegraphs and cast aiming stay readable.
+  camera.position.set(0, 6, 12);
   camera.lookAt(0, 0, 0);
 
   // ambient so flat-shaded surfaces aren't pitch black
@@ -112,8 +114,9 @@ export function render(world: WorldState, dt: number): void {
     const lerp = 1 - Math.exp(-dt * 5);
     c.position.x += (tx - c.position.x) * lerp;
     c.position.z += (tz + 12 - c.position.z) * lerp;
-    c.position.y = 14;
-    c.lookAt(tx, 0, tz);
+    c.position.y = 6;
+    // aim slightly above the deck so the horizon rides near the top of frame
+    c.lookAt(tx, 0.6, tz);
   }
 
   // mouse → world aim point (the cast system reads it next fixed step)
