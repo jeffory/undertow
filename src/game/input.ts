@@ -21,6 +21,19 @@ let mouseY = 0;
 let leftDown = false;
 let rightDown = false;
 
+// Reel Stance Mode (CIRCULAR 4, 'Reel Stance Mode'): RMB can latch instead of
+// hold. In toggle mode the latch is flipped on each RMB press edge and is the
+// ONLY RMB source (so the toggle-off edge drops immediately, keeping castFlow's
+// rising-edge detection honest). Shift still gives a momentary brace/reel hold
+// in either mode. Returning to hold clears the latch.
+let reelToggle = false;
+let rightLatch = false;
+
+export function setReelStance(mode: 'hold' | 'toggle'): void {
+  reelToggle = mode === 'toggle';
+  if (!reelToggle) rightLatch = false;
+}
+
 // edge-triggered taps: true for the step where the key just became held
 const tapFlags = new Map<string, boolean>();
 // the key has already been reported as a tap while held (prevents repeat)
@@ -65,6 +78,7 @@ function onBlur(): void {
   tapConsumed.clear();
   leftDown = false;
   rightDown = false;
+  rightLatch = false;
 }
 
 function onMouseMove(e: MouseEvent): void {
@@ -74,7 +88,10 @@ function onMouseMove(e: MouseEvent): void {
 
 function onMouseDown(e: MouseEvent): void {
   if (e.button === 0) leftDown = true;
-  else if (e.button === 2) rightDown = true;
+  else if (e.button === 2) {
+    if (reelToggle) rightLatch = !rightLatch;
+    else rightDown = true;
+  }
   e.preventDefault();
 }
 
@@ -136,7 +153,7 @@ export function updateInput(world: WorldState): void {
 
   // held actions (gaff light / heavy-hold need held state)
   intent.primary = leftDown;
-  intent.secondary = rightDown || held.has('ShiftLeft') || held.has('ShiftRight');
+  intent.secondary = rightLatch || rightDown || held.has('ShiftLeft') || held.has('ShiftRight');
 
   // edge-triggered taps (dodge, lures)
   intent.dodge = consumeTap('Space');

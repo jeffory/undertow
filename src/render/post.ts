@@ -24,6 +24,16 @@ let dreadOverride: number | null = null;
 let tilt = 0;
 let ready = false;
 
+// Options menu seam (CIRCULAR 4, 'Chromatic Dispersion & Lens Staining'):
+// forces the direct-render path (no render target, no shader) when disabled.
+// Gates BOTH the composite and the dread-driven screen tilt, so "off" is the
+// whole post-effect family off.
+let postEnabled = true;
+
+export function setPostEnabled(on: boolean): void {
+  postEnabled = on;
+}
+
 // Debug override: '?dread=NN' (0..100). Read once from the URL.
 function readOverride(): number | null {
   const m = /[?&]dread=(\d{1,3})/.exec(window.location.search || '');
@@ -107,7 +117,7 @@ export function updatePost(world: WorldState, dt: number): void {
 
   // Compute the screen-tilt target (dread tier 4 = 0.5° camera roll). Applied
   // in compositeScene AFTER the renderer's lookAt so it isn't reset each frame.
-  const effective = dreadOverride ?? world.dread;
+  const effective = !postEnabled ? 0 : (dreadOverride ?? world.dread);
   const target = effective >= 80 ? TILT_TIER : 0;
   const k = 1 - Math.exp(-dt * 3);
   tilt += (target - tilt) * k;
@@ -127,7 +137,7 @@ export function compositeScene(ctx: RenderContext): void {
     return;
   }
 
-  const effective = (dreadOverride ?? 0) / 100;
+  const effective = !postEnabled ? 0 : (dreadOverride ?? 0) / 100;
   if (effective <= 0) {
     ctx.renderer.render(ctx.scene, ctx.camera);
     return;

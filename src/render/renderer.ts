@@ -29,10 +29,22 @@ export interface RenderContext {
 
 let ctx: RenderContext | null = null;
 
+// Options menu seam (CIRCULAR 4, 'Resolution of Basin Survey'): a render-scale
+// multiplier over dpr, applied to the pixel ratio. resizeRenderer applies the
+// same value so window resizes never reset a configured scale.
+let renderScale = 1;
+
+export function setRenderScale(scale: number): void {
+  renderScale = scale;
+  if (ctx) {
+    ctx.renderer.setPixelRatio(renderScale * Math.min(window.devicePixelRatio, 2));
+  }
+}
+
 export function createRenderer(container: HTMLElement): RenderContext {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(renderScale * Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
@@ -78,7 +90,7 @@ export function resizeRenderer(renderer: THREE.WebGLRenderer): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
   renderer.setSize(w, h);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(renderScale * Math.min(window.devicePixelRatio, 2));
   if (ctx) {
     ctx.camera.aspect = w / h;
     ctx.camera.updateProjectionMatrix();

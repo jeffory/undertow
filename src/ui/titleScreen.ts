@@ -14,6 +14,8 @@
 // schema bump for one boolean isn't worth a migration; noted as debt in
 // qa-issues.md terms).
 
+import { openOptionsMenu, setOptionsMenuBlocked } from './optionsMenu';
+
 const INTRO_SEEN_KEY = 'undertow.introSeen';
 
 const TAGLINES = [
@@ -275,6 +277,8 @@ function dismissTitle(): void {
 export function initTitleScreen(): void {
   injectStyle();
   blockGameKeys(true);
+  // Esc must not yank the options menu over the title shell / story cards.
+  setOptionsMenuBlocked(true);
 
   root = document.createElement('div');
   root.id = 'title-screen';
@@ -302,10 +306,17 @@ export function initTitleScreen(): void {
 
   const begin = (skipCards: boolean): void => {
     dismissTitle();
-    if (!skipCards) {
+    if (skipCards) {
+      // no story cards — the sim is live once the title fades, so Esc may open
+      // the options menu again
+      setOptionsMenuBlocked(false);
+    } else {
       // cards keep the key blocker semantics themselves (capture handlers)
       blockGameKeys(true);
-      showCards(() => blockGameKeys(false));
+      showCards(() => {
+        blockGameKeys(false);
+        setOptionsMenuBlocked(false);
+      });
     }
   };
 
@@ -331,8 +342,9 @@ export function initTitleScreen(): void {
       code: 'CIRCULAR 4',
       label: 'ADJUSTMENT OF GAUGES & TOLERANCES',
       subtext: 'Configure visual scales, acoustic levels, and line tension palettes.',
-      stamp: 'PENDING REVIEW',
-      enabled: false,
+      stamp: 'FILED',
+      enabled: true,
+      action: () => openOptionsMenu(),
     },
     {
       code: 'FORM 99',

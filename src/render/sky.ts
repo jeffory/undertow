@@ -47,6 +47,16 @@ let moon: THREE.DirectionalLight | null = null;
 let bgSphere: THREE.Mesh | null = null;
 let bgGeo: THREE.BufferGeometry | null = null;
 
+// Options menu seam (CIRCULAR 4, 'Permissible Murk Level'): a multiplier over
+// the phase-lerped density. Deliberately NOT applied to scene.fog.density
+// directly — updateSky re-derives density from curDensity every frame, so the
+// scale has to ride the same lerp (fog.density = curDensity * fogDensityScale).
+let fogDensityScale = 1;
+
+export function setFogDensityScale(mult: number): void {
+  fogDensityScale = mult;
+}
+
 // Night Clock phase lerp state (03 §5.2): the sky/fog palette drifts toward the
 // current phase's palette — dusk bone-teal → night near-black → deep-night +blue
 // fog → false-dawn pale. Values persist so the lerp is smooth.
@@ -229,7 +239,7 @@ export function updateSky(world: WorldState, dt: number): void {
 
   if (fog) {
     fog.color.copy(curFog);
-    fog.density = curDensity;
+    fog.density = curDensity * fogDensityScale;
   }
 
   // Rewrite the gradient sphere's vertex colors from the drifting palette

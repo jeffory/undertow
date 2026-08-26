@@ -12,6 +12,7 @@ import { initSaveSystem, getSave, updateSave } from './core/save';
 import { initSavePanel } from './ui/savePanel';
 import { initQaAnnotate, isQaPaused } from './ui/qaAnnotate';
 import { initTitleScreen } from './ui/titleScreen';
+import { applySavedOptions, initOptionsMenu } from './ui/optionsMenu';
 import { toggleBestiary } from './ui/bestiaryScreen';
 import { initHud } from './ui/hud';
 import { applyRunStartPassives } from './loot/runStart';
@@ -88,7 +89,9 @@ if (/[?&]debug/.test(search)) {
 }
 
 const ctx = createRenderer(app);
-// wire the Three renderer's info counters into the debug overlay
+// apply saved CIRCULAR 4 options on boot (render scale / murk / post / reel stance)
+applySavedOptions();
+// wire the renderer's info counters into the debug overlay
 debugInfoRef.current = ctx.renderer.info;
 
 // debug seam: also expose the live THREE scene + camera so scene-graph probes
@@ -104,6 +107,9 @@ initQaAnnotate(world);
 
 // Diegetic HUD (corner chips + tension gauge) — shown in ALL modes, debug or not.
 initHud();
+
+// CIRCULAR 4 options menu: Esc opens/closes it in-game in every mode.
+initOptionsMenu();
 
 // M2.5 shell: title screen + opening story cards over the live drifting lake
 // (docs/story/title-menu.md / opening.md). Debug and gate paths (?debug, ?qa)
