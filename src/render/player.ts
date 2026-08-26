@@ -228,12 +228,23 @@ export function updatePlayer(world: WorldState, dt: number): void {
   trySwap();
 
   const foot = world.mode === 'foot';
-  root.visible = foot;
-  // The keeper only renders on foot, so only advance the mixer there: skinning
-  // an off-screen figure every frame is pure cost, and the clips are loops, so
-  // there is no state to lose while it is hidden.
-  if (!foot) return;
+  root.visible = true; // foot: standing on the islet; boat: riding the deck
   updateClips(world, dt);
+
+  // Boat mode: the keeper rides amidships (slightly aft), facing the bow, on
+  // the deck of the bobbing hull — the empty self-sailing boat read is gone.
+  // The hull's bob height is world.boat.y; the dinghy's deck sits ~0.32 above.
+  if (!foot) {
+    const b = world.boat;
+    const ox = 0;
+    const oz = -0.25; // a step aft of centre, clear of the bench
+    root.position.x = b.x + Math.sin(b.heading) * oz + Math.cos(b.heading) * ox;
+    root.position.z = b.z + Math.cos(b.heading) * oz - Math.sin(b.heading) * ox;
+    root.position.y = b.y + 0.32;
+    root.rotation.y = b.heading;
+    root.rotation.z = 0;
+    return;
+  }
 
   const p = world.player;
   root.position.x = p.x;
