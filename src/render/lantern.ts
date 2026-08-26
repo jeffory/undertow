@@ -13,6 +13,33 @@ const BULB_COLOR = 0xffd9a0; // hot core
 
 let light: THREE.PointLight | null = null;
 let bulb: THREE.Mesh | null = null;
+let halo: THREE.Sprite | null = null;
+
+// Soft radial glow billboard around the bulb — the concept carries much of its
+// bright-value budget in the lantern's warm halo, not just the pinpoint core
+// (TODO.md luma balance). Additive over the near-black water.
+function makeHalo(): THREE.Sprite {
+  const cnv = document.createElement('canvas');
+  cnv.width = cnv.height = 64;
+  const g = cnv.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255, 250, 230, 1.0)');
+  grad.addColorStop(0.12, 'rgba(255, 244, 205, 0.85)');
+  grad.addColorStop(0.3, 'rgba(255, 214, 140, 0.45)');
+  grad.addColorStop(0.6, 'rgba(255, 180, 94, 0.16)');
+  grad.addColorStop(1, 'rgba(255, 180, 94, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const mat = new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cnv),
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+  });
+  const s = new THREE.Sprite(mat);
+  s.scale.setScalar(2.2);
+  return s;
+}
 
 export function initLantern(scene: THREE.Scene): void {
   // Physical-ish point light: warm, tight decay so the glow pool is readable.
@@ -36,6 +63,9 @@ export function initLantern(scene: THREE.Scene): void {
   const mat = new THREE.MeshBasicMaterial({ vertexColors: true }); // emissive, ignores light
   bulb = new THREE.Mesh(geo, mat);
   scene.add(bulb);
+
+  halo = makeHalo();
+  scene.add(halo);
 }
 
 export function updateLantern(world: WorldState, dt: number): void {
@@ -60,4 +90,9 @@ export function updateLantern(world: WorldState, dt: number): void {
   const flutter = 0.5 + 0.5 * Math.sin(t * 4.1 + 1.3);
   const pulse = 0.82 + 0.16 * breath + 0.06 * flutter; // ~0.82..1.04
   light.intensity = 5.0 * pulse;
+  if (halo) {
+    halo.position.copy(bulb.position);
+    halo.material.opacity = 0.75 + 0.25 * (pulse - 0.82) / 0.22;
+    halo.scale.setScalar(2.2 * (0.92 + 0.12 * breath));
+  }
 }

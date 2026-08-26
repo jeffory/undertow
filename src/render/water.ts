@@ -139,7 +139,7 @@ void main() {
   vec3 hv = normalize(uMoonDir + viewDir);
   // flat facets share one normal — a broad spec gain paints whole
   // triangles pale, so keep the glint corridor faint
-  float spec = pow(max(dot(n, hv), 0.0), 96.0) * 0.1;
+  float spec = pow(max(dot(n, hv), 0.0), 96.0) * 0.2;
 
   vec3 color = base * uAmbient * 0.8;
   color += base * moon;
@@ -185,7 +185,9 @@ void main() {
   float surf = band * (0.25 + 0.75 * lap) * (0.15 + 0.85 * ch);
   float edgeFoam = smoothstep(0.32, 0.60, surf);
 
-  color = mix(color, uFoamColor, clamp(foam * 0.5 + edgeFoam * 0.45, 0.0, 1.0));
+  // crest foam saturates to full white at the peaks — the concept's bright ~2%
+  // lives in foam caps and the lantern, not in a lifted midrange (luma gate)
+  color = mix(color, uFoamColor, clamp(foam * 1.1 + edgeFoam * 0.45, 0.0, 1.0));
 
   // Cheap fresnel-ish darkening at grazing angles (also fattens the fog blend).
   // Weakened from the original 0.5 so the darker palette's moonlit facets stay
