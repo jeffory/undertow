@@ -308,6 +308,7 @@ const rigs = new Map<number, LineRig>();
 export function initLines(scene: THREE.Scene): void {
   root = new THREE.Group();
   root.visible = false; // hidden while no fight is active
+  root.name = 'lines:root';
   scene.add(root);
 }
 

@@ -46,8 +46,16 @@ npm run dev        # http://localhost:5173  (?debug for perf overlay, ?mode=foot
 npm test           # unit suite (vitest, pure-logic systems)
 npm run smoke      # boots the real app headless; fails on console errors / black frame
 node tools/fight.mjs   # automated M1 fight gate (Playwright plays the game)
+npm run qa:check   # end-to-end check of the QA annotate overlay
 npx tsc --noEmit   # typecheck
 ```
+
+- **QA annotate:** run with `?qa` (or `?debug`) and press **Q** to freeze the
+  sim, then click any spot to pin a note. Each note captures the world point,
+  the scene object + material under the cursor, water-vs-ground height there,
+  and the seed + sim tick — so a worker can replay the exact frame. Notes land
+  in `qa-notes/NNN.md` (+ `.png`) for the orchestrator. See
+  [qa-issues.md](qa-issues.md) §T8.
 
 - **Architecture:** TypeScript + Three.js + Vite, no backend. ECS-lite:
   plain data structs, systems as pure functions in a fixed update order,

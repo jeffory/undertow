@@ -187,6 +187,26 @@ and is the target for subsequent art rounds.
 `src/game/boat.ts`. Emit into a scene-level pool with world-space positions and
 per-particle decay; stop parenting to the boat group.
 
+### T8 — QA annotate overlay  `[DONE — landed, no dependencies]`
+In-game point-and-comment capture. `src/ui/qaAnnotate.ts` + a dev-server sink in
+`vite.config.ts`; `?qa` or `?debug`, press **Q**.
+
+The off-the-shelf tools in this space (Agentation, Vynix, doop) resolve a click
+to a DOM node and emit a CSS selector — useless against a single `<canvas>`.
+This resolves against the **scene and the sim** instead. Each note carries the
+world point, the scene object + material under the cursor (scene roots are now
+named, e.g. `water:plane`, `lake:root`), `waterHeightAt` vs `groundYAt` and the
+signed gap, and **seed + sim tick** — a reproducible frame, not just a
+screenshot. Notes are written to `qa-notes/NNN.md` (+ `.png`).
+
+Verified end-to-end by `npm run qa:check` (7 assertions: sim freeze/resume,
+scene-hit resolution, file write). Production path confirmed untouched — no
+`__world`, no overlay DOM, Q inert without the flag.
+
+**For workers:** a note's `colour 0x…` / `object` lines grep straight to the
+owning render module; the `?seed=…` + tick line replays the exact frame to
+reproduce and to verify the fix.
+
 ### T7 — Re-run the art-director pass  `[after T1, T2, T5]`
 Regenerate `TODO.md` against the new camera. Expect a significant share of the
 current CRITICAL/HIGH entries to be resolved or materially restated. Judge every

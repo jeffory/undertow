@@ -25,6 +25,7 @@ export function initFish(scene: THREE.Scene): void {
   outer = new THREE.Group();
   outer.add(inner);
   outer.visible = false; // hidden until a fish spawns
+  outer.name = 'fish:root';
   scene.add(outer);
 }
 

@@ -62,9 +62,11 @@ export function initLantern(scene: THREE.Scene): void {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const mat = new THREE.MeshBasicMaterial({ vertexColors: true }); // emissive, ignores light
   bulb = new THREE.Mesh(geo, mat);
+  bulb.name = 'lantern:bulb';
   scene.add(bulb);
 
   halo = makeHalo();
+  halo.name = 'lantern:halo';
   scene.add(halo);
 }
 

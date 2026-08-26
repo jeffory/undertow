@@ -433,6 +433,7 @@ function rebuild(lake: LakeMap): void {
 // --- system -------------------------------------------------------------------
 export function initLake(scene: THREE.Scene): void {
   lakeGroup = new THREE.Group();
+  lakeGroup.name = 'lake:root';
   scene.add(lakeGroup);
 }
 
