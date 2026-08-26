@@ -31,12 +31,11 @@ import { getAsset, hasAsset } from './assets';
 
 export const GROUND_Y = 0.25; // islet shoreline surface, above the water plane
 
-// --- slate-rock palette (CRITICAL bar: dark slate #1c2226..#2d353b with
-// earth-brown accents near the waterline) ---------------------------------------
+// --- slate-rock palette (CRITICAL bar: dark slate #1c2226..#2d353b, the
+// waterline edge reads as a dark rock face, no earth-brown mud) -----------------
 const SLATE_DARK = 0x1c2226; // dark slate — low slopes / shade facets
 const SLATE_LIGHT = 0x2d353b; // lighter slate — raised facets catch the moon
-const EARTH = 0x3a2c1c; // earth-brown accent at the waterline
-const DEEP = 0x0a0d10; // near-black below the waterline (the skirt)
+const DEEP = 0x0d1114; // near-black slate below the waterline (the skirt)
 const WRECK_COLOR = 0x1c1512; // near-black timber
 const BUOY_PRIMARY = 0xffb45e; // warm amber — the extraction buoy near the start
 const BUOY_SECONDARY = 0x9db8d4; // pale bone-teal — the mid-map buoy
@@ -69,7 +68,6 @@ const clamp = (v: number, lo: number, hi: number): number =>
 
 const C_SLATE_DARK = new THREE.Color(SLATE_DARK);
 const C_SLATE_LIGHT = new THREE.Color(SLATE_LIGHT);
-const C_EARTH = new THREE.Color(EARTH);
 const C_DEEP = new THREE.Color(DEEP);
 const faceCol = new THREE.Color();
 
@@ -93,15 +91,13 @@ function isoY(iso: Islet, x: number, z: number): number {
   return GROUND_Y + isletHeightAt(iso, x, z);
 }
 
-// Per-face colour: slate ramp by face height + a waterline earth-brown band +
-// a deterministic per-face jitter so adjacent facets read as separate blocks.
+// Per-face colour: slate ramp by face height + a deterministic per-face jitter
+// so adjacent facets read as separate blocks (that sells 'craggy slate').
 function faceColor(iso: Islet, mx: number, my: number, mz: number): THREE.Color {
   const h = my - GROUND_Y;
   const peak = Math.max(0.3, isletPeakRise(iso));
   const tTop = clamp(h / peak, 0, 1);
   faceCol.lerpColors(C_SLATE_DARK, C_SLATE_LIGHT, tTop);
-  const tWater = clamp(1 - h / 0.45, 0, 1);
-  faceCol.lerp(C_EARTH, tWater * 0.5);
   const jit = 0.9 + 0.2 * isletHash01(iso, Math.floor(mx * 3), Math.floor(mz * 3));
   faceCol.multiplyScalar(jit);
   return faceCol;
@@ -109,7 +105,8 @@ function faceColor(iso: Islet, mx: number, my: number, mz: number): THREE.Color 
 
 // Build the faceted terrain as a NON-INDEXED triangle soup (three duplicated
 // verts per face) so computeVertexNormals yields flat per-face normals, exactly
-// the "craggy faceted rock" look. Skirt faces blend earth-brown → near-black.
+// the "craggy faceted rock" look. Skirt faces blend dark slate → near-black
+// slate, so the waterline edge reads as a dark rock face.
 function buildIsletGeometry(iso: Islet): THREE.BufferGeometry {
   const m = iso.poly.length * 2; // verts per ring
   const c = iso.center;
@@ -130,7 +127,7 @@ function buildIsletGeometry(iso: Islet): THREE.BufferGeometry {
     let b: number;
     if (skirt) {
       const depth = clamp((GROUND_Y - my) / SKIRT_DROP, 0, 1);
-      faceCol.lerpColors(C_EARTH, C_DEEP, depth);
+      faceCol.lerpColors(C_SLATE_DARK, C_DEEP, depth);
       r = faceCol.r;
       g = faceCol.g;
       b = faceCol.b;

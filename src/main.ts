@@ -11,6 +11,7 @@ import { initRun } from './run/run';
 import { initSaveSystem, getSave, updateSave } from './core/save';
 import { initSavePanel } from './ui/savePanel';
 import { initQaAnnotate, isQaPaused } from './ui/qaAnnotate';
+import { initTitleScreen } from './ui/titleScreen';
 import { toggleBestiary } from './ui/bestiaryScreen';
 import { applyRunStartPassives } from './loot/runStart';
 import { gradeForXp } from './loot/license';
@@ -99,6 +100,11 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
 // QA annotate overlay (?qa / ?debug): Q freezes the sim, click pins a note
 // carrying seed + tick + scene hit, written to qa-notes/ by the dev server.
 initQaAnnotate(world);
+
+// M2.5 shell: title screen + opening story cards over the live drifting lake
+// (docs/story/title-menu.md / opening.md). Debug and gate paths (?debug, ?qa)
+// boot straight into gameplay so every automated driver stays untouched.
+if (!/[?&](debug|qa)\b/.test(search)) initTitleScreen();
 
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 
