@@ -1,11 +1,12 @@
 // LINES — T10 line render (plan 02 §9, spec 13.4). The line is the
 // protagonist: a quadratic Bézier catenary from the player's rod-tip to the
-// hooked catch, sagging by (1 − tension/100), coloured green→white→red by
-// tension, with a faint additive glow ribbon so it outreads fog and dark
-// water. Renders every fight in world.tether.fights (M2 has one; the boat /
-// reverse fights slot in through the same per-fight endpoint loop). Two draw
-// calls per fight (line + glow). Vertex colours only, zero textures. The only
-// render code in this plan — imports three, never game logic.
+// hooked catch, sagging by (1 − tension/100), coloured green→amber→red by
+// tension, drawn as a crisp 1px filament core with a soft additive halo so it
+// outreads fog and dark water. Renders every fight in world.tether.fights (M2
+// has one; the boat / reverse fights slot in through the same per-fight
+// endpoint loop). Two draw calls per fight (line + glow). Vertex colours only,
+// zero textures. The only render code in this plan — imports three, never game
+// logic.
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
@@ -16,24 +17,41 @@ import { WATER_FISH_Y } from './fishMesh';
 // --- tuning ----------------------------------------------------------------
 const SEGMENTS = 16; // bezier samples
 const K_SAG = 1.5; // metres of sag at zero tension (plan §9)
-const ROD_TIP_Y = 1.0; // rod-tip attach point, ~1m up off the islet
 const HOOK_Y = 0.45; // fish hook point above the islet
 const DIVE_DROP = 0.8; // how far the hook sinks while the catch dives
-const GLOW_HALF_WIDTH = 0.32; // glow ribbon half width (m)
 const THRASH_AMP = 0.12; // drag jitter amplitude (m)
 const FLASH_SECONDS = 0.3; // telegraph white-flash duration (s)
-const GLOW_EDGE_ALPHA = 0.3; // soft ribbon edges
-const GLOW_CENTER_ALPHA = 0.95;
 
-// 3-stop line palette (plan §9): green (calm) → white (warn ~60) → red (snap).
-const COLOR_CALM = new THREE.Color(0x22c55e);
-const COLOR_WARN = new THREE.Color(0xffffff);
-const COLOR_DANGER = new THREE.Color(0xef4444);
-const WARN_STOP = 0.6; // warn colour at 60% of the ceiling
+// Filament anchors (task t4): the line's origin must never emerge from the
+// keeper's torso. On foot it rides a held rod tip at hand height, slightly
+// forward + right of the player (heading space: +X = right, +Z = forward — a
+// real rod prop lands later). On boat it lands on the stern winch post when
+// the boat group carries one, else a boat-local stern point behind the helm.
+const ROD_TIP_OFFSET = { right: 0.35, up: 1.25, fwd: 0.3 };
+const BOAT_STERN_OFFSET = { right: 0, up: 1.0, back: 1.2 };
+
+// Glow halo — a 5-row triangle strip with a quadratic alpha falloff, so the
+// line reads as a crisp 1px filament core with a soft additive halo (the old
+// 3-row / high-alpha ribbon read as a fat translucent tube).
+const GLOW_ROWS = 5;
+const GLOW_HALF_WIDTH = 0.24; // outer glow row offset (m)
+const GLOW_ROW_SPACING = GLOW_HALF_WIDTH / ((GLOW_ROWS - 1) / 2);
+const GLOW_ALPHA: readonly number[] = [0.0, 0.3, 0.6, 0.3, 0.0];
+
+// 3-stop line palette (task t4, art bible): green #33ff88 (slack) → amber
+// #ffcc44 (~70%) → red #ff3344 (near snap). Tension colour updates every
+// frame while a fight is live.
+const COLOR_CALM = new THREE.Color(0x33ff88);
+const COLOR_WARN = new THREE.Color(0xffcc44);
+const COLOR_DANGER = new THREE.Color(0xff3344);
+const COLOR_FLASH = new THREE.Color(0xffffff); // telegraph white-flash
+const WARN_STOP = 0.7; // amber colour at 70% of the ceiling
 
 // Pure helpers (exported so the T10 acceptance can be unit-tested).
 
-// 3-stop lerp by tension: green at 0 → white at warn → red at the ceiling.
+// 3-stop lerp by tension: green at 0 → amber at the ~70 warn stop → red at the
+// ceiling. Reads live fight.tension every frame (updateRig), so the filament
+// walks the palette during a fight.
 export function tensionColor(
   tension: number,
   ceiling: number,
@@ -61,8 +79,8 @@ interface LineRig {
   glow: THREE.Mesh;
   linePos: Float32Array; // (SEGMENTS+1)*3
   lineCol: Float32Array; // (SEGMENTS+1)*3
-  glowPos: Float32Array; // (SEGMENTS+1)*3 verts * 3
-  glowCol: Float32Array; // (SEGMENTS+1)*3 verts * 4 (rgba)
+  glowPos: Float32Array; // (SEGMENTS+1)*GLOW_ROWS verts * 3
+  glowCol: Float32Array; // (SEGMENTS+1)*GLOW_ROWS verts * 4 (rgba)
   thrash: number; // 1 → decays; drives the drag jitter
   flash: number; // 1 → decays; white line flash on telegraph
   dive: number; // 1 → decays; hook sinks while the catch dives
@@ -100,10 +118,10 @@ function buildRig(fightId: number): LineRig {
   line.frustumCulled = false;
   line.renderOrder = 91;
 
-  // Glow ribbon — a 3-row (left/centre/right) triangle strip so the edges fall
-  // off softly; additive + vertex alpha reads as a halo over dark water.
+  // Glow halo — a GLOW_ROWS triangle strip so the alpha falls off softly;
+  // additive + vertex alpha reads as a halo over dark water.
   const glowGeo = new THREE.BufferGeometry();
-  const vCount = N_POINTS * 3;
+  const vCount = N_POINTS * GLOW_ROWS;
   glowGeo.setAttribute(
     'position',
     new THREE.BufferAttribute(new Float32Array(vCount * 3), 3),
@@ -114,16 +132,15 @@ function buildRig(fightId: number): LineRig {
   );
   const idx: number[] = [];
   for (let s = 0; s < SEGMENTS; s++) {
-    const a0 = s * 3;
-    const a1 = (s + 1) * 3;
-    const l0 = a0;
-    const c0 = a0 + 1;
-    const r0 = a0 + 2;
-    const l1 = a1;
-    const c1 = a1 + 1;
-    const r1 = a1 + 2;
-    idx.push(l0, c0, l1, c0, l1, c1); // left→centre quad
-    idx.push(c0, r0, c1, r0, c1, r1); // centre→right quad
+    const a0 = s * GLOW_ROWS;
+    const a1 = (s + 1) * GLOW_ROWS;
+    for (let r = 0; r < GLOW_ROWS - 1; r++) {
+      const l0 = a0 + r;
+      const r0 = a0 + r + 1;
+      const l1 = a1 + r;
+      const r1 = a1 + r + 1;
+      idx.push(l0, r0, l1, r0, r1, l1); // quad between row r and r+1
+    }
   }
   glowGeo.setIndex(idx);
   const glowMat = new THREE.MeshBasicMaterial({
@@ -205,6 +222,22 @@ function chordPerp(chord: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   return out;
 }
 
+// Local heading-space offset → world offset for a yaw (same XZ convention as
+// world.player.facing / world.boat.heading: 0 = +Z, +PI/2 = +X). `right` is
+// the +X heading-space axis, `fwd` the +Z one.
+function headingOffset(
+  right: number,
+  fwd: number,
+  heading: number,
+  out: THREE.Vector3,
+): THREE.Vector3 {
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  out.x = right * c + fwd * s;
+  out.z = -right * s + fwd * c;
+  return out;
+}
+
 const SAMPLES: THREE.Vector3[] = Array.from(
   { length: N_POINTS },
   () => new THREE.Vector3(),
@@ -222,16 +255,35 @@ function updateRig(
   const ceiling = world.line.tensionCeiling;
   const isFoot = world.mode === 'foot';
 
-  // Endpoints: rod-tip ≈ player + 1m up (boat deck during boat fights); hook on
-  // the catch at the fight's waterline (dive → sink). On foot both anchors ride
-  // the terrain surface so the line stays attached to the rod and the catch.
-  const rodY = isFoot ? groundYAt(world, p.x, p.z) + ROD_TIP_Y : WATER_FISH_Y + ROD_TIP_Y;
+  // Rod-tip anchor (task t4): never the keeper's torso centre. On foot the
+  // origin rides a held rod tip at hand height, forward + right of the player
+  // in heading space. On a boat fight it lands on the stern winch post when
+  // the boat group carries one, else a boat-local stern point.
+  if (fight.anchor === 'boat') {
+    if (winchPost) {
+      winchPost.getWorldPosition(P0);
+    } else {
+      const b = world.boat;
+      headingOffset(0, -BOAT_STERN_OFFSET.back, b.heading, P0);
+      P0.x += b.x;
+      P0.z += b.z;
+      P0.y = b.y + BOAT_STERN_OFFSET.up;
+    }
+  } else {
+    headingOffset(ROD_TIP_OFFSET.right, ROD_TIP_OFFSET.fwd, p.facing, P0);
+    P0.x += p.x;
+    P0.z += p.z;
+    P0.y = groundYAt(world, P0.x, P0.z) + ROD_TIP_OFFSET.up;
+  }
+
+  // Hook anchor on the catch at the fight's waterline (dive → sink). On foot
+  // both anchors ride the terrain surface so the line stays attached to the
+  // rod and the catch.
   const diving = rig.dive > 0 || (fish ? (fish.state as string) === 'dive' : false);
   const hookBase = isFoot
     ? groundYAt(world, fish ? fish.x : p.x, fish ? fish.z : p.z)
     : WATER_FISH_Y;
   const hookY = hookBase + HOOK_Y - (diving ? DIVE_DROP : 0);
-  P0.set(p.x, rodY, p.z);
   P2.set(fish ? fish.x : p.x, hookY, fish ? fish.z : p.z);
 
   // Control point: midpoint + sideways sag (catenary in top-down) with a touch
@@ -256,7 +308,7 @@ function updateRig(
 
   // Colour: 3-stop by tension, blended toward white during the telegraph flash.
   tensionColor(fight.tension, ceiling, TMP_COLOR);
-  if (rig.flash > 0.001) TMP_COLOR.lerp(COLOR_WARN, Math.min(1, rig.flash));
+  if (rig.flash > 0.001) TMP_COLOR.lerp(COLOR_FLASH, Math.min(1, rig.flash));
 
   // Line vertices + colours.
   for (let i = 0; i <= SEGMENTS; i++) {
@@ -267,16 +319,17 @@ function updateRig(
     rig.lineCol[i * 3 + 2] = TMP_COLOR.b;
   }
 
-  // Glow ribbon: 3 rows per sample, offset perpendicular to the line tangent.
+  // Glow halo: GLOW_ROWS per sample, offset perpendicular to the line tangent,
+  // alpha falling off quadratically toward the outer rows.
   for (let i = 0; i <= SEGMENTS; i++) {
     const s = SAMPLES[i]!;
     if (i < SEGMENTS) TANGENT.subVectors(SAMPLES[i + 1]!, s);
     chordPerp(TANGENT, GLOW_PERP);
-    for (let r = 0; r < 3; r++) {
-      const v = i * 3 + r;
-      const off = (r - 1) * GLOW_HALF_WIDTH;
+    for (let r = 0; r < GLOW_ROWS; r++) {
+      const v = i * GLOW_ROWS + r;
+      const off = (r - (GLOW_ROWS - 1) / 2) * GLOW_ROW_SPACING;
       setRow(rig.glowPos, v, s.x + GLOW_PERP.x * off, s.y, s.z + GLOW_PERP.z * off);
-      const alpha = r === 1 ? GLOW_CENTER_ALPHA : GLOW_EDGE_ALPHA;
+      const alpha = GLOW_ALPHA[r]!;
       rig.glowCol[v * 4] = TMP_COLOR.r;
       rig.glowCol[v * 4 + 1] = TMP_COLOR.g;
       rig.glowCol[v * 4 + 2] = TMP_COLOR.b;
@@ -304,16 +357,42 @@ function updateRig(
 // --- module state + the renderer seam -----------------------------------------
 let root: THREE.Group | null = null;
 const rigs = new Map<number, LineRig>();
+let sceneRef: THREE.Scene | null = null; // for the boat winch-post lookup
+let boatRoot: THREE.Group | null = null;
+let winchPost: THREE.Object3D | null = null;
+let anchorResolveTimer = 0;
 
 export function initLines(scene: THREE.Scene): void {
   root = new THREE.Group();
   root.visible = false; // hidden while no fight is active
   root.name = 'lines:root';
   scene.add(root);
+  sceneRef = scene;
+}
+
+// Re-resolve the boat's stern winch post (~1Hz — the boat group is stable but
+// the rowboat model with its winch can land after boot). updateRig reads the
+// module-level `winchPost` for boat-fight anchors.
+function refreshWinchPost(): void {
+  anchorResolveTimer = Math.max(0, anchorResolveTimer - 1);
+  if (anchorResolveTimer > 0) return;
+  anchorResolveTimer = 60;
+  if (!sceneRef) return;
+  if (!boatRoot || !boatRoot.parent) {
+    boatRoot = (sceneRef.getObjectByName('boat:root') as THREE.Group) ?? null;
+  }
+  winchPost = null;
+  if (boatRoot) {
+    boatRoot.traverse((o) => {
+      if (winchPost) return;
+      if (o.name && /winch/i.test(o.name)) winchPost = o;
+    });
+  }
 }
 
 export function updateLines(world: WorldState, dt: number): void {
   if (!root) return;
+  refreshWinchPost();
   const fights = world.tether.fights;
   root.visible = fights.length > 0; // boat fights (M4) render the line too
   if (!root.visible) {

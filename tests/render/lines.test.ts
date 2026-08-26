@@ -1,7 +1,8 @@
 // LINES — T10 line-render acceptance (plan 02 §9): the pure geometry/colour
 // helpers the render module uses, pinned so the sag and 3-stop tension colour
-// behave as specced. The visual (draw calls, readability over fog) is checked
-// by the browser screenshot; this pins the math.
+// behave as specced. Task t4 moved the palette to the art-bible filament:
+// green → amber (~70%) → red (near snap). The visual (draw calls, readability
+// over fog) is checked by the browser screenshot; this pins the math.
 
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
@@ -14,30 +15,30 @@ function hexAt(tension: number): string {
   return `#${c.getHexString()}`;
 }
 
-describe('line tension colour (green → white → red)', () => {
+describe('line tension colour (green → amber → red)', () => {
   it('is green at 0 tension', () => {
-    expect(hexAt(0)).toBe('#22c55e');
+    expect(hexAt(0)).toBe('#33ff88');
   });
 
-  it('is white at the ~60 warn stop', () => {
-    // lerped stop sits at 60% of the ceiling; exactly 60 → pure white
-    expect(hexAt(60)).toBe('#ffffff');
+  it('is amber at the ~70 warn stop', () => {
+    // lerped stop sits at 70% of the ceiling; exactly 70 → pure amber
+    expect(hexAt(70)).toBe('#ffcc44');
   });
 
   it('is red at the ceiling', () => {
-    expect(hexAt(100)).toBe('#ef4444');
+    expect(hexAt(100)).toBe('#ff3344');
   });
 
   it('clamps out-of-range tension', () => {
-    expect(hexAt(-5)).toBe('#22c55e');
-    expect(hexAt(150)).toBe('#ef4444');
+    expect(hexAt(-5)).toBe('#33ff88');
+    expect(hexAt(150)).toBe('#ff3344');
   });
 
-  it('blends monotonically green → white → red', () => {
-    const stops = [0, 30, 60, 80, 100].map((t) => hexAt(t));
-    expect(stops[1] !== stops[0]).toBe(true); // midway to white
+  it('blends monotonically green → amber → red', () => {
+    const stops = [0, 30, 70, 85, 100].map((t) => hexAt(t));
+    expect(stops[1] !== stops[0]).toBe(true); // midway to amber
     expect(stops[3] !== stops[2]).toBe(true); // toward red
-    expect(stops[4] === '#ef4444').toBe(true);
+    expect(stops[4] === '#ff3344').toBe(true);
   });
 });
 
