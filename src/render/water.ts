@@ -143,7 +143,14 @@ void main() {
   // both bounded by the same ranged falloff.
   vec3 rl = reflect(-ln, n);
   float lspec = pow(max(dot(rl, viewDir), 0.0), 28.0);
-  vec3 lanternGlow = uLanternColor * atten * uLanternIntensity * (lspec * 0.28 + 0.045);
+  // The direct warm disc must hug the hull: at the light's full 16 m range the
+  // faint amber over near-black mixed into a mud-brown wash that read as a
+  // shadow FOLLOWING the boat (the moonlit facets beyond it were brighter).
+  // Tight quartic pool (~7 m, most energy inside ~4 m) lets the dark water
+  // close around a small lamp-lit circle instead. The view-dependent specular
+  // streak keeps the longer ranged falloff.
+  float pool = pow(clamp(1.0 - dist / 7.0, 0.0, 1.0), 2.0);
+  vec3 lanternGlow = uLanternColor * uLanternIntensity * (lspec * 0.28 * atten + 0.05 * pool * pool);
 
   // Subtle moon specular so a glint path rakes across the swells.
   vec3 hv = normalize(uMoonDir + viewDir);
