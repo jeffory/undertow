@@ -32,6 +32,7 @@ import { updateBottledLight } from '../systems/bottledLight';
 import { updateBarks } from '../systems/barks';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
+import { updateFightTutorial } from '../ui/fightTutorial';
 import { updateRestorationUI } from '../ui/restorationUI';
 import { updateBarkOverlay } from '../ui/barkOverlay';
 import { updateHud } from '../ui/hud';
@@ -183,6 +184,7 @@ function ui(world: WorldState, _dt: number): void {
   updateHud(world);
   updateCastPrompt(world);
   updateDescentPrompt(world);
+  updateFightTutorial(world);
   updateRestorationUI(world);
   updateBarkOverlay(world);
   updateBestiaryToggle(world);
