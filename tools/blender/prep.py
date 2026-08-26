@@ -29,6 +29,7 @@ Plain argparse; exits nonzero on any failure.
 import argparse
 import os
 import sys
+import tempfile
 
 
 def parse_args(argv):
@@ -538,6 +539,13 @@ def render_contact_sheet(obj, out_path):
         ("top", (0.0, 0.0, 1.0)),
     ]
 
+    # Per-PROCESS scratch dir for the four cells: a batch round preps several
+    # assets at once (eight buildings, task t20), and the shared /tmp path had
+    # the parallel runs overwriting each other's cells — contact sheets that
+    # showed four different assets. The pid keeps each run's cells its own.
+    cell_dir = os.path.join(tempfile.gettempdir(), f"prep_cells_{os.getpid()}")
+    os.makedirs(cell_dir, exist_ok=True)
+
     cell = 0
     for name, look in views:
         lookv = mathutils.Vector(look).normalized()
@@ -554,7 +562,7 @@ def render_contact_sheet(obj, out_path):
         scn.render.image_settings.file_format = "PNG"
         scn.render.resolution_x = 512
         scn.render.resolution_y = 512
-        scn.render.filepath = f"/tmp/prep_cell_{name}.png"
+        scn.render.filepath = os.path.join(cell_dir, f"{name}.png")
         bpy.ops.render.render(write_still=True)
         cell += 1
 
@@ -563,7 +571,7 @@ def render_contact_sheet(obj, out_path):
 
     cells = []
     for name, _ in views:
-        p = f"/tmp/prep_cell_{name}.png"
+        p = os.path.join(cell_dir, f"{name}.png")
         cells.append(PImage.open(p).convert("RGBA"))
     sheet = PImage.new("RGBA", (1024, 1024))
     sheet.paste(cells[0], (0, 0))

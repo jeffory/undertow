@@ -208,6 +208,9 @@ assert(closed, 'CLOSE REGISTER dismissed the overlay');
 await sleep(400);
 assert((await page.evaluate(() => document.querySelector('#restoration'))) === null, 'the overlay is out of the DOM');
 
+// A restored building stands as the STUB immediately and swaps to its real
+// generated mesh (public/assets/town/<id>.glb) once that lands, so the gate
+// counts PRESENCE — stub instances plus swapped models — not one or the other.
 const scene = await page.evaluate(() => {
   const root = window.__scene?.getObjectByName('town:root');
   if (!root) return null;
@@ -217,14 +220,21 @@ const scene = await page.evaluate(() => {
     bodies: byName('town:bodies')?.count ?? -1,
     roofs: byName('town:roofs')?.count ?? -1,
     windows: byName('town:windows')?.count ?? -1,
+    models: byName('town:models')?.children.length ?? -1,
   };
 });
 assert(scene, 'the town render group exists in the scene (town:root)');
 assert(scene && scene.visible === true, 'the town group is visible once a building stands');
-assert(scene && scene.bodies === 1, `exactly one building body instance is drawn (${scene?.bodies})`);
-assert(scene && scene.roofs === 1 && scene.windows === 1, 'roof + warm window instances match the body count');
+assert(
+  scene && scene.bodies + scene.models === 1,
+  `exactly one building stands (stub ${scene?.bodies} + mesh ${scene?.models})`,
+);
+assert(
+  scene && scene.roofs === scene.bodies && scene.windows === scene.bodies,
+  'roof + warm window instances match the stub body count',
+);
 m = await meta();
-assert(m && m.instances === 1, 'the render seam agrees: 1 instance');
+assert(m && m.instances === 1, 'the render seam agrees: 1 building on the street');
 
 // Restore three more so the street reads as a street, then compose the shot.
 for (const id of ['chandlery', 'post-office', 'bell-tower']) {
@@ -233,8 +243,12 @@ for (const id of ['chandlery', 'post-office', 'bell-tower']) {
 }
 await waitFor(async () => (await meta())?.restored.length === 4, 4000);
 await sleep(500);
-const four = await page.evaluate(() => window.__scene?.getObjectByName('town:bodies')?.count ?? -1);
-assert(four === 4, `four buildings instanced on the shore (${four})`);
+const four = await page.evaluate(() => {
+  const root = window.__scene?.getObjectByName('town:root');
+  return (root?.getObjectByName('town:bodies')?.count ?? 0) +
+    (root?.getObjectByName('town:models')?.children.length ?? 0);
+});
+assert(four === 4, `four buildings stand on the shore (${four})`);
 
 // Compose the shore shot: look down the street from the lighthouse side, with
 // the ?debug scaffolding stripped so the frame reads as the game.
@@ -264,7 +278,11 @@ assert(m2 && m2.restored.length === 4, `the save persisted across a reload (${m2
 assert(m2 && m2.metaState.memories === 25, `the purse persisted, debited for all four (${m2?.metaState.memories})`);
 assert(reloaded && reloaded.dread === 8, `the next run opens the water at Dread 8 = 2 × 4 (${reloaded?.dread})`);
 assert(reloaded && reloaded.startedAt === 8, 'run.startedAtDread stamped to 8');
-const inst = await page.evaluate(() => window.__scene?.getObjectByName('town:bodies')?.count ?? -1);
+const inst = await page.evaluate(() => {
+  const root = window.__scene?.getObjectByName('town:root');
+  return (root?.getObjectByName('town:bodies')?.count ?? 0) +
+    (root?.getObjectByName('town:models')?.children.length ?? 0);
+});
 assert(inst === 4, `the restored street is back on the shore after the reload (${inst})`);
 
 await browser.close();

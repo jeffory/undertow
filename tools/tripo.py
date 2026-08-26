@@ -26,6 +26,87 @@ from pathlib import Path
 
 from tripo3d import TripoClient
 
+# --- Cloudflare guard ----------------------------------------------------------
+# api.tripo3d.ai sits behind Cloudflare, which serves a managed challenge
+# ("Just a moment...", HTTP 403 HTML) to the SDK's hand-rolled raw-socket
+# requests — they carry no User-Agent and their TLS/header shape does not look
+# like a browser's, so every call died with
+#   `HTTP 403: Failed to parse response as JSON. Response: <!DOCTYPE html>...`
+# urllib with a browser User-Agent sails straight through, so swap the
+# transport: keep the SDK's request-building and response-parsing contract
+# (returns parsed JSON, raises TripoAPIError / TripoRequestError) and only
+# replace the socket layer underneath it.
+_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
+
+def _install_urllib_transport() -> None:
+    import shutil
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    from tripo3d.client_impl import ClientImpl
+    from tripo3d.exceptions import TripoAPIError, TripoRequestError
+
+    def _headers(extra=None):
+        h = {"User-Agent": _UA, "Accept": "*/*"}
+        h.update(extra or {})
+        return h
+
+    async def _request(self, method, path, params=None, json_data=None, data=None, headers=None):
+        url = self._url(path)
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+        hdrs = _headers(headers)
+        hdrs["Authorization"] = f"Bearer {self.api_key}"
+        body = data
+        if json_data is not None:
+            body = json.dumps(json_data).encode("utf-8")
+            hdrs["Content-Type"] = "application/json"
+
+        def fetch():
+            req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    return resp.status, resp.read()
+            except urllib.error.HTTPError as exc:
+                return exc.code, exc.read()
+
+        status, raw = await asyncio.to_thread(fetch)
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            raise TripoRequestError(
+                status_code=status,
+                message=f"Failed to parse response as JSON. Response: {raw.decode('utf-8', 'replace')[:200]}...",
+            )
+        if status >= 400:
+            if "code" in payload and "message" in payload:
+                raise TripoAPIError(
+                    code=payload["code"],
+                    message=payload["message"],
+                    suggestion=payload.get("suggestion"),
+                )
+            raise TripoRequestError(status_code=status, message=f"Request failed: {payload}")
+        return payload
+
+    async def _download_file(self, url, output_path):
+        def fetch():
+            req = urllib.request.Request(url, headers=_headers())
+            with urllib.request.urlopen(req) as resp, open(output_path, "wb") as fh:
+                shutil.copyfileobj(resp, fh)
+
+        await asyncio.to_thread(fetch)
+
+    ClientImpl._request = _request
+    ClientImpl.download_file = _download_file
+
+
+_install_urllib_transport()
+
 DEFAULT_OUT = "assets/generated"
 
 

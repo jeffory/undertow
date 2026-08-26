@@ -66,25 +66,44 @@ function flattenMaterials(root: THREE.Object3D, tint: THREE.Color | null): void 
   });
 }
 
+// Ids whose fetch has already been kicked off (loaded or in flight, and also
+// the ones that FAILED — a failed asset is not retried, it just keeps its
+// primitive fallback forever rather than re-fetching every frame).
+const requested = new Set<string>();
+
+// Start one asset's load. The cache is shared with the manifest path, so
+// getAsset()/hasAsset() work exactly the same for an on-demand asset. Repeat
+// calls for the same id are no-ops, which makes this safe to call from a
+// per-frame update (render/town.ts calls it for each restored building).
+export function requestAsset(id: string, url: string, tint?: string): void {
+  if (requested.has(id)) return;
+  requested.add(id);
+  makeLoader().load(
+    url,
+    (gltf) => {
+      flattenMaterials(gltf.scene, tint ? new THREE.Color(tint) : null);
+      loaded.set(id, { scene: gltf.scene, clips: gltf.animations ?? [] });
+    },
+    undefined,
+    (err) => {
+      // Network/parse failure — keep the primitive fallback, don't crash.
+      console.warn(`[assets] failed to load '${id}' from ${url}:`, err);
+    }
+  );
+}
+
 // Kick off loads for every manifest entry. Failures are logged as warnings and
 // leave the entry missing so the caller falls back to its primitive.
+//
+// The manifest is the BOOT set: things every session needs (keeper, boat,
+// lighthouse, rocks). Assets that only some saves ever show — the town's eight
+// buildings, which a fresh save never draws — are fetched on demand through
+// requestAsset() instead, so a first run pays for none of them.
 export function loadAssets(): void {
   for (const id of Object.keys(MANIFEST)) {
     const entry = MANIFEST[id];
     if (!entry) continue;
-    makeLoader().load(
-      entry.url,
-      (gltf) => {
-        const tint = entry.tint ? new THREE.Color(entry.tint) : null;
-        flattenMaterials(gltf.scene, tint);
-        loaded.set(id, { scene: gltf.scene, clips: gltf.animations ?? [] });
-      },
-      undefined,
-      (err) => {
-        // Network/parse failure — keep the primitive fallback, don't crash.
-        console.warn(`[assets] failed to load '${id}' from ${entry.url}:`, err);
-      }
-    );
+    requestAsset(id, entry.url, entry.tint);
   }
 }
 

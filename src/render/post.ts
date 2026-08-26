@@ -128,8 +128,13 @@ export function updatePost(world: WorldState, dt: number): void {
 // the screen. When effective dread is 0 it just renders directly — free.
 export function compositeScene(ctx: RenderContext): void {
   // Camera-roll tilt (tier-4 dread) — applied here, after the renderer's
-  // camera.lookAt, so it survives to the actual render.
-  ctx.camera.rotation.z = tilt;
+  // camera.lookAt, so it survives to the actual render. It is a ROLL ABOUT THE
+  // VIEW AXIS, so rotate the camera on its own local Z rather than writing
+  // `rotation.z`: writing the euler component zeroed the roll term lookAt() had
+  // baked in for any camera that is not looking straight down −Z, which visibly
+  // canted the horizon in every obliquely-composed shot (the town street shots
+  // caught it) even at dread 0.
+  if (tilt !== 0) ctx.camera.rotateZ(tilt);
 
   ensureReady(ctx);
   if (!mat || !rt || !quadScene || !quadCamera) {

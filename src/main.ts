@@ -25,7 +25,7 @@ import { BUILDINGS } from './content/buildings';
 import { restore, restoredIds, startingDreadFor } from './meta/restoration';
 import { unlockContextFor } from './meta/runMeta';
 import { emitTownEvent, peekTownEvents } from './meta/townEvents';
-import { townInstanceCount } from './render/town';
+import { townBuildingCount, townInstanceCount, townModelCount } from './render/town';
 import { PHASE_LENGTH_S } from './game/clock';
 import * as THREE from 'three';
 
@@ -124,7 +124,12 @@ if (/[?&]debug/.test(search)) {
       box: save.box,
       restored: restoredIds(save.metaState),
       startingDread: startingDreadFor(save.metaState),
-      instances: townInstanceCount(),
+      // buildings standing on the street, however they are drawn: `instances`
+      // is the count the save's restored list must agree with, `stubs` and
+      // `models` say how many are still the primitive vs. the generated mesh.
+      instances: townBuildingCount(),
+      stubs: townInstanceCount(),
+      models: townModelCount(),
       events: peekTownEvents(),
     };
   };
@@ -172,6 +177,35 @@ if (/[?&]debug/.test(search)) {
     world.player.x = slot.x;
     world.player.z = slot.z;
     return slot;
+  };
+  // t20 seam (tools/town-street.mjs): the Schoolhouse's ledger row is gated on
+  // `zoneReached: 3`, which meta/runMeta.ts DERIVES from the run log rather
+  // than storing — so a shot driver that wants the whole street standing has to
+  // put a deep run in the log. This appends one finished run that descended
+  // `n − 1` sinkholes; it touches nothing but the save's run history.
+  (window as unknown as { __logDeepRun: (n: number) => void }).__logDeepRun = (n: number) => {
+    void updateSave((s) => ({
+      ...s,
+      runs: [
+        ...s.runs,
+        {
+          seed: 0,
+          source: 'random' as const,
+          clockPhaseEnd: 'night' as const,
+          haul: [],
+          extracted: true,
+          memoriesTotal: 0,
+          xpTotal: 0,
+          dreadPeak: 0,
+          startedAtDread: 0,
+          draggersLand: 0,
+          bagmanCaught: false,
+          sinkholesDescended: Math.max(0, n - 1),
+          bestiary: [],
+          sundries: [],
+        },
+      ],
+    }));
   };
   (window as unknown as { __restore: (id: string) => unknown }).__restore = (id: string) => {
     const save = getSave();
