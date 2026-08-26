@@ -105,7 +105,9 @@ describe('every species builds a readable fish', () => {
       for (const pl of params.finPlacement) {
         finVerts += pl.kind === 'caudal' ? 5 : pl.kind === 'ridge' ? 4 : pl.kind === 'pectoral' ? 6 : 3;
       }
-      expect(count, sp.id).toBe(ringVerts + finVerts);
+      const jawVerts = params.jawSplit > 0.35 ? 5 : 0;
+      const teeth = params.jawSplit > 0.55 ? (params.jawSplit > 0.85 ? 5 : params.jawSplit > 0.7 ? 4 : 3) : 0;
+      expect(count, sp.id).toBe(ringVerts + finVerts + jawVerts + teeth * 3);
       expect(finVerts, sp.id).toBeGreaterThan(0);
     }
   });

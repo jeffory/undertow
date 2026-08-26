@@ -153,12 +153,18 @@ export function buildFishRig(params: FishParams): FishRig {
 
   const baseRadius = total * BASE_RADIUS_FRAC;
 
-  // head / snout profile (head ring smaller than body + a jaw hint)
+  // head / snout profile (head ring smaller than body + a jaw hint). The snout
+  // param SHAPES the head (task t6): blunt <0.35 widens the whole front into a
+  // bulldog face, needle >0.7 narrows the snout mid and pulls the nose forward.
   const headGirth = params.girthCurve[n - 1] ?? 0.4;
   const headR = headGirth * baseRadius * HEAD_RATIO;
   const snout = params.snout ?? 0.5;
-  const snoutLen = (lengths[n - 1] ?? 0.5) * (0.55 + snout * 0.95);
-  const jawDrop = params.jawSplit * headR * 0.45;
+  const snoutLenMult = snout > 0.7 ? 1.25 : 1; // needle nose pulled further forward
+  const snoutLen = (lengths[n - 1] ?? 0.5) * (0.55 + snout * 0.95) * snoutLenMult;
+  // profile-shaped head ring radius + snout-mid fraction (0.55 = classic taper)
+  const headRingR = snout < 0.35 ? headR * 1.15 : headR;
+  const snoutMidFrac = snout < 0.35 ? 0.85 : snout > 0.7 ? 0.35 : 0.55;
+  const jawDrop = params.jawSplit * headRingR * 0.45;
 
   // ring layout: body rings 0..n-1 (girthCurve), head ring n, snout mid ring n+1
   const ringZ: number[] = [];
@@ -170,10 +176,10 @@ export function buildFishRig(params: FishParams): FishRig {
     ringSeg.push(i);
   }
   ringZ.push(segZ[n]!);
-  ringR.push(headR);
+  ringR.push(headRingR);
   ringSeg.push(n - 1);
   ringZ.push(segZ[n]! + snoutLen * 0.55);
-  ringR.push(headR * 0.55);
+  ringR.push(headRingR * snoutMidFrac);
   ringSeg.push(n - 1);
   const rings = ringZ.length; // n + 2
 
@@ -184,7 +190,12 @@ export function buildFishRig(params: FishParams): FishRig {
     finVerts += pl.kind === 'caudal' ? 5 : pl.kind === 'ridge' ? 4 : pl.kind === 'pectoral' ? 6 : 3;
   }
   const eyeCount = params.eyeCount;
-  const count = rings * RING_RADIAL + 2 + finVerts + eyeCount * 8;
+  // morphology extras: underslung jaw wedge (5 verts) + teeth strip (3/tooth).
+  // Every conditional vert is counted here so the arrays are exactly the size
+  // of what slot()/putAt() emit — the vi!==count throw stays a hard guarantee.
+  const jawVerts = params.jawSplit > 0.35 ? 5 : 0;
+  const teethCount = params.jawSplit > 0.55 ? (params.jawSplit > 0.85 ? 5 : params.jawSplit > 0.7 ? 4 : 3) : 0;
+  const count = rings * RING_RADIAL + 2 + finVerts + eyeCount * 8 + jawVerts + teethCount * 3;
 
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
@@ -360,11 +371,11 @@ export function buildFishRig(params: FishParams): FishRig {
   if (eyeCount > 0) {
     // just behind the head ring — an eye forward on the snout reads as a nose
     const eyeZ = segZ[n]! - snoutLen * 0.2;
-    const eyeRad = headR * 1.08;
+    const eyeRad = headRingR * 1.08;
     // Eye size is proportional to the HEAD, never absolute: the old 0.09 m
     // floor exceeded small species' entire head radius and rendered as a giant
     // box frame swallowing the face.
-    const eyeS = headR * clamp(params.eyeSize * 2.2, 0.24, 0.48);
+    const eyeS = headRingR * clamp(params.eyeSize * 2.2, 0.24, 0.48);
     // slightly above the midline, like a real fish — not on the equator
     const eyeAngles =
       eyeCount === 1
@@ -403,6 +414,47 @@ export function buildFishRig(params: FishParams): FishRig {
       tri(rim + 3, pupil, pupil + 3);
       tri(pupil, pupil + 1, pupil + 2);
       tri(pupil, pupil + 2, pupil + 3);
+    }
+  }
+
+  // UNDERSLUNG JAW — a wedge hanging below the snout, anchored at the head
+  // ring's underside, extending forward to just short of the nose tip, dropped
+  // by jawDrop into the open gape the concepts want. Head colour darkened ~0.6.
+  if (jawVerts > 0) {
+    const hz = segZ[n]!;
+    const end = hz + snoutLen;
+    const rootY = -headRingR;
+    const jc = new THREE.Color(head).multiplyScalar(0.6);
+    const a = slot(5);
+    putAt(a, 0, rootY, hz, jc, n - 1);
+    putAt(a + 1, 0, rootY - jawDrop * 0.7, hz + snoutLen * 0.2, jc, n - 1);
+    putAt(a + 2, 0, rootY - jawDrop * 1.2, hz + snoutLen * 0.55, jc, n - 1);
+    putAt(a + 3, 0, rootY - jawDrop * 0.75, hz + snoutLen * 0.8, jc, n - 1);
+    putAt(a + 4, 0, rootY - jawDrop * 0.45, end - snoutLen * 0.05, jc, n - 1);
+    tri(a, a + 1, a + 2);
+    tri(a, a + 2, a + 3);
+    tri(a, a + 3, a + 4);
+  }
+
+  // TEETH — a zigzag strip of small pale triangles along the upper snout
+  // underside, pointing down into the jaw gap (a hint, not a crocodile).
+  if (teethCount > 0) {
+    const hz = segZ[n]!;
+    const tc = new THREE.Color(0xe8e4d4);
+    const toothLen = headRingR * 0.16;
+    const a = slot(teethCount * 3);
+    for (let t = 0; t < teethCount; t++) {
+      const f0 = 0.25 + (0.6 * t) / teethCount;
+      const f1 = 0.25 + (0.6 * (t + 1)) / teethCount;
+      const z0 = hz + snoutLen * f0;
+      const z1 = hz + snoutLen * f1;
+      // upper snout underside: linear taper from the head underside to the drop
+      const yBase = -headRingR + (-jawDrop + headRingR) * ((f0 + f1) / 2);
+      const tip = a + t * 3;
+      putAt(tip, 0, yBase, z0, tc, n - 1);
+      putAt(tip + 1, 0, yBase, z1, tc, n - 1);
+      putAt(tip + 2, 0, yBase - toothLen, (z0 + z1) / 2, tc, n - 1);
+      tri(tip, tip + 2, tip + 1);
     }
   }
 
