@@ -77,9 +77,15 @@ export function updateLantern(world: WorldState, dt: number): void {
   // Follow the boat in boat mode (M0); on foot (M1) the lantern rides with the
   // player, hovering above the keeper's head like a carried lamp.
   const foot = world.mode === 'foot';
-  const x = foot ? world.player.x : world.boat.x;
-  const z = foot ? world.player.z : world.boat.z;
-  const y = foot ? 1.7 : world.boat.y + 0.7;
+  // Boat: the lantern hangs at the BOW, ahead of the keeper — so the keeper
+  // reads as a dark shape against his own light and the glow pool leads the
+  // boat (USER art direction). Foot: carried at head height as before.
+  const b = world.boat;
+  const bowX = b.x + Math.sin(b.heading) * 1.45;
+  const bowZ = b.z + Math.cos(b.heading) * 1.45;
+  const x = foot ? world.player.x : bowX;
+  const z = foot ? world.player.z : bowZ;
+  const y = foot ? 1.7 : b.y + 0.85;
   light.position.set(x, y, z);
   bulb.position.set(x, y, z);
   // Gentle bob so the lantern rides the boat's motion.

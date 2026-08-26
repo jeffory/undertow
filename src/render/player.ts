@@ -186,6 +186,23 @@ function trySwap(): void {
 // Wire up the mixer if the loaded keeper carries clips. Everything here is
 // optional: no clips (or no 'idle') means no mixer, and the model just stands
 // there the way the static keeper always has.
+// Swap the keeper's warm emissive lift per mode (cheap: only writes when the
+// value actually changes). Aboard, the bow lantern owns the light and the
+// emissive would keep the silhouette glowing.
+let curEmissive = -1;
+function setKeeperEmissive(hex: number): void {
+  if (curEmissive === hex || !modelGroup) return;
+  curEmissive = hex;
+  modelGroup.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (m instanceof THREE.MeshLambertMaterial) m.emissive.setHex(hex);
+    }
+  });
+}
+
 function bindClips(model: THREE.Group): void {
   const clips = getAssetClips('keeper');
   if (clips.length === 0) return;
@@ -236,6 +253,11 @@ export function updatePlayer(world: WorldState, dt: number): void {
   // the deck of the bobbing hull — the empty self-sailing boat read is gone.
   // The hull's bob height is world.boat.y; the dinghy's deck sits ~0.32 above.
   if (!foot) {
+    // Aboard, the bow lantern owns the lighting: kill the keeper's own warm
+    // fill so his camera side falls dark and he reads as a shape against his
+    // own light (USER art direction). Foot mode restores the fill below.
+    if (fillLight) fillLight.intensity = 0.5;
+    setKeeperEmissive(0x140f08); // near-none: the silhouette must go dark
     const b = world.boat;
     const ox = 0;
     const oz = -0.25; // a step aft of centre, clear of the bench
@@ -252,6 +274,8 @@ export function updatePlayer(world: WorldState, dt: number): void {
     return;
   }
   root.scale.setScalar(1);
+  if (fillLight) fillLight.intensity = FILL_INTENSITY;
+  setKeeperEmissive(KEEPER_EMISSIVE);
 
   const p = world.player;
   root.position.x = p.x;
