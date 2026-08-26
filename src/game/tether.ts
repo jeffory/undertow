@@ -89,12 +89,61 @@ export interface TetherFight {
   // "scales pullForce so the fight starts heavy and lightens". Same seam shape
   // as reelRate — undefined → ×1, so every other fight is untouched.
   pullForceMult?: number;
+  // A THIRD ENTITY riding this line (05 §2.2): the Snatcher's second mouth.
+  // Absent on every other fight — see TetherRider above for why this is a
+  // rider and not a third endpoint.
+  rider?: TetherRider | null;
   tension: number;            // 0..line.tensionCeiling
   reel: ReelState;
   cut: CutState;
   land: LandState;
   snap: SnapState;
   drag: DragState;
+}
+
+// --- the THIRD ENTITY on the line (plan 05 §2.2, task t28) -----------------------
+//
+// "Snatchers spawn actively and try to steal your hooked catch — a second mouth
+//  on the line; kill it or lose the catch (t2 must allow a third entity on the
+//  line — interface flagged)."
+//
+// THE INTERFACE, chosen: a third entity is a RIDER on an existing two-endpoint
+// fight — never a third endpoint. The constraint stays the one distance
+// constraint every fight in the game already is; what the rider adds is a
+// declared, data-only load on that one line:
+//
+//   • `pullForceMult` STACKS onto the fight's own (the Congregation's mass-pool
+//     lever is the fight's; the Snatcher's is the rider's) — see
+//     `effectivePullMult`, which is the single place either is read;
+//   • `tensionBias` is a steady tension/s the constraint adds while the rider
+//     holds on — the steal-timer pressure, expressed in the one currency the
+//     player already reads.
+//
+// Why not a third ENDPOINT: a 3-body distance constraint is a different solver
+// (two segments, two tensions, a 3-way mass split) and every zone-1/2 fight's
+// correction math would move under it. A rider is additive, defaults to absent,
+// and cannot perturb a fight that has none — which is what "zones 1-2 stay
+// byte-identical" actually costs.
+
+export type RiderKind = 'snatcher';
+
+export interface TetherRider {
+  kind: RiderKind;
+  owner: EndpointOwner; // 'third' — it is neither the hauler nor the catch
+  on: 'a' | 'b';        // the endpoint it has bitten down on (the catch end)
+  pullForceMult: number; // stacks onto TetherFight.pullForceMult
+  tensionBias: number;   // tension/s added while it holds
+}
+
+// The one read of a fight's pull multiplier: the fight's own lever × its
+// rider's. Undefined on either side is ×1, so a plain fight is untouched.
+export function effectivePullMult(fight: TetherFight): number {
+  return (fight.pullForceMult ?? 1) * (fight.rider ? fight.rider.pullForceMult : 1);
+}
+
+// The steady tension/s a rider adds (0 when the line carries none).
+export function riderTensionBias(fight: TetherFight): number {
+  return fight.rider ? fight.rider.tensionBias : 0;
 }
 
 export interface TetherState {
@@ -164,7 +213,12 @@ export type TetherEvent =
   | { type: 'enterWaterPhase'; breathSec: number; occupied: boolean; sinkingHaul?: boolean };
 
 // 03 §3.2 run-reducer mapping (A.6): one stream, many subscribers.
-export type RunKind = 'tether/landed' | 'tether/cut' | 'tether/snapped' | 'tether/pulledIn';
+export type RunKind =
+  | 'tether/landed'
+  | 'tether/cut'
+  | 'tether/snapped'
+  | 'tether/pulledIn'
+  | 'tether/stolen'; // 05 §2.2 — a Snatcher finished its steal clock
 
 export function toRunKinds(ev: TetherEvent): RunKind | null {
   switch (ev.type) {
@@ -176,6 +230,8 @@ export function toRunKinds(ev: TetherEvent): RunKind | null {
       return 'tether/snapped';
     case 'pulledUnder':
       return 'tether/pulledIn';
+    case 'catchStolen':
+      return 'tether/stolen';
     default:
       return null;
   }

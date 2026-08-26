@@ -29,6 +29,8 @@ import type { BoatCombatState } from '../boat/boatCombat';
 import { createBoatCombat } from '../boat/boatCombat';
 import type { CongregationState } from '../bosses/congregation';
 import { createCongregationState } from '../bosses/congregation';
+import type { SnatcherState } from '../enemies/snatcher';
+import { createSnatcherState } from '../enemies/snatcher';
 import { MIN_ZONE } from './zones';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
@@ -302,6 +304,11 @@ export interface RunState {
   // first time the run reaches the Kelp Graves. The flag lives on the run, not
   // on the lake, so a re-generated zone-2 surface never re-seeds it.
   bossSeeded: boolean;
+  // --- M7 (plan 05 §2.2): catches a Snatcher's steal clock took off the line.
+  // The reducer treats a steal as an abandon variant (nothing recorded, no land
+  // gain) and counts it here — the seam the run receipt's own "stolen" line
+  // reads when it lands.
+  stolen: number;
 }
 
 export function createRunState(startedAt: number, startedAtDread: number): RunState {
@@ -331,6 +338,7 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     descend: { held: 0, buoyId: null },
     sinking: [],
     bossSeeded: false,
+    stolen: 0,
   };
 }
 
@@ -381,6 +389,19 @@ export interface TownshipState {
   read: Record<number, boolean>;
   /** One env line waiting for the ui overlay; the overlay clears it. */
   pendingEnv: PendingEnvText | null;
+  /**
+   * 05 §2.2 — one Snatcher moment line waiting for the bark toast (latch /
+   * split tension / kill / steal). The ui system consumes and clears it, in the
+   * same one-at-a-time way `town.pendingBark` works.
+   */
+  pendingMoment: PendingMoment | null;
+}
+
+export interface PendingMoment {
+  /** The moment it fired on (content/snatcherLines.ts SnatcherMoment). */
+  trigger: string;
+  title: string;
+  text: string;
 }
 
 export interface PendingEnvText {
@@ -390,7 +411,7 @@ export interface PendingEnvText {
 }
 
 export function createTownshipState(): TownshipState {
-  return { onRoof: null, nearEnv: null, read: {}, pendingEnv: null };
+  return { onRoof: null, nearEnv: null, read: {}, pendingEnv: null, pendingMoment: null };
 }
 
 export interface PendingBark {
@@ -409,6 +430,7 @@ export interface WorldState {
   boat: BoatState;
   boatCombat: BoatCombatState; // 03 §6 — hull / winch / Dragger (night boat fight)
   congregation: CongregationState; // 05 §2.1 — the Kelp Graves boss (swarm + mass pool)
+  snatcher: SnatcherState; // 05 §2.2 — the Township's second mouth on the line
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
@@ -470,6 +492,7 @@ export function createWorld(seed = 1): WorldState {
     boat: { x: 0, y: 0, z: 0, heading: 0, speed: 0, atWinchPost: false, atCleat: false },
     boatCombat: createBoatCombat(),
     congregation: createCongregationState(),
+    snatcher: createSnatcherState(),
     combat: {
       comboStage: 0,
       comboWindow: 0,

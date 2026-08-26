@@ -27,6 +27,7 @@ import { updateSpawnDirectorSystem } from '../systems/spawnDirector';
 import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateBoatCombat } from '../systems/boatCombat';
 import { updateCongregation } from '../systems/congregation';
+import { updateSnatcher } from '../systems/snatcher';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
 import { updateBottledLight } from '../systems/bottledLight';
@@ -335,6 +336,11 @@ export const UPDATE_ORDER: SystemFn[] = [
   // tears members off) and BEFORE the run reducer (so the landing is a burst of
   // 12-18 records, never one boss-sized catch).
   updateCongregation,
+  // 05 §2.2: the Township's second mouth. Same two constraints as the boss
+  // above — AFTER combat (this tick's gaff hits are what kill it) and BEFORE
+  // the run reducer (so a completed steal is folded as an abandon variant in
+  // the very tick it happened).
+  updateSnatcher,
   updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
   updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)

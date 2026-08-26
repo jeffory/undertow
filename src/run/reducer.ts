@@ -104,6 +104,16 @@ export function abandonCatch(world: WorldState): void {
   world.run.activeCatch = null;
 }
 
+// STOLEN (05 §2.2) — a Snatcher's steal clock ran out. Mechanically an abandon
+// variant: nothing is recorded, no land gain is paid, and (unlike a snap or a
+// cut) no lure is spent — the line came back, the catch did not. The count is
+// the seam the run receipt's own "stolen" line reads when it lands; the small
+// Dread gain is paid by the Snatcher system, at the moment of the theft.
+export function stolenCatch(world: WorldState): void {
+  world.run.stolen++;
+  world.run.activeCatch = null;
+}
+
 // The run reducer: fold the fresh tether event stream into haul + Dread.
 export function processRunEvents(world: WorldState): void {
   for (const ev of world.tetherEvents) {
@@ -118,6 +128,9 @@ export function processRunEvents(world: WorldState): void {
       case 'cut':
       case 'pulledUnder':
         abandonCatch(world);
+        break;
+      case 'catchStolen':
+        stolenCatch(world);
         break;
       default:
         break;

@@ -32,6 +32,7 @@
 
 import type { WorldState } from '../core/world';
 import { spendStamina } from './stamina';
+import { SNATCHER_TARGET_ID } from '../enemies/snatcher';
 
 // --- tuning constants ---------------------------------------------------------
 export const REACH = 1.6; // m — gaff arc radius (light and heavy)
@@ -90,6 +91,50 @@ function lightStageDamage(stage: number): number {
   const idx = Math.min(LIGHT_DAMAGE.length - 1, Math.max(0, stage - 1));
   return LIGHT_DAMAGE[idx] ?? LIGHT_DAMAGE[0];
 }
+
+// --- M7 (plan 05 §2.2): the Snatcher is a SECOND TARGET for the SAME SWING ----
+//
+// THE KILL-VERB REUSE DECISION: no new verb, no new button, no new arc, no new
+// damage model. The gaff the keeper already owns — the light combo and the
+// heavy — is the whole kill. What the Snatcher adds is only WHERE that swing is
+// measured from, because a boat fight has no keeper standing on the water:
+//
+//   • ON FOOT the origin is the keeper and the facing is the swing's own locked
+//     facing — the ordinary arc, unchanged, "gaff combo in reach";
+//   • ABOARD the origin is the hull and the facing is the bearing from the hull
+//     to the catch: the gunwale the line actually runs over. Aboard, facing is
+//     not a driven quantity (the on-foot controller is a no-op in boat mode), so
+//     an aimed arc would be an arc nobody could aim — the side the line is on IS
+//     the aim.
+//
+// And it is only ever in that arc while it is SURFACED (enemies/snatcher.ts's
+// down/up cycle): latched, it is under, working the catch. The timing is the
+// skill; the swing is the one already in the player's hands.
+//
+// The catch's own hit test below is UNTOUCHED — it still measures from the
+// keeper exactly as it always has, so no zone-1/2 fight moves.
+export interface GaffArc {
+  x: number;
+  z: number;
+  facing: number;
+}
+
+export function snatcherGaffArc(world: WorldState): GaffArc | null {
+  const s = world.snatcher;
+  if (s.phase !== 'latched' || !s.surfaced) return null;
+  const fight = world.tether.fights.find((f) => f.id === s.fightId);
+  const fish = world.fish;
+  if (!fight || !fish) return null;
+  if (fight.anchor === 'boat') {
+    const b = world.boat;
+    return { x: b.x, z: b.z, facing: Math.atan2(fish.x - b.x, fish.z - b.z) };
+  }
+  return { x: world.player.x, z: world.player.z, facing: world.combat.swingFacing };
+}
+
+// The Snatcher's body radius for the arc test — it is a long eel, but what the
+// swing has to catch is the part of it at the gunwale.
+export const SNATCHER_HIT_RADIUS = 0.6;
 
 function startSwing(world: WorldState, isHeavy: boolean): void {
   const c = world.combat;
@@ -191,6 +236,41 @@ export function updateCombat(world: WorldState, dt: number): void {
   if (c.attackTimer > 0) world.player.facing = c.swingFacing;
 
   // Active-window hit detection — at most one hit per swing.
+  if (c.attackTimer > 0 && !c.swingHitDelivered) {
+    // M7: a surfaced Snatcher takes the swing FIRST. It is at the gunwale, on
+    // the line, between the keeper and everything else — and it is the reason
+    // the swing was thrown. Nothing here runs unless one is latched AND up.
+    const arc = snatcherGaffArc(world);
+    if (arc) {
+      const isHeavy = c.swingIsHeavy;
+      const dur = isHeavy ? HEAVY_SWING_DURATION : LIGHT_SWING_DURATION;
+      const elapsed = dur - c.attackTimer;
+      const activeStart = isHeavy ? HEAVY_ACTIVE_START : LIGHT_ACTIVE_START;
+      const activeEnd = isHeavy ? HEAVY_ACTIVE_END : LIGHT_ACTIVE_END;
+      const s = world.snatcher;
+      if (elapsed >= activeStart && elapsed < activeEnd) {
+        const arcHalf = (isHeavy ? HEAVY_ARC_DEG : LIGHT_ARC_DEG) / 2;
+        if (
+          arcCircleHit(arc.x, arc.z, arc.facing, s.x, s.z, SNATCHER_HIT_RADIUS, REACH, arcHalf)
+        ) {
+          const damage = isHeavy ? HEAVY_DAMAGE : lightStageDamage(c.comboStage);
+          const dx = s.x - arc.x;
+          const dz = s.z - arc.z;
+          const dist = Math.hypot(dx, dz) || 1;
+          const kb = isHeavy ? HEAVY_KNOCKBACK : LIGHT_KNOCKBACK;
+          c.hits.push({
+            targetId: SNATCHER_TARGET_ID,
+            damage,
+            knockbackX: (dx / dist) * kb,
+            knockbackZ: (dz / dist) * kb,
+            stagger: isHeavy ? HEAVY_STAGGER : 0,
+          });
+          c.swingHitDelivered = true;
+        }
+      }
+    }
+  }
+
   if (c.attackTimer > 0 && !c.swingHitDelivered) {
     const fish = world.fish;
     if (fish && fish.hp > 0) {

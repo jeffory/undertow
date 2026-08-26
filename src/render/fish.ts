@@ -31,9 +31,11 @@ export function initFish(scene: THREE.Scene): void {
 
 // CPU sine-spine bend: accumulated joint angles along the spine, each template
 // vertex rotated about its joint (cross-section in X/Y, spine along Z, head +Z).
-function bendRig(r: FishRig, fish: WorldState['fish']): void {
-  if (!fish) return;
-  const n = fish.spine.length;
+// Exported because it is the FISH PIPELINE, not the fish: anything built from a
+// FishParams rig bends through this one function (05 §2.2 — the Snatcher's body
+// is a species preset through the same generator, so it undulates the same way).
+export function bendFishRig(r: FishRig, spine: Float32Array): void {
+  const n = spine.length;
   if (r.segZ.length !== n + 1) return; // spine resized under us — rebuild next frame
 
   const posAttr = r.geo.attributes.position as THREE.BufferAttribute;
@@ -43,7 +45,7 @@ function bendRig(r: FishRig, fish: WorldState['fish']): void {
   let ang = 0;
   for (let i = 0; i < n; i++) {
     th[i] = ang;
-    ang += fish.spine[i] ?? 0;
+    ang += spine[i] ?? 0;
   }
 
   const jx = new Float32Array(n + 1);
@@ -125,5 +127,5 @@ export function updateFishMesh(world: WorldState, _dt: number): void {
   // hurt flash: emissive overlay scaled by remaining flash time
   FISH_MATERIAL.emissiveIntensity = Math.min(1, fish!.hitFlash / HIT_FLASH_DURATION) * 0.9;
 
-  bendRig(rig, fish);
+  bendFishRig(rig, fish!.spine);
 }

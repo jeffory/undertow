@@ -13,7 +13,7 @@
 export interface BestiaryRecord {
   id: string;
   name: string;
-  zone: 1 | 2;
+  zone: 1 | 2 | 3;
   rarity: 'C' | 'U' | 'R' | 'E' | 'Drowned' | 'Boss';
   eligibility: 1 | 2 | 3;
   category: 'catch' | 'crawler' | 'caller' | 'snatcher' | 'dragger' | 'bagman' | 'boss';
@@ -242,8 +242,29 @@ export const KELP_BESTIARY_TEXT: BestiaryRecord[] = [
   },
 ];
 
+// --- M7: the Township (zone 3) ------------------------------------------------------
+// The drowned Hollow's second mouth, transcribed VERBATIM from
+// docs/story/township.md §6 (the Snatcher Bestiary Entry). Its own array for the
+// same reason the kelp roster has one: the zone-1 id-coverage test pins that
+// roster exactly, and all three feed the single lookup below.
+export const TOWNSHIP_BESTIARY_TEXT: BestiaryRecord[] = [
+  {
+    id: 'gallows-snatcher',
+    name: 'Gallows Snatcher',
+    zone: 3,
+    rarity: 'U',
+    eligibility: 2,
+    category: 'snatcher',
+    silhouette: 'A lean, many-jointed jaw darting between submerged chimney stacks.',
+    entryFought:
+      'It waits for another mouth to take the hook before biting down on both. In Greywater Hollow, nothing is surrendered without an audit.',
+    entryWilling:
+      'It clasps its jaws around your empty hook without biting, holding the steel gently in its throat like a pledge it forgot how to make.',
+  },
+];
+
 const BY_ID = new Map<string, BestiaryRecord>(
-  [...BESTIARY_TEXT, ...KELP_BESTIARY_TEXT].map((r) => [r.id, r]),
+  [...BESTIARY_TEXT, ...KELP_BESTIARY_TEXT, ...TOWNSHIP_BESTIARY_TEXT].map((r) => [r.id, r]),
 );
 
 export function bestiaryById(id: string): BestiaryRecord | null {

@@ -16,6 +16,7 @@ import { resolveKelpSnag } from '../gen/kelp';
 import type { KelpSnagResult } from '../gen/kelp';
 import { BOAT_HULL_RADIUS } from './boatObstacle';
 import type { Anchor, TetherFight, TetherEndpoint, Vec2 } from './tether';
+import { riderTensionBias } from './tether';
 import {
   PLAYER_ENTITY,
   FISH_ENTITY,
@@ -399,6 +400,11 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
   } else {
     fight.tension -= tuning.slackDecay * dt;
   }
+  // A THIRD ENTITY on the line (05 §2.2): while a rider holds on, tension gains
+  // a steady upward bias — the steal-timer pressure, paid in the one currency
+  // the player already reads. Taut or slack: the second mouth is pulling either
+  // way. Zero on every fight without a rider, so nothing else moves.
+  fight.tension += riderTensionBias(fight) * dt;
   fight.tension = clamp(fight.tension, 0, line.tensionCeiling);
 
   // 5. SNAP (plan §3 branch 5 / §5.3) — switch on the line's SnapBehavior.

@@ -81,7 +81,7 @@ function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): bo
     return false;
   }
   if (lmbEdge) {
-    setCatch(world, d);
+    setCatchAt(world, d);
     return true;
   } else if (rmbEdge) {
     release(d);
@@ -92,12 +92,15 @@ function handlePrompt(world: WorldState, lmbEdge: boolean, rmbEdge: boolean): bo
 }
 
 // SET — roll species/params AT the commit, spawn + scale the fish, start the
-// tether fight, tag the active catch for the run reducer. The species is resolved
+// tether fight, tag the active catch for the run reducer.
+// Exported (as `setCatchAt`) so the ?debug gate drivers hook a catch through
+// THE SET PATH itself rather than through a parallel construction of their own
+// — the same precedent `hookCongregation` set. The species is resolved
 // through the bite-eligibility gate (plan 04 §8.4): an ineligible species is
 // never selected — when nothing in the tier is license-eligible the disturbance
 // DECLINES the tackle (it stays present, "disturbance present but doesn't
 // respond to the cast"), no fight starts and nothing is recorded.
-function setCatch(world: WorldState, d: Disturbance): void {
+export function setCatchAt(world: WorldState, d: Disturbance): void {
   // M6 (plan 05 §2.1): a boss ripple hooks its boss instead of rolling the tier
   // table. The gate and the hook are the only two branches the cast flow needs
   // — everything after the hook is the ordinary fight.

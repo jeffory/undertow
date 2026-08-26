@@ -27,7 +27,7 @@
 
 import type { WorldState, FishState, TetherAIMode } from '../core/world';
 import type { TetherFight } from './tether';
-import { FISH_ENTITY } from './tether';
+import { FISH_ENTITY, effectivePullMult } from './tether';
 import { FISH_TARGET_ID } from './combat';
 import { segmentCrossesKelp } from '../gen/kelp';
 
@@ -358,7 +358,9 @@ function fireLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: F
   const f = fish.tether;
   // dial 1 — live, scaled by the fight's own pull multiplier (05 §2.1: the
   // Congregation's mass pool). Undefined on every ordinary fight → ×1.
-  const force = world.tuning.pullForce * (fight.pullForceMult ?? 1);
+  // 05 §2.1 + §2.2: the fight's own pull lever (the Congregation's mass pool)
+  // COMPOSED with its rider's (a latched Snatcher's second load) — one read.
+  const force = world.tuning.pullForce * effectivePullMult(fight);
   if (f.exhausted) return; // plan 02 §3 edge case: exhausted fish never lunge
   fish.vx = ai!.pullDirX * force;
   fish.vz = ai!.pullDirZ * force;

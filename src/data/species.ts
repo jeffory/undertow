@@ -599,6 +599,53 @@ export const KELP_SPECIES: SpeciesPreset[] = [
   },
 ];
 
+// --- M7: THE TOWNSHIP (zone 3) -----------------------------------------------------
+// The drowned Hollow's second mouth (plan 05 §2.2, docs/story/township.md §6).
+// Like the KELP rows these are deliberately NOT in TIER_TABLES: a Snatcher is
+// never something a ripple rolls — it is spawned onto a LIVE FIGHT by the spawn
+// director (systems/snatcher.ts), which is the only producer of this id.
+export const TOWNSHIP_SPECIES: SpeciesPreset[] = [
+  {
+    // THE GALLOWS SNATCHER — "a lean, many-jointed jaw darting between
+    // submerged chimney stacks". Eel-like on purpose: the longest spine the
+    // generator allows, an even ribbon of girth the whole way down, a long
+    // snout and the widest jaw split in the game — it is mostly mouth, which
+    // is the entire point of the animal.
+    id: 'gallows-snatcher',
+    name: 'Gallows Snatcher',
+    rarity: 'U',
+    eligibility: 2,
+    category: 'snatcher',
+    tier: 2,
+    lengthM: 3.4,
+    spineSegments: 14,
+    girthCurve: [
+      0.1, 0.2, 0.3, 0.34, 0.33, 0.31, 0.3, 0.29, 0.28, 0.26, 0.23, 0.19, 0.15, 0.1,
+    ],
+    snout: 0.95, // all head and hinge
+    finCount: 5, // odd, wrong
+    finKinds: [D(), 'ridge'],
+    eyeCount: 2,
+    eyeSize: 0.12, // small eyes; it does not need to look at you
+    jawSplit: 0.85, // the second mouth
+    limbBudget: 1, // the "many-jointed" read the bestiary silhouette promises
+    humanRatio: 0.2,
+    swimFreq: 3.4, // fast, whipping — an eel closing on a hooked fish
+    swimAmp: 0.85,
+    palette: 2,
+    stats: { mass: 2.6, stamina: 120, pullForce: 5.6, swimSpeed: 8.4, hp: 110 },
+    patterns: { orbit: 0.3, lunge: 0.45, dive: 0.1, drag: 0.15 },
+    wrongnessInfluence: 0.7,
+    lungeCooldown: 2.2,
+    lungeStaminaCost: 16,
+    dragSpeed: 4.2,
+    dragStaminaCostPerM: 2,
+    routedDrag: false,
+  },
+];
+
+export const SNATCHER_SPECIES_ID = 'gallows-snatcher';
+
 export const CONGREGATION_SPECIES_ID = 'the-congregation';
 
 // The roster the Congregation's landing burst itemises (the boss itself is not
@@ -617,6 +664,7 @@ export const ALL_SPECIES: SpeciesPreset[] = [
   ...BOSS_AND_BAGMAN,
   ...NIGHT_SPECIES,
   ...KELP_SPECIES,
+  ...TOWNSHIP_SPECIES,
 ];
 
 const BY_ID = new Map<string, SpeciesPreset>(ALL_SPECIES.map((s) => [s.id, s]));

@@ -35,7 +35,20 @@ import { envTextOnScreen } from './ui/envTextOverlay';
 import { envReadCount } from './systems/envText';
 import { createDisturbance } from './run/disturbance';
 import { congregationRenderState } from './render/congregation';
-import { hookCongregation } from './systems/castFlow';
+import { snatcherRenderState } from './render/snatcher';
+import { snatcherToastOnScreen } from './ui/barkOverlay';
+import { haulPoint } from './systems/snatcher';
+import {
+  SNATCHER_GAFF_HP,
+  SNATCHER_TARGET_ID,
+  STEAL_SECONDS,
+  SURFACE_DOWN,
+  SURFACE_PERIOD,
+  snatcherGaffCost,
+  stealFraction,
+} from './enemies/snatcher';
+import { snatcherLines, snatcherPlaceholderCount } from './content/snatcherLines';
+import { hookCongregation, setCatchAt } from './systems/castFlow';
 import { seedCongregation } from './spawn/director';
 import { massFraction, pullForceMultFor, attachedCount, gaffTearFor } from './bosses/congregation';
 import { HEAVY_STAGGER } from './game/combat';
@@ -448,6 +461,153 @@ if (/[?&]debug/.test(search)) {
     f.x = at.x + 0.9;
     f.z = at.z;
     return { L: fight.L, eligible: fight.land.eligible };
+  };
+
+  // t28 / M7 SNATCHER seams (tools/m7b-probe.mjs): read the second mouth,
+  // drop a ripple beside the hull in the drowned street and hook it through the
+  // REAL SET path, arm the director now instead of in 6-12 s, land a gaff on the
+  // Snatcher through the same rule a real swing uses, and force the surfacing
+  // window open so the kill is testable without waiting out the cycle.
+  (window as unknown as { __snatcher: () => unknown }).__snatcher = () => {
+    const s = world.snatcher;
+    const fight = world.tether.fights.find((f) => f.id === s.fightId) ?? null;
+    const primary = world.tether.fights[0] ?? null;
+    return {
+      zone: world.run.zone,
+      phase: world.snatcher.phase,
+      fightId: s.fightId,
+      pos: { x: s.x, z: s.z },
+      speed: s.speed,
+      surfaced: s.surfaced,
+      surfaceTimer: s.surfaceTimer,
+      steal: s.steal,
+      stealFraction: stealFraction(s),
+      stealSeconds: STEAL_SECONDS,
+      gaffHp: s.gaffHp,
+      gaffHits: s.gaffHits,
+      gaffHpMax: SNATCHER_GAFF_HP,
+      spawnTimer: s.spawnTimer,
+      spawnDelay: s.spawnDelay,
+      origin: { x: s.originX, z: s.originZ },
+      armedFor: s.armedFor,
+      launches: s.launches,
+      killed: s.killed,
+      stolen: s.stolen,
+      species: s.params ? s.params.speciesId : null,
+      weightKg: s.params ? s.params.weightKg : null,
+      // the fight, seen from outside: what the rider is doing to it
+      fight: primary
+        ? {
+            id: primary.id,
+            species: primary.species,
+            anchor: primary.anchor,
+            tension: primary.tension,
+            pullForceMult: primary.pullForceMult ?? null,
+            rider: primary.rider ?? null,
+            L: primary.L,
+          }
+        : null,
+      haulAt: fight ? haulPoint(world, fight) : null,
+      distToHaul: fight
+        ? Math.hypot(haulPoint(world, fight).x - s.x, haulPoint(world, fight).z - s.z)
+        : null,
+      fish: world.fish ? { x: world.fish.x, z: world.fish.z } : null,
+      lure: world.lure.count,
+      haul: world.run.haul.length,
+      inventory: world.run.inventory.length,
+      runStolen: world.run.stolen,
+      dread: world.dread,
+      moment: world.township.pendingMoment,
+      toast: snatcherToastOnScreen(),
+      lines: snatcherLines().map((l) => ({ trigger: l.trigger, text: l.text, placeholder: l.placeholder })),
+      placeholders: snatcherPlaceholderCount(),
+      render: snatcherRenderState(),
+    };
+  };
+  // Park the hull in the drowned street and hook a ripple there through the
+  // ordinary SET path (systems/castFlow.ts setCatchAt) — the same precedent
+  // __hookCongregation set. Returns what got hooked.
+  (window as unknown as { __hookStreet: () => unknown }).__hookStreet = () => {
+    const lake = world.lake;
+    if (!lake || !lake.street) return null;
+    const st = lake.street;
+    const along = st.length * 0.5;
+    const at = { x: st.origin.x + st.dir.x * along, z: st.origin.z + st.dir.z * along };
+    world.boat.x = at.x;
+    world.boat.z = at.z;
+    world.boat.speed = 0;
+    world.boat.heading = Math.atan2(st.dir.z, st.dir.x);
+    const pos = { x: at.x + st.dir.x * 6, z: at.z + st.dir.z * 6 };
+    const d = createDisturbance(world.run.nextDisturbanceId++, pos, 2, 4242);
+    world.disturbances.push(d);
+    setCatchAt(world, d);
+    const fight = world.tether.fights[0] ?? null;
+    return fight
+      ? {
+          fightId: fight.id,
+          species: fight.species,
+          anchor: fight.anchor,
+          catch: world.run.activeCatch,
+          boat: { x: world.boat.x, z: world.boat.z },
+        }
+      : null;
+  };
+  // Arm the director NOW: the launch happens on the next sim tick instead of
+  // after the seeded 6-12 s. The launch itself still runs the real code path.
+  (window as unknown as { __armSnatcher: () => unknown }).__armSnatcher = () => {
+    const fight = world.tether.fights[0];
+    if (!fight) return null;
+    world.snatcher.armedFor = fight.id;
+    world.snatcher.spawnTimer = 0;
+    return { fightId: fight.id, spawnTimer: 0 };
+  };
+  // Hold the surfacing window open (or shut) so the gaff is testable without
+  // waiting out the down/up cycle. Same cycle, parked at a chosen point.
+  (window as unknown as { __snatcherSurface: (up?: boolean) => unknown }).__snatcherSurface = (
+    up = true,
+  ) => {
+    const s = world.snatcher;
+    s.surfaceTimer = up ? SURFACE_DOWN + 0.01 : 0;
+    s.surfaced = up;
+    return { surfaceTimer: s.surfaceTimer, surfaced: s.surfaced, period: SURFACE_PERIOD };
+  };
+  // A gaff landing on the Snatcher, through the SAME rule the system applies to
+  // a real swing (snatcherGaffCost). Like __congregationGaff it does not push a
+  // HitEvent — an out-of-band hit injected between frames is not what the
+  // in-play producer (world.combat.hits inside a tick) does; the unit tests
+  // drive that. Returns the pool left.
+  (window as unknown as { __snatcherGaff: (heavy?: boolean) => number }).__snatcherGaff = (
+    heavy = false,
+  ) => {
+    const s = world.snatcher;
+    if (s.phase !== 'latched') return -1;
+    s.gaffHits++;
+    s.gaffHp -= snatcherGaffCost(heavy ? HEAVY_STAGGER : 0);
+    return s.gaffHp;
+  };
+  // Push a REAL HitEvent onto this tick's array, tagged for the Snatcher — the
+  // in-play producer's shape, for the gate that wants the system's own kill path.
+  (window as unknown as { __snatcherHit: (heavy?: boolean) => unknown }).__snatcherHit = (
+    heavy = false,
+  ) => {
+    world.combat.hits.push({
+      targetId: SNATCHER_TARGET_ID,
+      damage: heavy ? 18 : 6,
+      knockbackX: 0,
+      knockbackZ: 0,
+      stagger: heavy ? HEAVY_STAGGER : 0,
+    });
+    return { hits: world.combat.hits.length };
+  };
+  // Run the steal clock down to `left` seconds so the theft is reachable in a
+  // gate without eight seconds of real time at 1x.
+  (window as unknown as { __snatcherSteal: (left?: number) => number }).__snatcherSteal = (
+    left = 0.05,
+  ) => {
+    const s = world.snatcher;
+    if (s.phase !== 'latched') return -1;
+    s.steal = Math.max(0, left);
+    return s.steal;
   };
 
   // t27 / M7 TOWNSHIP seams (tools/m7-probe.mjs): read what the drowned Hollow

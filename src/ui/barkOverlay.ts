@@ -59,9 +59,10 @@ function clearFadeTimer(): void {
   }
 }
 
-// Present (or replace) the toast.
-export function showBarkToast(bark: WorldState['town']['pendingBark']): void {
-  if (!bark || typeof document === 'undefined') return;
+// The one parchment note, rendered. Title bar, body, optional stamp. Never
+// stacks: a second call replaces what is in the element rather than piling up.
+function renderToast(title: string, body: string, stamp: string | null): void {
+  if (typeof document === 'undefined') return;
   ensureStyle();
   clearFadeTimer();
 
@@ -70,20 +71,19 @@ export function showBarkToast(bark: WorldState['town']['pendingBark']): void {
     toastEl.id = 'bark-toast';
     document.body.appendChild(toastEl);
   }
-  // never stacks: replace the resident + text in place
   toastEl.textContent = '';
-  const resident = document.createElement('div');
-  resident.className = 'bark-resident';
-  resident.textContent = bark.residentName.toUpperCase();
+  const head = document.createElement('div');
+  head.className = 'bark-resident';
+  head.textContent = title;
   const text = document.createElement('div');
   text.className = 'bark-text';
-  text.textContent = bark.text;
-  toastEl.appendChild(resident);
+  text.textContent = body;
+  toastEl.appendChild(head);
   toastEl.appendChild(text);
-  if (bark.maskSlipping) {
+  if (stamp) {
     const mask = document.createElement('div');
     mask.className = 'bark-mask';
-    mask.textContent = 'THE WATER IS REDDER TODAY.';
+    mask.textContent = stamp;
     toastEl.appendChild(mask);
   }
   toastEl.style.opacity = '1';
@@ -97,6 +97,45 @@ export function showBarkToast(bark: WorldState['town']['pendingBark']): void {
   }, BARK_LINGER_MS);
 }
 
+// Present (or replace) the toast.
+export function showBarkToast(bark: WorldState['town']['pendingBark']): void {
+  if (!bark) return;
+  renderToast(
+    bark.residentName.toUpperCase(),
+    bark.text,
+    bark.maskSlipping ? 'THE WATER IS REDDER TODAY.' : null,
+  );
+}
+
+// 05 §2.2 — a Snatcher moment line, in the SAME note the doorstep barks use.
+// It is the same object the player already reads mid-fight, so the second mouth
+// speaks in the Office's paper voice rather than inventing a HUD element for
+// itself. The stamp is the Schedule 6-S line the bible stamps contested
+// salvage with (docs/story/township.md §7, note-z3-04).
+const SNATCHER_STAMP = 'PARTITION APPROVED';
+
+let lastMoment: { title: string; text: string } | null = null;
+
+export function showMomentToast(moment: WorldState['township']['pendingMoment']): void {
+  if (!moment) return;
+  lastMoment = { title: moment.title, text: moment.text };
+  renderToast(moment.title, moment.text, SNATCHER_STAMP);
+}
+
+// Probe/gate readout: what the note ACTUALLY says right now. The sim's
+// `pendingMoment` is consumed by this overlay within a frame of being parked,
+// so it is never what an outside observer can read — the same reason
+// envTextOverlay exposes `envTextOnScreen()`.
+export function snatcherToastOnScreen(): { visible: boolean; title: string; text: string } {
+  const el = toastEl;
+  const visible = !!el && el.style.display !== 'none' && el.style.opacity !== '0';
+  return {
+    visible: visible && lastMoment !== null,
+    title: lastMoment ? lastMoment.title : '',
+    text: lastMoment ? lastMoment.text : '',
+  };
+}
+
 // The ui-system entry point: consume world.town.pendingBark into the toast.
 // When the sim parks a new bark while one is fading, it replaces in place.
 export function updateBarkOverlay(world: WorldState): void {
@@ -106,9 +145,18 @@ export function updateBarkOverlay(world: WorldState): void {
     showBarkToast(pending);
     world.town.pendingBark = null;
   }
+  // A Snatcher moment outranks a doorstep bark — it fires mid-fight, and the
+  // two can never be live at once anyway (barks are a hub verb, the Snatcher is
+  // a zone-3 fight verb). Consumed second so it wins the element if they are.
+  const moment = world.township.pendingMoment;
+  if (moment) {
+    showMomentToast(moment);
+    world.township.pendingMoment = null;
+  }
 }
 
 export function dismissBarkOverlay(): void {
+  lastMoment = null;
   if (toastEl) {
     toastEl.remove();
     toastEl = null;

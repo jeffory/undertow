@@ -14,6 +14,11 @@ import type { BuildingRestoredEvent } from './restoration';
 import type { BottledLightDecantedEvent, BottledLightUsedEvent } from './bottledLight';
 import type { PendingBark } from '../core/world';
 import type { BossStartedEvent, BossLandedEvent } from '../bosses/congregation';
+import type {
+  SnatcherLatchedEvent,
+  SnatcherKilledEvent,
+  SnatcherStoleEvent,
+} from '../enemies/snatcher';
 
 export interface BarkShownEvent {
   type: 'bark.shown';
@@ -30,7 +35,10 @@ export type TownEvent =
   | BottledLightDecantedEvent // 05 §1.7 / §0.2 (task t21)
   | BottledLightUsedEvent
   | BossStartedEvent // 05 §2.1 / §0.2 — the Kelp Graves boss (task t25)
-  | BossLandedEvent;
+  | BossLandedEvent
+  | SnatcherLatchedEvent // 05 §2.2 — the Township's second mouth (task t28)
+  | SnatcherKilledEvent
+  | SnatcherStoleEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];

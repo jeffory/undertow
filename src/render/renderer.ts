@@ -15,6 +15,7 @@ import { initLake, updateLake } from './lake';
 import { initKelp, updateKelp } from './kelp';
 import { initSilt, updateSilt } from './silt';
 import { initCongregation, updateCongregation } from './congregation';
+import { initSnatcher, updateSnatcher } from './snatcher';
 import { initTown, updateTown } from './town';
 import { initTownship, updateTownship } from './township';
 import { initRipples, updateRipples } from './ripples';
@@ -79,6 +80,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initKelp(scene);
   initSilt(scene);
   initCongregation(scene);
+  initSnatcher(scene);
   initTown(scene);
   initTownship(scene);
   initRipples(scene);
@@ -119,6 +121,7 @@ export function render(world: WorldState, dt: number): void {
   updateKelp(world, dt); // M6: the Kelp Graves' columns (one InstancedMesh)
   updateSilt(world, dt); // M6: the Kelp Graves' drifting silt (one Points layer)
   updateCongregation(world, dt); // M6: the boss swarm (one InstancedMesh, one draw)
+  updateSnatcher(world, dt); // M7: the second mouth — fish-pipeline body + wake pool
   updateTown(world, dt);
   updateTownship(world, dt); // M7: the drowned Hollow (decks instanced, buildings on demand)
   updateRipples(world, dt);
