@@ -23,8 +23,14 @@ fight is a leash fight.
 | M1 The Fight | ✅ | On-foot combat: dodge, stamina, gaff combo, first fish (automated fight-gate verified) |
 | M1.5 Asset pipeline | ✅ | Tripo3D + Blender → GLTF; keeper/rowboat/lighthouse/rocks in-game |
 | M2 The Line | ✅ | Tether combat: constraint, reel/brace/snap/cut, fish AI, water phase, line render — six-scenario automated gate passing (human feel-pass pending) |
-| M3 The Loop | 🔨 | Playable run loop: cast/SET/fight/land, Dread, night clock, extraction receipts, saves (boat combat + descents remain) |
-| M3–M10 | — | Run loop, fish generator, town, zones, endings ([docs/plan](docs/plan/00-overview.md)) |
+| M2.5 The Shell | ✅ | Title screen + municipal-form menu, opening story cards, options ledger (render scale / fog / post / reel stance / audio), diegetic HUD chips + tension gauge |
+| M3 The Loop | 🔨 | Playable run loop: cast/SET/fight/land, Dread, night clock, extraction receipts, saves — boat combat (Draggers) + sinkhole descents in flight |
+| M4 Fish & Loot | ✅ | Procedural species (jaws/teeth/head profiles, diamond eyes), bite-eligibility license gating, Drowned named uniques, bestiary Register (pedestal staging pending) |
+| Audio | ✅ | Fully procedural WebAudio: basin drone, line-tension creak, dread heartbeat, splash one-shots — zero audio files |
+| Visual QA stack | ✅ | Beauty-shot gate + luma report, invariant tests (wave/terrain, boat collision, wake, splash), in-game QA annotate (Q), scored blind-A/B rubric |
+| M5–M10 | — | Town/meta, deeper zones, endings ([docs/plan](docs/plan/00-overview.md)) |
+
+**Play it:** https://undertow.jeffory.dev (or https://undertow.jeffory.workers.dev) — click FORM 1 to begin; sound starts on your first click.
 
 ## Quickstart
 
