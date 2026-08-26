@@ -11,9 +11,20 @@ import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { GROUND_Y } from './ground';
 import { groundYAt } from './lake';
-import { getAsset, hasAsset } from './assets';
+import { getAsset, getAssetClips, hasAsset } from './assets';
 
 const DODGE_DURATION = 0.25; // seconds; matches the 0.25s i-frame roll window
+
+// --- keeper animation (rigged GLB only) ---------------------------------------
+// A rigged keeper GLB ships two loops: 'idle' (breathing sway) and 'reel' (the
+// rhythmic haul). The reel plays while a tether fight is running — the same
+// world.tether.fights.length check render/lines.ts uses to show the line — and
+// crossfades back to idle when the fight ends. A GLB with no clips (the current
+// public/assets/keeper.glb) leaves the mixer null and renders exactly as before.
+const CLIP_IDLE = 'idle';
+const CLIP_REEL = 'reel';
+const CROSSFADE = 0.25; // seconds; long enough to hide the pose pop, short
+                        // enough that the haul still lands with the hook-set
 
 // The generated keeper GLB faces +Z natively (verified from the model's
 // geometry: the face/skin side of the head sits on +Z), which matches the
@@ -47,6 +58,10 @@ let modelGroup: THREE.Group | null = null; // base-yaw wrapper holding the model
 let fillLight: THREE.PointLight | null = null;
 let primitive: THREE.Group | null = null; // fallback figure
 let swapped = false; // have we swapped primitive -> loaded model?
+let mixer: THREE.AnimationMixer | null = null; // null for a clip-less GLB
+let idleAction: THREE.AnimationAction | null = null;
+let reelAction: THREE.AnimationAction | null = null;
+let reeling = false; // which clip the mixer is currently faded to
 
 // Paint a geometry a single flat colour (flat shading via MeshLambertMaterial).
 function tint(geo: THREE.BufferGeometry, color: number): void {
@@ -107,6 +122,11 @@ function buildPrimitive(): THREE.Group {
 
 export function initPlayer(scene: THREE.Scene): void {
   root = new THREE.Group();
+  mixer = null;
+  idleAction = null;
+  reelAction = null;
+  reeling = false;
+  swapped = false;
   primitive = buildPrimitive();
   root.add(primitive);
 
@@ -158,18 +178,62 @@ function trySwap(): void {
     }
   });
   modelGroup!.add(model);
+  bindClips(model);
   swapped = true;
+}
+
+// Wire up the mixer if the loaded keeper carries clips. Everything here is
+// optional: no clips (or no 'idle') means no mixer, and the model just stands
+// there the way the static keeper always has.
+function bindClips(model: THREE.Group): void {
+  const clips = getAssetClips('keeper');
+  if (clips.length === 0) return;
+  const idle = THREE.AnimationClip.findByName(clips, CLIP_IDLE) ?? clips[0]!;
+  const reel = THREE.AnimationClip.findByName(clips, CLIP_REEL);
+
+  mixer = new THREE.AnimationMixer(model);
+  idleAction = mixer.clipAction(idle);
+  idleAction.setLoop(THREE.LoopRepeat, Infinity);
+  idleAction.play();
+  // The reel action is created but NOT started: an action parked at weight 0
+  // can never fade back in, because fadeIn scales the action's own weight
+  // rather than replacing it. It gets reset/re-weighted on the first crossfade.
+  if (reel) {
+    reelAction = mixer.clipAction(reel);
+    reelAction.setLoop(THREE.LoopRepeat, Infinity);
+  }
+  reeling = false;
+}
+
+// Crossfade between the two loops on the tether-fight edge. With no 'reel'
+// clip this is a no-op and idle keeps playing throughout.
+function updateClips(world: WorldState, dt: number): void {
+  if (!mixer) return;
+  const fighting = world.tether.fights.length > 0;
+  if (reelAction && idleAction && fighting !== reeling) {
+    const from = reeling ? reelAction : idleAction;
+    const to = reeling ? idleAction : reelAction;
+    // Restart the incoming clip from its first frame so the haul reads as a
+    // fresh pull rather than picking up mid-stroke.
+    from.fadeOut(CROSSFADE);
+    to.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(CROSSFADE).play();
+    reeling = fighting;
+  }
+  mixer.update(dt);
 }
 
 export function updatePlayer(world: WorldState, dt: number): void {
   if (!root) return;
-  void dt;
 
   trySwap();
 
   const foot = world.mode === 'foot';
   root.visible = foot;
+  // The keeper only renders on foot, so only advance the mixer there: skinning
+  // an off-screen figure every frame is pure cost, and the clips are loops, so
+  // there is no state to lose while it is hidden.
   if (!foot) return;
+  updateClips(world, dt);
 
   const p = world.player;
   root.position.x = p.x;

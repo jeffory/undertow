@@ -16,7 +16,7 @@ if it isn't here with `in build: yes`, it isn't a decision.
 | 2026-08-26 | AI | shell | introSeen persisted in localStorage, not the zod save (schema bump not worth a migration for one boolean) — noted debt | yes |
 | 2026-08-26 | USER | boat | candidate C (harbour dinghy) replaces the rowboat; A (concept DRAGGER boat, needs water-skirt surgery) and B (lantern skiff) archived in assets/candidates/ | yes |
 | 2026-08-26 | USER | keeper | candidate C (braced hauler) replaces the A-posed keeper; 502k tris / 15 MB accepted as debt pending retopo | yes |
-| 2026-08-26 | USER | keeper | retopo-and-rig experiment queued (Blender-driven, falsifiable: worse-than-static-C does not ship) | pending |
+| 2026-08-26 | USER | keeper | retopo-and-rig experiment queued (Blender-driven, falsifiable: worse-than-static-C does not ship) | yes — shipped: 59k tris/5.7MB rigged keeper with idle+reel clips replaced static C; reel amplitudes ~1.85x the first cut so the haul reads at gameplay distance (AI QA call) | 
 | 2026-08-26 | AI | fx | telegraph events deliberately spawn NO splash (the lunge burst covers the read; per-telegraph bursts double the noise) | yes |
 | 2026-08-26 | AI | water | lantern reflection pool: tight ~7 m quartic disc + view-dependent spec streak; the 16 m disc read as a shadow following the boat (USER report) | yes |
 | 2026-08-26 | USER | process | parallel Claude sessions may share this tree — explicit `git add` lists, check branch before commit, dev server on 5175 | yes |
