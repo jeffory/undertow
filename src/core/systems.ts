@@ -241,7 +241,7 @@ function updateBuildBadge(): void {
   if (!fpsDirty || typeof document === 'undefined') return;
   fpsDirty = false;
   const el = document.getElementById('buildinfo');
-  if (el) el.textContent = `${BUILD_DATE} · ${Math.round(fpsSmooth)} fps`;
+  if (el) el.textContent = `Build: ${BUILD_DATE} · ${Math.round(fpsSmooth)} fps`;
 }
 
 export function updateDebugOverlay(world: WorldState): void {
