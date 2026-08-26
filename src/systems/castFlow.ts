@@ -9,7 +9,7 @@
 import type { WorldState } from '../core/world';
 import { createFish } from '../core/world';
 import { createRng, LOOT } from '../core/rngStreams';
-import { startTetherFight } from '../game/tether';
+import { startTetherFight, BOAT_MASS_DEFAULT, BOAT_RADIUS_DEFAULT } from '../game/tether';
 import type { Disturbance } from '../run/disturbance';
 import {
   PROMPT_WINDOW,
@@ -115,15 +115,28 @@ function setCatch(world: WorldState, d: Disturbance): void {
   fish.x = d.pos.x;
   fish.z = d.pos.z;
 
-  // A boat cast fights at the boat — the keeper "is aboard", so the tether's
-  // player endpoint rides the boat position (the foot keeper otherwise sits at
-  // the last islet and the line would point across the lake).
-  if (world.mode === 'boat') {
-    world.player.x = world.boat.x;
-    world.player.z = world.boat.z;
-  }
-
-  const fight = startTetherFight(world, preset.id, 'player');
+  // A boat cast fights AT THE BOAT — with a real, continuously-tracked boat
+  // anchor. The old approach snapped world.player to the boat once at SET,
+  // so the moment the boat moved the line/fight stayed at the phantom SET
+  // point (USER playtest: "the line doesn't go to the boat if the boat
+  // moves", tension unreadable). The boat anchor keeps the Dragger fights'
+  // position tracking but overrides the endpoint traits: the keeper works
+  // this line by hand — RMB reel stance and a lure-cost cut, never the
+  // winch/hull-segment rules (those belong to hooked Draggers only; hull
+  // damage is filtered by the Dragger's own fight id in systems/boatCombat).
+  const fight =
+    world.mode === 'boat'
+      ? startTetherFight(world, preset.id, 'boat', {
+          a: {
+            anchor: { kind: 'boat' },
+            owner: 'player',
+            mass: BOAT_MASS_DEFAULT,
+            radius: BOAT_RADIUS_DEFAULT,
+            reel: { kind: 'player-stance' },
+            cut: { kind: 'lure' },
+          },
+        })
+      : startTetherFight(world, preset.id, 'player');
   if (fight) {
     applySpeciesParams(world, fish, params);
     world.run.activeCatch = {

@@ -76,8 +76,8 @@ async function landClean() {
   await wset(`
     w.fish.stamina = 0;
     w.fish.tether.exhausted = true;
-    w.fish.x = w.player.x;
-    w.fish.z = w.player.z;
+    w.fish.x = w.boat.x; /* boat is the cast anchor (castFlow fix) */
+    w.fish.z = w.boat.z;
     if (w.tether.fights[0]) w.tether.fights[0].land.eligible = true;
   `);
   await page.keyboard.press('KeyE');

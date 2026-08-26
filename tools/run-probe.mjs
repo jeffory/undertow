@@ -60,6 +60,13 @@ assert(snap && snap.islets >= 9, `lake generated (${snap?.islets} islets)`);
 assert(snap && snap.dists >= 3, `spawn director seeded ${snap?.dists} initial disturbances`);
 assert(snap && snap.run && !snap.run.ended, 'run stamped (not ended)');
 
+// Bite-eligibility gating (plan 04 §8.4, M4-remainders round): every tier-3
+// species requires license grade >= 2, so at the fresh-save grade 1 this
+// probe's tier-3 SET would (correctly) DECLINE. Raise the run's grade so the
+// probe keeps testing the fight/land/receipt flow it was written for — the
+// decline behaviour itself is covered by tests/loot/eligibility.test.ts.
+await wset(`w.run.licenseGrade = 4;`);
+
 // --- CAST --------------------------------------------------------------------
 // Inject a tier-3 disturbance in the water beside the boat + aim the debug seam.
 await wset(`
@@ -105,8 +112,8 @@ assert(fish && fish.tier >= 3, `tier-3 disturbance rolls the Rare/Epic ladder (t
 await wset(`
   w.fish.stamina = 0;
   w.fish.tether.exhausted = true;
-  w.fish.x = w.player.x;
-  w.fish.z = w.player.z;
+  w.fish.x = w.boat.x; /* boat is the cast anchor (castFlow fix) */
+  w.fish.z = w.boat.z;
   if (w.tether.fights[0]) w.tether.fights[0].land.eligible = true;
 `);
 await page.keyboard.press('KeyE');

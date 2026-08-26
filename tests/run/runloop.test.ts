@@ -175,8 +175,8 @@ describe('M4 species roll at SET (replaces the tier capsule)', () => {
     const display = w.run.activeCatch!.name.toLowerCase();
     w.fish!.stamina = 0;
     w.fish!.tether.exhausted = true;
-    w.fish!.x = w.player.x;
-    w.fish!.z = w.player.z;
+    w.fish!.x = w.boat.x; // the boat IS the cast anchor now (castFlow boat-anchor fix)
+    w.fish!.z = w.boat.z;
     updateTetherConstraint(w, DT);
     w.intent.acceptLand = true;
     updateTetherConstraint(w, DT);
@@ -203,8 +203,8 @@ describe('land → haul + Dread gain', () => {
     // Eligibility is computed on the first step, the LAND press lands on the next.
     w.fish!.stamina = 0;
     w.fish!.tether.exhausted = true;
-    w.fish!.x = w.player.x;
-    w.fish!.z = w.player.z;
+    w.fish!.x = w.boat.x; // the boat IS the cast anchor now (castFlow boat-anchor fix)
+    w.fish!.z = w.boat.z;
     updateTetherConstraint(w, DT); // computes land.eligible
     w.intent.acceptLand = true;
     updateTetherConstraint(w, DT); // fires 'landed', despawns the fish
@@ -302,8 +302,8 @@ describe('Drowned unique loot (plan 04 §7.3) rides the run result', () => {
 
     w.fish!.stamina = 0;
     w.fish!.tether.exhausted = true;
-    w.fish!.x = w.player.x;
-    w.fish!.z = w.player.z;
+    w.fish!.x = w.boat.x; // the boat IS the cast anchor now (castFlow boat-anchor fix)
+    w.fish!.z = w.boat.z;
     updateTetherConstraint(w, DT);
     w.intent.acceptLand = true;
     updateTetherConstraint(w, DT);
@@ -336,8 +336,8 @@ describe('run result — extraction vs death', () => {
     pressSet(w); // SET
     w.fish!.stamina = 0;
     w.fish!.tether.exhausted = true;
-    w.fish!.x = w.player.x;
-    w.fish!.z = w.player.z;
+    w.fish!.x = w.boat.x; // the boat IS the cast anchor now (castFlow boat-anchor fix)
+    w.fish!.z = w.boat.z;
     updateTetherConstraint(w, DT); // computes land.eligible
     w.intent.acceptLand = true;
     updateTetherConstraint(w, DT);
