@@ -26,6 +26,7 @@ import { updateSpawnDirectorSystem } from '../systems/spawnDirector';
 import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt } from '../ui/castPrompt';
+import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 
 export type SystemFn = (world: WorldState, dt: number) => void;
@@ -170,6 +171,7 @@ function ui(world: WorldState, _dt: number): void {
   updateDebugOverlay(world);
   updateDebugPanel(world);
   updateWaterTint(world);
+  updateHud(world);
   updateCastPrompt(world);
   updateBestiaryToggle(world);
 }
