@@ -33,6 +33,7 @@ import { updateBarks } from '../systems/barks';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
 import { updateFightTutorial } from '../ui/fightTutorial';
+import { updateVerbHints } from '../ui/verbHints';
 import { updateRestorationUI } from '../ui/restorationUI';
 import { updateBarkOverlay } from '../ui/barkOverlay';
 import { updateHud } from '../ui/hud';
@@ -185,6 +186,7 @@ function ui(world: WorldState, _dt: number): void {
   updateCastPrompt(world);
   updateDescentPrompt(world);
   updateFightTutorial(world);
+  updateVerbHints(world);
   updateRestorationUI(world);
   updateBarkOverlay(world);
   updateBestiaryToggle(world);
