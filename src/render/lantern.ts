@@ -81,8 +81,8 @@ export function updateLantern(world: WorldState, dt: number): void {
   // reads as a dark shape against his own light and the glow pool leads the
   // boat (USER art direction). Foot: carried at head height as before.
   const b = world.boat;
-  const bowX = b.x + Math.sin(b.heading) * 1.45;
-  const bowZ = b.z + Math.cos(b.heading) * 1.45;
+  const bowX = b.x + Math.sin(b.heading) * 1.75;
+  const bowZ = b.z + Math.cos(b.heading) * 1.75;
   const x = foot ? world.player.x : bowX;
   const z = foot ? world.player.z : bowZ;
   const y = foot ? 1.7 : b.y + 0.85;

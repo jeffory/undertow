@@ -181,6 +181,11 @@ function trySwap(): void {
   modelGroup!.add(model);
   bindClips(model);
   swapped = true;
+  // The per-mode emissive/exposure guards may have latched against the EMPTY
+  // modelGroup on frames before this swap — reset so the next updatePlayer
+  // pass re-applies them to the real materials.
+  curEmissive = -1;
+  curExposure = -1;
 }
 
 // Wire up the mixer if the loaded keeper carries clips. Everything here is
@@ -190,6 +195,7 @@ function trySwap(): void {
 // value actually changes). Aboard, the bow lantern owns the light and the
 // emissive would keep the silhouette glowing.
 let curEmissive = -1;
+let curExposure = -1;
 function setKeeperEmissive(hex: number): void {
   if (curEmissive === hex || !modelGroup) return;
   curEmissive = hex;
@@ -199,6 +205,26 @@ function setKeeperEmissive(hex: number): void {
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const m of mats) {
       if (m instanceof THREE.MeshLambertMaterial) m.emissive.setHex(hex);
+    }
+  });
+}
+
+// Exposure compensation: aboard, the bow lantern at ~1.7m blows the warm-
+// tinted coat to flat amber and the baked texture disappears (USER report).
+// Scaling the material color down keeps the texture contrast on the lit side
+// and deepens the dark side. Base color = manifest tint (#ffdf8a).
+const KEEPER_BASE_TINT = new THREE.Color(0xffdf8a);
+function setKeeperExposure(mult: number): void {
+  if (curExposure === mult || !modelGroup) return;
+  curExposure = mult;
+  modelGroup.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (m instanceof THREE.MeshLambertMaterial) {
+        m.color.copy(KEEPER_BASE_TINT).multiplyScalar(mult);
+      }
     }
   });
 }
@@ -258,6 +284,7 @@ export function updatePlayer(world: WorldState, dt: number): void {
     // own light (USER art direction). Foot mode restores the fill below.
     if (fillLight) fillLight.intensity = 0.5;
     setKeeperEmissive(0x140f08); // near-none: the silhouette must go dark
+    setKeeperExposure(0.42);
     const b = world.boat;
     const ox = 0;
     const oz = -0.25; // a step aft of centre, clear of the bench
@@ -276,6 +303,7 @@ export function updatePlayer(world: WorldState, dt: number): void {
   root.scale.setScalar(1);
   if (fillLight) fillLight.intensity = FILL_INTENSITY;
   setKeeperEmissive(KEEPER_EMISSIVE);
+  setKeeperExposure(1);
 
   const p = world.player;
   root.position.x = p.x;
