@@ -135,6 +135,16 @@ void main() {
   }
   vec3 lantern = uLanternColor * uLanternIntensity * atten * max(dot(n, ln), 0.0);
 
+  // Lantern REFLECTION — not albedo-multiplied. Every other light term is
+  // modulated by the near-black base (#081014, ~4%), which is physically fine
+  // for diffuse but means the lantern can never visibly pool on the water and
+  // night phases read as a void around the boat. Real dark water still MIRRORS
+  // a lamp: a specular lobe toward the viewer plus a faint direct warm disc,
+  // both bounded by the same ranged falloff.
+  vec3 rl = reflect(-ln, n);
+  float lspec = pow(max(dot(rl, viewDir), 0.0), 28.0);
+  vec3 lanternGlow = uLanternColor * atten * uLanternIntensity * (lspec * 0.28 + 0.045);
+
   // Subtle moon specular so a glint path rakes across the swells.
   vec3 hv = normalize(uMoonDir + viewDir);
   // flat facets share one normal — a broad spec gain paints whole
@@ -144,6 +154,7 @@ void main() {
   vec3 color = base * uAmbient * 0.8;
   color += base * moon;
   color += base * lantern;
+  color += lanternGlow;
   color += uMoonColor * spec;
 
   // Faceted crest foam: height threshold >~0.75·max, jittered per facet (from
