@@ -25,6 +25,13 @@ import type {
   PostmasterCutEvent,
   PostmasterDeliveredEvent,
 } from '../bosses/postmaster';
+import type {
+  WhistlerHeardEvent,
+  WhistlerHookedEvent,
+  WhistlerCutEvent,
+  WhistlerDeliveredEvent,
+  ChoirSangEvent,
+} from '../enemies/whistler';
 
 export interface BarkShownEvent {
   type: 'bark.shown';
@@ -48,7 +55,12 @@ export type TownEvent =
   | PostmasterSummonedEvent // 05 §2.2 — the Township boss (task t29)
   | PostmasterTelegraphEvent
   | PostmasterCutEvent
-  | PostmasterDeliveredEvent;
+  | PostmasterDeliveredEvent
+  | ChoirSangEvent // 05 §2.3 — the void sings (task t31; the audio worker's cue)
+  | WhistlerHeardEvent // 05 §2.3 — the three proximity bands, in order
+  | WhistlerHookedEvent
+  | WhistlerCutEvent
+  | WhistlerDeliveredEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];

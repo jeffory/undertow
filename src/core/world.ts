@@ -33,6 +33,10 @@ import type { SnatcherState } from '../enemies/snatcher';
 import { createSnatcherState } from '../enemies/snatcher';
 import type { PostmasterState } from '../bosses/postmaster';
 import { createPostmasterState } from '../bosses/postmaster';
+import type { WhistlerState } from '../enemies/whistler';
+import { createWhistlerState } from '../enemies/whistler';
+import type { ChoirState } from '../gen/choir';
+import { createChoirState } from '../gen/choir';
 import { MIN_ZONE } from './zones';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
@@ -233,6 +237,12 @@ export interface WaterPhaseState {
   // breath is lethal, and the only exit is a walkable shore.
   sinkingHaul: boolean;
   lethal: boolean; // breath 0 ends the run (a swamp), instead of merely clamping
+  // 05 §2.3 — the Whistler's delivery. The SAME extended water phase the swamp
+  // runs (no fight holds the keeper under; the only exit is a walkable shore),
+  // minus the swamp's sinking haul and minus its lethality: "it does NOT kill
+  // outright — it delivers you to the water". Defaults false, so every water
+  // phase built before M8 takes exactly the branch it always took.
+  adrift: boolean;
 }
 
 // One catch sinking out of a swamped boat (plan §6.1: "your whole haul sinks
@@ -416,6 +426,17 @@ export interface PendingMoment {
   trigger: string;
   title: string;
   text: string;
+  /**
+   * 05 §2.3 — the stamp under the note. Absent keeps the Snatcher's own
+   * 'PARTITION APPROVED' (ui/barkOverlay.ts), so every M7 toast is unchanged.
+   */
+  stamp?: string;
+  /**
+   * 05 §2.3 — the Choir's dread lines are FAINT: the same parchment note at a
+   * lower peak opacity, because in the void a loud toast would be the brightest
+   * thing on screen and the darkness is the point. Absent = the ordinary note.
+   */
+  faint?: boolean;
 }
 
 export interface PendingEnvText {
@@ -446,6 +467,8 @@ export interface WorldState {
   congregation: CongregationState; // 05 §2.1 — the Kelp Graves boss (swarm + mass pool)
   snatcher: SnatcherState; // 05 §2.2 — the Township's second mouth on the line
   postmaster: PostmasterState; // 05 §2.2 — the Township boss: the reverse tether
+  whistler: WhistlerState; // 05 §2.3 — the Choir's roaming elite: the second reverse tether
+  choir: ChoirState; // 05 §2.3 — the emissive void's singing cursor
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
@@ -509,6 +532,8 @@ export function createWorld(seed = 1): WorldState {
     congregation: createCongregationState(),
     snatcher: createSnatcherState(),
     postmaster: createPostmasterState(),
+    whistler: createWhistlerState(),
+    choir: createChoirState(),
     combat: {
       comboStage: 0,
       comboWindow: 0,
@@ -545,6 +570,7 @@ export function createWorld(seed = 1): WorldState {
       threatsApproach: false,
       sinkingHaul: false,
       lethal: false,
+      adrift: false,
     },
     lure: { id: 'basic-lure', count: 1 },
     lake: null,

@@ -686,6 +686,66 @@ export const TOWNSHIP_SPECIES: SpeciesPreset[] = [
   },
 ];
 
+// --- M8: THE CHOIR (zone 4) ---------------------------------------------------------
+// The bioluminescent void's roaming elite (plan 05 §2.3). Like the KELP and
+// TOWNSHIP rows this is deliberately NOT in TIER_TABLES: a Whistler is never
+// something a ripple rolls — systems/whistler.ts is the only producer of this id,
+// and it produces at most one per run.
+export const CHOIR_SPECIES: SpeciesPreset[] = [
+  {
+    // THE WHISTLER — "roaming elite that hooks YOU" (spec §5), heard long before
+    // it is ever seen. No new asset: the read is bought from the generator's
+    // dials, the same way the Snatcher's and the Postmaster's were.
+    //   • the longest spine the generator allows (14) over a thin, even girth —
+    //     a ribbon, not a body, so what the lantern catches at the strike is a
+    //     length of something rather than an animal;
+    //   • `glow: true` — the ONE preset in the game that carries it, because it
+    //     is the only thing in the Choir that is lit from inside. In a zone whose
+    //     entire look is emissive points on black, the elite has to be one;
+    //   • snout 0.72 and jawSplit 0.55 — a long head with a hinge, not a mouth
+    //     that has to open wide: it does not bite you, it puts a line on you;
+    //   • eyeCount 0. It has never needed to look at anything. It listens.
+    //   • humanRatio 0.35 — enough shoulder in the silhouette to be wrong.
+    // Rarity E, so tier 4 — the "tier-4 elite" the plan asks for exactly, and
+    // the rarity / eligibility / category the bible's own bestiary record files
+    // it under (docs/story/choir.md §4: E, 3, 'dragger' — it drags, it does not
+    // call).
+    id: 'the-whistler',
+    name: 'The Whistler',
+    rarity: 'E',
+    eligibility: 3,
+    category: 'dragger',
+    tier: 4,
+    lengthM: 4.6,
+    spineSegments: 14,
+    girthCurve: [
+      0.08, 0.15, 0.22, 0.24, 0.24, 0.23, 0.23, 0.22, 0.21, 0.2, 0.18, 0.15, 0.11, 0.07,
+    ],
+    snout: 0.72,
+    finCount: 3, // almost nothing to see, and two of them are ridges
+    finKinds: [D(), 'ridge'],
+    eyeCount: 0,
+    eyeSize: 0.05,
+    jawSplit: 0.55,
+    limbBudget: 2,
+    humanRatio: 0.35,
+    swimFreq: 2.1, // an unhurried whip — it is not chasing, it is arriving
+    swimAmp: 0.7,
+    palette: 4,
+    glow: true,
+    stats: { mass: 11, stamina: 260, pullForce: 9, swimSpeed: 9.5, hp: 420 },
+    patterns: { orbit: 0.25, lunge: 0, dive: 0.1, drag: 0.65 },
+    wrongnessInfluence: 0.85,
+    lungeCooldown: 5,
+    lungeStaminaCost: 22,
+    dragSpeed: 4.8,
+    dragStaminaCostPerM: 1.8,
+    routedDrag: true,
+  },
+];
+
+export const WHISTLER_SPECIES_ID = 'the-whistler';
+
 export const SNATCHER_SPECIES_ID = 'gallows-snatcher';
 export const POSTMASTER_SPECIES_ID = 'the-postmaster';
 
@@ -708,6 +768,7 @@ export const ALL_SPECIES: SpeciesPreset[] = [
   ...NIGHT_SPECIES,
   ...KELP_SPECIES,
   ...TOWNSHIP_SPECIES,
+  ...CHOIR_SPECIES,
 ];
 
 const BY_ID = new Map<string, SpeciesPreset>(ALL_SPECIES.map((s) => [s.id, s]));

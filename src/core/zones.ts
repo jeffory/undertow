@@ -9,6 +9,9 @@
 // Pure data: no `three` imports, no RNG.
 
 export const MIN_ZONE = 1;
+// M8 (plan 05 §2.3): the bioluminescent void. Named here rather than in the
+// darkness system so the zone table and its consumers share one constant.
+export const CHOIR_ZONE = 4;
 export const MAX_ZONE = 5; // plan §12.7 — the M3 descent cap (The Mouth)
 
 export const ZONE_NAMES: Record<number, string> = {
@@ -68,7 +71,13 @@ export const ZONE_FOG_MULT: Record<number, number> = {
   1: 1,
   2: 1.55,
   3: 1,
-  4: 1,
+  // M8 (plan 05 §2.3): "fog near-total". The Choir's multiplier is the load-
+  // bearing half of the darkness system — at ×5.5 the night palette's 0.019
+  // base becomes ~0.105, and FogExp2 reaches 99% saturation at ~20 m. The
+  // lantern's own light distance is 16 m (game/darkness.ts LANTERN_BASE_RADIUS),
+  // so the lit pool ends a few metres BEFORE the fog goes absolute: the disc of
+  // light is the disc of the world, and everything past it is black.
+  4: 5.5,
   5: 1,
 };
 
@@ -98,4 +107,53 @@ export const ZONE_FOG_TINT: Record<number, ZoneFogTint> = {
 
 export function zoneFogTint(zone: number): ZoneFogTint {
   return ZONE_FOG_TINT[clampZone(zone)] ?? { color: 0x000000, strength: 0 };
+}
+
+// --- zone SKY DARKEN (plan 05 §2.3) -------------------------------------------
+// M8's Choir is a "bioluminescent void … black palette with emissive points"
+// (spec §8.1 "Choir is emissive points on black"). Dense fog alone is not black:
+// FogExp2 saturates toward the FOG COLOUR, and the background dome keeps its own
+// phase gradient behind it — so a merely foggy zone 4 would read as a teal wall,
+// not a void.
+//
+// This is the second half of the seam: how far the already-phase-lerped fog
+// colour AND the gradient dome's three stops are lerped toward pure black. It is
+// applied last, after the phase lerp and the zone tint, and it is exactly 0 for
+// zones 1-3 and 5 — so `fog.color.copy(curFog)` and `paintSphere(curTop, …)` are
+// byte-identical there.
+export const ZONE_SKY_DARKEN: Record<number, number> = {
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 0.94, // near-black; the 6% left is what keeps the horizon from banding
+  5: 0,
+};
+
+export function zoneSkyDarken(zone: number): number {
+  return ZONE_SKY_DARKEN[clampZone(zone)] ?? 0;
+}
+
+// --- zone AMBIENT SCALE (plan 05 §2.3) -----------------------------------------
+// The third and last piece of the void, and the one the fog cannot buy: "geometry
+// only where light touches". Fog hides what is FAR. It does nothing about a
+// near islet standing in the moonlight — which in a lightless zone is exactly the
+// thing that must not be visible, because the design is that the lantern is the
+// only light there is.
+//
+// So the Choir turns the world lights down to a floor: the moon and the ambient
+// are scaled, and what is left standing is the lantern's own pool. Not zero — a
+// hard 0 flattens the near hull into an unreadable silhouette and takes the
+// water's own shading with it.
+//
+// Exactly 1 for every other zone, so their lighting is untouched.
+export const ZONE_AMBIENT_SCALE: Record<number, number> = {
+  1: 1,
+  2: 1,
+  3: 1,
+  4: 0.12,
+  5: 1,
+};
+
+export function zoneAmbientScale(zone: number): number {
+  return ZONE_AMBIENT_SCALE[clampZone(zone)] ?? 1;
 }

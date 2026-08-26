@@ -172,6 +172,10 @@ export const FISH_ENTITY = -2;
 // the catch's butcher check, its LAND prompt and its low-tension exhaustion for
 // free. Resolves to world.postmaster in the constraint's position accessor.
 export const POSTMASTER_ENTITY = -3;
+// 05 §2.3 — the Choir's roaming elite. Same reasoning as the Postmaster above,
+// one zone deeper: a reverse fight has no catch, so it is not world.fish.
+// Resolves to world.whistler in the constraint's position accessor.
+export const WHISTLER_ENTITY = -4;
 
 export const M2_SPECIES: SpeciesId = 'capsule';
 

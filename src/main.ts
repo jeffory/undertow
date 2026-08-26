@@ -74,7 +74,42 @@ import { seedCongregation } from './spawn/director';
 import { massFraction, pullForceMultFor, attachedCount, gaffTearFor } from './bosses/congregation';
 import { HEAVY_STAGGER } from './game/combat';
 import { siltRenderState } from './render/silt';
-import { zoneFogMultiplier, zoneFogTint } from './core/zones';
+import { zoneFogMultiplier, zoneFogTint, zoneSkyDarken, zoneAmbientScale } from './core/zones';
+import { choirRenderState, choirMoteWorld } from './render/choir';
+import { whistlerRenderState } from './render/whistler';
+import { whistlerPromptOnScreen } from './ui/whistlerPrompt';
+import { choirCursor } from './systems/choir';
+import { whistlerFightConfig, keeperPoint, landmarks, DEEP_CLEARANCE } from './systems/whistler';
+import {
+  CHOIR_MOTE_COUNT,
+  choirMoteAt,
+  singIntervalFor,
+  singerFor,
+  singPitchFor,
+} from './gen/choir';
+import { CHOIR_AMBIENT, choirLines, choirPlaceholderCount } from './content/choirLines';
+import {
+  BAND_OFFSETS,
+  bandRings,
+  CUT_REACH as WHISTLER_CUT_REACH,
+  GAFF_POOL as WHISTLER_GAFF_POOL,
+  ROAM_MARGIN,
+  SPAWN_DIST,
+  WHISTLER_TARGET_ID,
+  cutArmed as whistlerCutArmed,
+  cutProgress as whistlerCutProgress,
+  whistlerFighting,
+  whistlerGaffCost,
+  nearestLandmarkDistance,
+} from './enemies/whistler';
+import {
+  darknessActive,
+  discFraction,
+  lanternOrigin,
+  lanternRadius,
+  lanternRadiusFor,
+  withinLantern,
+} from './game/darkness';
 import { setShoreRestoration, shoreWarmth } from './render/water';
 import { townBuildingCount, townInstanceCount, townModelCount } from './render/town';
 import { groundYAt } from './render/lake';
@@ -913,6 +948,269 @@ if (/[?&]debug/.test(search)) {
       pos,
       fromPlayer: Math.hypot(world.player.x - pos.x, world.player.z - pos.z),
     };
+  };
+
+  // t31 / M8 seams (tools/m8-probe.mjs): read the DARKNESS (the fog/black/disc
+  // triple and what the gate is currently withholding), read the CHOIR (the mote
+  // field, the hymn cursor, the render cost), and read/drive THE WHISTLER — force
+  // its spawn without waiting for deep-night, pull it to a band, land a real gaff
+  // and skip the current phase timer.
+  (window as unknown as { __darkness: () => unknown }).__darkness = () => {
+    const at = lanternOrigin(world);
+    const hidden = world.disturbances.filter(
+      (d) => d.state !== 'gone' && !withinLantern(world, d.pos.x, d.pos.z),
+    ).length;
+    const lake = world.lake;
+    return {
+      zone: world.run.zone,
+      active: darknessActive(world),
+      fogZoneMult: zoneFogMultiplier(world.run.zone),
+      fogTint: zoneFogTint(world.run.zone),
+      skyDarken: zoneSkyDarken(world.run.zone),
+      ambientScale: zoneAmbientScale(world.run.zone),
+      fogDensity: currentRenderContext()?.scene.fog
+        ? (currentRenderContext()!.scene.fog as THREE.FogExp2).density
+        : null,
+      fogColor: currentRenderContext()?.scene.fog
+        ? (currentRenderContext()!.scene.fog as THREE.FogExp2).color.getHex()
+        : null,
+      // three's getHex() encodes to sRGB, which lifts near-black values a long
+      // way; the void has to be judged on the WORKING-SPACE channels the
+      // renderer actually blends toward.
+      fogLinear: currentRenderContext()?.scene.fog
+        ? {
+            r: (currentRenderContext()!.scene.fog as THREE.FogExp2).color.r,
+            g: (currentRenderContext()!.scene.fog as THREE.FogExp2).color.g,
+            b: (currentRenderContext()!.scene.fog as THREE.FogExp2).color.b,
+          }
+        : null,
+      lantern: {
+        origin: at,
+        radius: lanternRadius(world),
+        bowLantern: world.boatCombat.upgrades.bowLantern,
+        radiusAtLevel: [0, 1, 2, 3].map((n) => lanternRadiusFor(n)),
+      },
+      disturbances: world.disturbances.filter((d) => d.state !== 'gone').length,
+      hiddenDisturbances: hidden,
+      buoys: lake
+        ? lake.buoys.map((b) => ({
+            id: b.id,
+            dist: Math.hypot(b.pos.x - at.x, b.pos.z - at.z),
+            shown: withinLantern(world, b.pos.x, b.pos.z, 1.5),
+          }))
+        : [],
+      mode: world.mode,
+    };
+  };
+  (window as unknown as { __setBowLantern: (n: number) => number }).__setBowLantern = (n: number) => {
+    world.boatCombat.upgrades.bowLantern = Math.max(0, Math.floor(n));
+    return lanternRadius(world);
+  };
+  (window as unknown as { __choir: () => unknown }).__choir = () => {
+    const lake = world.lake;
+    const seed = lake ? lake.seed : 0;
+    return {
+      zone: world.run.zone,
+      render: choirRenderState(),
+      cursor: choirCursor(world),
+      moteCount: CHOIR_MOTE_COUNT,
+      motes: lake
+        ? Array.from({ length: CHOIR_MOTE_COUNT }, (_, i) => {
+            const m = choirMoteAt(seed, i, world.time.elapsed);
+            return { i, x: m.x, y: m.y, z: m.z };
+          })
+        : [],
+      schedule: Array.from({ length: 6 }, (_, i) => ({
+        i,
+        gap: singIntervalFor(world.seed, i),
+        mote: singerFor(world.seed, i, CHOIR_MOTE_COUNT),
+        pitch: singPitchFor(world.seed, i),
+      })),
+      events: peekTownEvents().filter((e) => e.type === 'choir.sang'),
+      lines: choirLines().map((l) => ({ moment: l.moment, text: l.text, placeholder: l.placeholder })),
+      placeholders: choirPlaceholderCount(),
+      ambient: CHOIR_AMBIENT.map((l) => ({ id: l.id, focus: l.focus, chars: l.text.length })),
+    };
+  };
+  // Park the hull well clear of every islet, so a chase-height camera frames the
+  // void the way play does: the lantern disc, and nothing else but motes.
+  (window as unknown as { __toVoid: () => unknown }).__toVoid = () => {
+    const lake = world.lake;
+    if (!lake) return null;
+    // the widest gap in the field: the lake-extent grid point furthest from land
+    let best = { x: 0, z: 0, clear: -1 };
+    const land = landmarks(world);
+    for (let ix = -4; ix <= 4; ix++) {
+      for (let iz = -4; iz <= 4; iz++) {
+        const x = ix * 22;
+        const z = iz * 22;
+        const clear = nearestLandmarkDistance(x, z, land);
+        if (clear > best.clear) best = { x, z, clear };
+      }
+    }
+    world.boat.x = best.x;
+    world.boat.z = best.z;
+    world.boat.speed = 0;
+    world.boat.heading = 0;
+    return best;
+  };
+  // Frame the nearest mote from the boat — the "choir motes beyond the disc" shot.
+  (window as unknown as { __nearestMote: () => unknown }).__nearestMote = () => {
+    const at = lanternOrigin(world);
+    let best = { i: -1, d: Infinity, x: 0, y: 0, z: 0 };
+    for (let i = 0; i < CHOIR_MOTE_COUNT; i++) {
+      const m = choirMoteWorld(world, i);
+      if (!m) continue;
+      const d = Math.hypot(m.x - at.x, m.z - at.z);
+      if (d < best.d) best = { i, d, x: m.x, y: m.y, z: m.z };
+    }
+    return best.i >= 0 ? best : null;
+  };
+  (window as unknown as { __whistler: () => unknown }).__whistler = () => {
+    const s = world.whistler;
+    const fight = world.tether.fights.find((f) => f.id === s.fightId) ?? null;
+    const at = keeperPoint(world);
+    return {
+      zone: world.run.zone,
+      phase: s.phase,
+      fighting: whistlerFighting(s),
+      fightId: s.fightId,
+      pos: { x: s.x, z: s.z },
+      speed: s.speed,
+      timer: s.timer,
+      band: s.band,
+      bandDistance: s.bandDistance,
+      bandOffsets: BAND_OFFSETS,
+      bandRings: bandRings(lanternRadius(world) + ROAM_MARGIN),
+      distToKeeper: Math.hypot(s.x - at.x, s.z - at.z),
+      discFraction: discFraction(world, s.x, s.z),
+      roamFloor: lanternRadius(world) + ROAM_MARGIN,
+      spawnDist: SPAWN_DIST,
+      drags: s.drags,
+      reeling: s.reeling,
+      route: { x: s.routeX, z: s.routeZ },
+      gaffHp: s.gaffHp,
+      gaffHpMax: WHISTLER_GAFF_POOL,
+      gaffHits: s.gaffHits,
+      cutArmed: whistlerCutArmed(s),
+      cutHeld: s.cutHeld,
+      cutProgress: whistlerCutProgress(s),
+      cutReach: WHISTLER_CUT_REACH,
+      cut: s.cut,
+      delivered: s.delivered,
+      spawned: s.spawned,
+      species: s.params ? s.params.speciesId : null,
+      config: whistlerFightConfig(world),
+      fight: fight
+        ? {
+            id: fight.id,
+            species: fight.species,
+            anchor: fight.anchor,
+            L: fight.L,
+            tension: fight.tension,
+            reelRate: fight.reelRate ?? null,
+            snapBehavior: fight.snapBehavior ?? null,
+            aiReel: fight.aiReel ?? false,
+            reelActive: fight.reel.active,
+          }
+        : null,
+      fights: world.tether.fights.length,
+      mode: world.mode,
+      dockedIslet: world.dockedIslet,
+      keeper: at,
+      clearance: nearestLandmarkDistance(world.player.x, world.player.z, landmarks(world)),
+      deepClearance: DEEP_CLEARANCE,
+      water: {
+        active: world.water.active,
+        breath: world.water.breath,
+        lethal: world.water.lethal,
+        adrift: world.water.adrift,
+        threatsApproach: world.water.threatsApproach,
+      },
+      player: { x: world.player.x, z: world.player.z, hp: world.player.hp },
+      deliveredBy: world.run.deliveredBy,
+      dread: world.dread,
+      lure: world.lure.count,
+      runEnded: world.run.ended,
+      events: peekTownEvents().filter((e) => e.type.startsWith('whistler.')),
+      moment: world.township.pendingMoment,
+      toast: snatcherToastOnScreen(),
+      prompt: whistlerPromptOnScreen(),
+      render: whistlerRenderState(),
+    };
+  };
+  // Force the spawn through the REAL code path: the gate is a pure predicate, so
+  // the seam supplies the two facts a gate driver cannot wait out (deep-night is
+  // three phases away; Dread 60 is a run's worth of landings) and the system
+  // itself does the spawning on its next tick.
+  (window as unknown as { __armWhistler: () => unknown }).__armWhistler = () => {
+    (window as unknown as { __setPhase: (p: string) => number }).__setPhase('deepNight');
+    world.dread = Math.max(world.dread, 75);
+    return { phase: 'deepNight', dread: world.dread, spawned: world.whistler.spawned };
+  };
+  // Walk it in to a chosen distance along its current bearing, so the three bands
+  // are reachable in a gate without rowing the wander out at 5.2 m/s. The BAND
+  // ITSELF still fires through the system's own monotonic ladder.
+  (window as unknown as { __whistlerTo: (d: number) => unknown }).__whistlerTo = (d: number) => {
+    const s = world.whistler;
+    const at = keeperPoint(world);
+    const dx = s.x - at.x;
+    const dz = s.z - at.z;
+    const len = Math.hypot(dx, dz) || 1;
+    s.x = at.x + (dx / len) * d;
+    s.z = at.z + (dz / len) * d;
+    s.wanderRing = Math.max(lanternRadius(world) + ROAM_MARGIN, d);
+    return { dist: Math.hypot(s.x - at.x, s.z - at.z), band: s.band };
+  };
+  // A REAL HitEvent on this tick's array, tagged for the Whistler — the in-play
+  // producer's own shape (the unit tests drive the arc itself).
+  (window as unknown as { __whistlerHit: (heavy?: boolean) => unknown }).__whistlerHit = (
+    heavy = false,
+  ) => {
+    world.combat.hits.push({
+      targetId: WHISTLER_TARGET_ID,
+      damage: heavy ? 18 : 6,
+      knockbackX: 0,
+      knockbackZ: 0,
+      stagger: heavy ? HEAVY_STAGGER : 0,
+    });
+    return { hits: world.combat.hits.length, gaffHp: world.whistler.gaffHp };
+  };
+  // A gaff landing on it through the SAME rule the system applies to a real swing
+  // (whistlerGaffCost) — the __postmasterGaff precedent, for the same reason:
+  // combat clears its hit array at the top of every tick, so an out-of-band
+  // injection between frames is not what the in-play producer does.
+  (window as unknown as { __whistlerGaff: (heavy?: boolean) => number }).__whistlerGaff = (
+    heavy = false,
+  ) => {
+    const s = world.whistler;
+    if (!whistlerFighting(s)) return -1;
+    s.gaffHits++;
+    s.gaffHp -= whistlerGaffCost(heavy ? HEAVY_STAGGER : 0);
+    return s.gaffHp;
+  };
+  // Bring it to arm's length of the keeper (aboard: of the hull) and point the
+  // keeper at it — the __postmasterToReach precedent.
+  (window as unknown as { __whistlerToReach: (d?: number) => unknown }).__whistlerToReach = (
+    d = 1.1,
+  ) => {
+    const s = world.whistler;
+    if (!whistlerFighting(s)) return null;
+    const at = keeperPoint(world);
+    s.x = at.x;
+    s.z = at.z + d;
+    s.speed = 0;
+    world.player.facing = Math.atan2(s.x - world.player.x, s.z - world.player.z);
+    world.combat.swingFacing = world.player.facing;
+    return { dist: Math.hypot(s.x - at.x, s.z - at.z), reach: WHISTLER_CUT_REACH };
+  };
+  // Pull the current phase timer to zero so the next haul begins on the next sim
+  // tick. The transition and everything it does are the real code.
+  (window as unknown as { __whistlerSkip: () => unknown }).__whistlerSkip = () => {
+    const s = world.whistler;
+    if (!whistlerFighting(s)) return null;
+    s.timer = 0;
+    return { phase: s.phase, reeling: s.reeling };
   };
 
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =

@@ -35,7 +35,11 @@ import { chromium } from 'playwright';
 // a 10x sim — on a heavily loaded machine the driver can lose that footrace
 // and time out. A B-timeout on a loaded box is suspect; rerun once on a quiet
 // machine before treating it as a regression (see docs/decisions.md).
-const URL = 'http://localhost:5173/?mode=foot&debug&timescale=10&seed=2026';
+// TETHER_GATE_URL lets the driver be pointed at a scoped dev server (a second
+// session's port, or a baseline worktree when a B-timeout has to be told apart
+// from a regression). Default unchanged.
+const URL =
+  process.env.TETHER_GATE_URL ?? 'http://localhost:5173/?mode=foot&debug&timescale=10&seed=2026';
 const WALK_SPEED = 4.5; // controller.ts WALK_SPEED — the movement walk while braced
 const GROUND_R = 20; // world.ts GROUND_RADIUS
 const PLAYER_R = 0.5; // shore threshold = GROUND_R - PLAYER_R = 19.5

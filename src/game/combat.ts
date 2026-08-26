@@ -38,6 +38,11 @@ import {
   POSTMASTER_TARGET_ID,
   postmasterFighting,
 } from '../bosses/postmaster';
+import {
+  WHISTLER_HIT_RADIUS,
+  WHISTLER_TARGET_ID,
+  whistlerFighting,
+} from '../enemies/whistler';
 
 // --- tuning constants ---------------------------------------------------------
 export const REACH = 1.6; // m — gaff arc radius (light and heavy)
@@ -156,6 +161,28 @@ export function postmasterGaffArc(world: WorldState): GaffArc | null {
   const b = world.postmaster;
   if (!postmasterFighting(b)) return null;
   if (world.mode !== 'foot') return null;
+  return { x: world.player.x, z: world.player.z, facing: world.combat.swingFacing };
+}
+
+// --- M8 (plan 05 §2.3): the Whistler is a FOURTH target for the SAME swing ------
+//
+// Its escape is the Postmaster's, one zone deeper: two landed gaffs knock its
+// grip off the line and open the contextual cut. What is different is that its
+// fight happens in OPEN WATER and can therefore be fought from the boat — so the
+// arc is measured the way the SNATCHER's is, not the way the Postmaster's is:
+// aboard, from the hull, aimed down the line (facing is not a driven quantity in
+// boat mode, so an aimed arc would be one nobody could aim); on foot, from the
+// keeper on the swing's own locked facing.
+//
+// It takes no HP either. The hit event is the entire interface, and
+// systems/whistler.ts owns what it means.
+export function whistlerGaffArc(world: WorldState): GaffArc | null {
+  const w = world.whistler;
+  if (!whistlerFighting(w)) return null;
+  if (world.mode === 'boat') {
+    const b = world.boat;
+    return { x: b.x, z: b.z, facing: Math.atan2(w.x - b.x, w.z - b.z) };
+  }
   return { x: world.player.x, z: world.player.z, facing: world.combat.swingFacing };
 }
 
@@ -283,6 +310,38 @@ export function updateCombat(world: WorldState, dt: number): void {
           const kb = isHeavy ? HEAVY_KNOCKBACK : LIGHT_KNOCKBACK;
           c.hits.push({
             targetId: POSTMASTER_TARGET_ID,
+            damage: isHeavy ? HEAVY_DAMAGE : lightStageDamage(c.comboStage),
+            knockbackX: (dx / dist) * kb,
+            knockbackZ: (dz / dist) * kb,
+            stagger: isHeavy ? HEAVY_STAGGER : 0,
+          });
+          c.swingHitDelivered = true;
+        }
+      }
+    }
+  }
+
+  // M8 boss-adjacent: the Whistler, on the same terms as the Postmaster above —
+  // in ITS fight there is no catch either, so this block is mutually exclusive
+  // with the two below in practice.
+  if (c.attackTimer > 0 && !c.swingHitDelivered) {
+    const arc = whistlerGaffArc(world);
+    if (arc) {
+      const isHeavy = c.swingIsHeavy;
+      const dur = isHeavy ? HEAVY_SWING_DURATION : LIGHT_SWING_DURATION;
+      const elapsed = dur - c.attackTimer;
+      const activeStart = isHeavy ? HEAVY_ACTIVE_START : LIGHT_ACTIVE_START;
+      const activeEnd = isHeavy ? HEAVY_ACTIVE_END : LIGHT_ACTIVE_END;
+      const w = world.whistler;
+      if (elapsed >= activeStart && elapsed < activeEnd) {
+        const arcHalf = (isHeavy ? HEAVY_ARC_DEG : LIGHT_ARC_DEG) / 2;
+        if (arcCircleHit(arc.x, arc.z, arc.facing, w.x, w.z, WHISTLER_HIT_RADIUS, REACH, arcHalf)) {
+          const dx = w.x - arc.x;
+          const dz = w.z - arc.z;
+          const dist = Math.hypot(dx, dz) || 1;
+          const kb = isHeavy ? HEAVY_KNOCKBACK : LIGHT_KNOCKBACK;
+          c.hits.push({
+            targetId: WHISTLER_TARGET_ID,
             damage: isHeavy ? HEAVY_DAMAGE : lightStageDamage(c.comboStage),
             knockbackX: (dx / dist) * kb,
             knockbackZ: (dz / dist) * kb,

@@ -288,7 +288,14 @@ const drag = await page.evaluate(
 );
 assert(drag, 'the delivery began');
 assert(drag && drag.aiReel === true, 'and only NOW is he taking line (fight.aiReel)');
-assert(drag && drag.reelActive === true, 'the constraint resolved his AI reel as active');
+// FLAKE FIX (t31): `aiReel` is set by the BOSS system at the end of a tick;
+// `reel.active` is what the CONSTRAINT makes of it on its NEXT step. Sampling
+// both in the same rAF callback is a race the driver loses whenever the drag
+// begins on the last sim step of a frame — so the second half is read a beat
+// later. Nothing about the behaviour changed; only when the driver looks.
+await sleep(250);
+const dragReelActive = await w('w.tether.fights[0] ? w.tether.fights[0].reel.active : null');
+assert(dragReelActive === true, `the constraint resolved his AI reel as active (${dragReelActive})`);
 
 await sleep(1400);
 const mid = await page.evaluate(() => {

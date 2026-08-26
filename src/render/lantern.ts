@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import type { WorldState } from '../core/world';
+import { BOW_OFFSET, LANTERN_BASE_RADIUS, lanternRadius } from '../game/darkness';
 
 // Warm palette (spec 8.1: bone/teal water, sodium-amber accents here).
 const LIGHT_COLOR = 0xffb45e; // warm amber
@@ -45,7 +46,14 @@ export function initLantern(scene: THREE.Scene): void {
   // Physical-ish point light: warm, tight decay so the glow pool is readable.
   // distance ~16 units, decay 2 gives a fast falloff — a small warm pool on the
   // water, not a flood. Base intensity tuned for modern three physical units.
-  light = new THREE.PointLight(LIGHT_COLOR, 5.0, 16, 2);
+  //
+  // M8 (plan 05 §2.3): the distance is no longer a literal — it is
+  // `lanternRadiusFor(bowLantern)` (game/darkness.ts), the SINGLE number that
+  // also decides where the Choir's cue gate stops drawing and where the
+  // Whistler's roam clamp holds it. updateLantern re-applies it every frame so a
+  // Chandlery upgrade bought mid-session widens the light without a rebuild.
+  light = new THREE.PointLight(LIGHT_COLOR, 5.0, LANTERN_BASE_RADIUS, 2);
+  light.name = 'lantern:light'; // the gate reads its `distance` back by name
   scene.add(light);
 
   // Tiny emissive lantern mesh — vertex-colored octahedron reads as a lamp
@@ -81,11 +89,13 @@ export function updateLantern(world: WorldState, dt: number): void {
   // reads as a dark shape against his own light and the glow pool leads the
   // boat (USER art direction). Foot: carried at head height as before.
   const b = world.boat;
-  const bowX = b.x + Math.sin(b.heading) * 1.75;
-  const bowZ = b.z + Math.cos(b.heading) * 1.75;
+  const bowX = b.x + Math.sin(b.heading) * BOW_OFFSET;
+  const bowZ = b.z + Math.cos(b.heading) * BOW_OFFSET;
   const x = foot ? world.player.x : bowX;
   const z = foot ? world.player.z : bowZ;
   const y = foot ? 1.7 : b.y + 0.85;
+  // THE radius (05 §2.3): the Chandlery's bow lantern, read live.
+  light.distance = lanternRadius(world);
   light.position.set(x, y, z);
   bulb.position.set(x, y, z);
   // Gentle bob so the lantern rides the boat's motion.

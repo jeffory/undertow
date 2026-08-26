@@ -83,6 +83,7 @@ function surface(world: WorldState): void {
   world.water.drift.z = 0;
   world.water.sinkingHaul = false;
   world.water.lethal = false;
+  world.water.adrift = false;
   world.ui.underwater = false;
   // Anything still sinking when the keeper climbs out is lost from the run haul
   // (plan §6.1: "extraction yields what you actually carried out").
@@ -91,9 +92,10 @@ function surface(world: WorldState): void {
   world.tetherEvents.push(ev);
 }
 
-// The swamp variant of the phase (plan §6.1). Pickups cost breath seconds;
-// breath 0 drowns (the run terminal reads hp 0); reaching a walkable islet hull
-// climbs out and ends it, losing whatever is still sinking.
+// The EXTENDED variant of the phase (plan §6.1's swamp; 05 §2.3's adrift).
+// Pickups cost breath seconds; breath 0 drowns ONLY when `water.lethal` is set
+// (the swamp sets it; the Whistler's delivery deliberately does not); reaching a
+// walkable islet hull climbs out and ends it, losing whatever is still sinking.
 function updateSwampPhase(world: WorldState, dt: number): void {
   const water = world.water;
   const p = world.player;
@@ -133,8 +135,14 @@ export function updateWaterPhase(world: WorldState, dt: number): void {
   const water = world.water;
 
   if (water.active) {
-    // The swamp variant has no fight holding it open — it runs on breath alone.
-    if (water.sinkingHaul) {
+    // The EXTENDED variants have no fight holding them open — they run on breath
+    // and a swim alone. Two producers reach this branch:
+    //   • `sinkingHaul` — the hull swamp (03 §6.1), lethal, haul on the bottom;
+    //   • `adrift` — the Whistler's delivery (05 §2.3), NOT lethal and with
+    //     nothing sinking, because it did not want you dead, it wanted you in
+    //     the water. `water.lethal` is what separates the two outcomes, and the
+    //     swim to a walkable shore is identical.
+    if (water.sinkingHaul || water.adrift) {
       updateSwampPhase(world, dt);
       return;
     }

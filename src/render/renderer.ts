@@ -17,6 +17,8 @@ import { initSilt, updateSilt } from './silt';
 import { initCongregation, updateCongregation } from './congregation';
 import { initSnatcher, updateSnatcher } from './snatcher';
 import { initPostmaster, updatePostmaster as updatePostmasterMesh } from './postmaster';
+import { initWhistler, updateWhistler as updateWhistlerMesh } from './whistler';
+import { initChoir, updateChoir as updateChoirMotes } from './choir';
 import { initTown, updateTown } from './town';
 import { initTownship, updateTownship } from './township';
 import { initRipples, updateRipples } from './ripples';
@@ -69,8 +71,12 @@ export function createRenderer(container: HTMLElement): RenderContext {
   camera.position.set(0, 6, 12);
   camera.lookAt(0, 0, 0);
 
-  // ambient so flat-shaded surfaces aren't pitch black
-  scene.add(new THREE.AmbientLight(0x223344, 0.6));
+  // ambient so flat-shaded surfaces aren't pitch black. NAMED, because the zone
+  // atmosphere owns how much world light there is (render/sky.ts, M8 §2.3) and
+  // it reaches this one by name rather than by traversing for it.
+  const ambient = new THREE.AmbientLight(0x223344, 0.6);
+  ambient.name = 'sky:ambient';
+  scene.add(ambient);
 
   initSky(scene);
   initWater(scene);
@@ -83,6 +89,8 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initCongregation(scene);
   initSnatcher(scene);
   initPostmaster(scene);
+  initWhistler(scene);
+  initChoir(scene);
   initTown(scene);
   initTownship(scene);
   initRipples(scene);
@@ -125,6 +133,8 @@ export function render(world: WorldState, dt: number): void {
   updateCongregation(world, dt); // M6: the boss swarm (one InstancedMesh, one draw)
   updateSnatcher(world, dt); // M7: the second mouth — fish-pipeline body + wake pool
   updatePostmasterMesh(world, dt); // M7 boss: the Postmaster — fish-pipeline body, one draw
+  updateWhistlerMesh(world, dt); // M8: the Whistler — not drawn at all until it strikes
+  updateChoirMotes(world, dt); // M8: the Choir — 40 emissive motes, two draws
   updateTown(world, dt);
   updateTownship(world, dt); // M7: the drowned Hollow (decks instanced, buildings on demand)
   updateRipples(world, dt);

@@ -360,12 +360,19 @@ assert(
 console.log('=== F. second pass — let the clock finish: the STOLEN outcome ===');
 await sleep(2000); // let the body finish drifting off
 await page.evaluate(() => window.__armSnatcher());
-const latched2 = await waitFor(`w.snatcher.phase === 'latched'`, 12000);
+// FLAKE FIX (t31): the second approach is a SIM-time journey (APPROACH_RADIUS at
+// APPROACH_SPEED ≈ 3.3 s of sim), and under swiftshader the fixed-step loop runs
+// at a small fraction of the wall clock — which a 20 ms polling loop makes worse,
+// because every poll is a page.evaluate competing with rAF for the main thread.
+// The old 12 s budget sat right on that edge and failed on HEAD as often as not;
+// nothing about the behaviour changed, only how long the driver is willing to
+// watch it and how often it interrupts to look.
+const latched2 = await waitFor(`w.snatcher.phase === 'latched'`, 45000, 150);
 assert(latched2, 'a second Snatcher latched onto the same fight');
 
 const preSteal = await snatcher();
 await page.evaluate(() => window.__snatcherSteal(0.05));
-const stole = await waitFor(`w.snatcher.stolen >= 1`, 4000);
+const stole = await waitFor(`w.snatcher.stolen >= 1`, 15000, 100);
 assert(stole, 'the steal clock completed');
 
 const after = await snatcher();

@@ -25,7 +25,7 @@ import {
 } from '../game/clock';
 import type { ClockPhase } from '../game/clock';
 import { hubLightCurve } from '../meta/bottledLight';
-import { zoneFogMultiplier, zoneFogTint } from '../core/zones';
+import { zoneFogMultiplier, zoneFogTint, zoneSkyDarken, zoneAmbientScale } from '../core/zones';
 
 // Palette (spec 8.1 / plan 01 §3.2): dark teal over near-black water base.
 const SKY_TOP = 0x080e12; // deep near-black with a hint of teal
@@ -49,6 +49,11 @@ const BEAM_COOL_COLOR = 0xb6cfe4;
 
 let fog: THREE.FogExp2 | null = null;
 let moon: THREE.DirectionalLight | null = null;
+// M8 (plan 05 §2.3): the world lights' untouched values, so the zone's scale is
+// applied to a base and never compounds frame over frame.
+let moonBaseIntensity = 0;
+let ambient: THREE.AmbientLight | null = null;
+let ambientBaseIntensity = 0;
 let bgSphere: THREE.Mesh | null = null;
 let bgGeo: THREE.BufferGeometry | null = null;
 
@@ -149,6 +154,14 @@ const tmpBottom = new THREE.Color();
 const tmpFog = new THREE.Color();
 // M7 (plan 05 §2.2): the zone's own hue nudge, applied AFTER the phase lerp.
 const tmpZoneTint = new THREE.Color();
+// M8 (plan 05 §2.3): the void. The three dome stops and the fog colour are
+// lerped this far toward pure black, LAST — after the phase lerp and after the
+// zone tint. Scratch colours so the drifting palette itself is never mutated
+// (the lerp state has to keep drifting toward the phase, not toward the zone).
+const BLACK = new THREE.Color(0x000000);
+const voidTop = new THREE.Color();
+const voidHorizon = new THREE.Color();
+const voidBottom = new THREE.Color();
 
 // --- lighthouse beam state -----------------------------------------------------
 let beamMesh: THREE.Mesh | null = null;
@@ -237,7 +250,7 @@ function ensureBeam(scene: THREE.Scene): void {
   }
 }
 
-function updateBeam(scene: THREE.Scene, phase: ClockPhase, dt: number): void {
+function updateBeam(scene: THREE.Scene, phase: ClockPhase, dt: number, zone: number): void {
   // Re-find the lighthouse lantern whenever it has been disposed (new run) or
   // never found yet (lake not built).
   if (beamTarget && !beamTarget.parent) beamTarget = null;
@@ -260,6 +273,15 @@ function updateBeam(scene: THREE.Scene, phase: ClockPhase, dt: number): void {
   // every decant (plan §1.1: sweepFrequency is on the same 1 − f curve — the
   // meta-clock visibly winds down as the light is bottled).
   beamAngle += beamSweepHzForPhase(phase) * hubLightCurve(hubDecants).sweepScale * Math.PI * 2 * dt;
+
+  // M8 (plan 05 §2.3): the beam is `fog: false` — it is built to cut THROUGH the
+  // distance haze, which is the one thing nothing may do in the Choir. It rides
+  // the same zone world-light scale as the moon and the ambient, so in the void
+  // the lantern really is the only light. ×1 in every other zone, so the M5
+  // decant curve owns it exactly as before.
+  const beamMat = beamMesh.material as THREE.MeshBasicMaterial;
+  beamMat.opacity =
+    BEAM_OPACITY * hubLightCurve(hubDecants).intensityScale * zoneAmbientScale(zone);
 
   const origin = beamTarget.getWorldPosition(tmpPos);
   beamDir.set(Math.cos(beamAngle), -0.06, Math.sin(beamAngle)).normalize();
@@ -299,6 +321,7 @@ export function initSky(scene: THREE.Scene): void {
   // and islet silhouettes. Positioned high-ish and far off-axis; direction is
   // from position toward origin.
   moon = new THREE.DirectionalLight(0x9db8d4, 1.1);
+  moonBaseIntensity = 1.1;
   moon.position.set(-12, 16, -10);
   moon.target.position.set(0, 0, 0);
   moon.name = 'sky:moon';
@@ -340,16 +363,48 @@ export function updateSky(world: WorldState, dt: number): void {
     // own multiplier — the Kelp Graves' "fog denser than Shallows". Zone 1 is
     // exactly ×1, so the Shallows is byte-identical to pre-M6.
     fog.density = curDensity * fogDensityScale * zoneFogMultiplier(zone);
+    // M8 (plan 05 §2.3): "black palette with emissive points; fog near-total".
+    // Density alone gives a WALL — geometry saturating toward a teal fog colour.
+    // This is the other half: what it saturates toward is (near) black, so the
+    // wall becomes a void. Zones 1-3/5 darken by exactly 0, a no-op lerp.
+    const dark = zoneSkyDarken(zone);
+    if (dark > 0) fog.color.lerp(BLACK, dark);
   }
 
   // Rewrite the gradient sphere's vertex colors from the drifting palette
   // (same per-vertex math as init, cheap for the 32×24 sphere).
   if (bgGeo) {
-    paintSphere(curTop, curHorizon, curBottom);
+    const dark = zoneSkyDarken(world.run ? world.run.zone : 1);
+    if (dark > 0) {
+      // The dome goes with the fog — otherwise the horizon band is the one lit
+      // thing in a lightless zone and the void reads as a lid, not a depth.
+      paintSphere(
+        voidTop.copy(curTop).lerp(BLACK, dark),
+        voidHorizon.copy(curHorizon).lerp(BLACK, dark),
+        voidBottom.copy(curBottom).lerp(BLACK, dark),
+      );
+    } else {
+      paintSphere(curTop, curHorizon, curBottom);
+    }
+  }
+
+  // M8 (plan 05 §2.3): "geometry only where light touches". The fog hides the
+  // FAR; this is what stops a near islet standing in the moonlight in a zone
+  // whose whole premise is that the lantern is the only light there is. Applied
+  // to the captured base every frame, so it is a set and not an accumulation —
+  // and it is exactly ×1 outside the Choir.
+  if (ctx) {
+    if (!ambient || !ambient.parent) {
+      ambient = ctx.scene.getObjectByName('sky:ambient') as THREE.AmbientLight | null;
+      if (ambient) ambientBaseIntensity = ambient.intensity;
+    }
+    const worldLight = zoneAmbientScale(world.run ? world.run.zone : 1);
+    if (moon) moon.intensity = moonBaseIntensity * worldLight;
+    if (ambient) ambient.intensity = ambientBaseIntensity * worldLight;
   }
 
   // Lighthouse beam (fog:false so it cuts through the distance haze).
   if (ctx) {
-    updateBeam(ctx.scene, phase, dt);
+    updateBeam(ctx.scene, phase, dt, world.run ? world.run.zone : 1);
   }
 }

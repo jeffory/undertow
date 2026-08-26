@@ -29,6 +29,8 @@ import { updateBoatCombat } from '../systems/boatCombat';
 import { updateCongregation } from '../systems/congregation';
 import { updateSnatcher } from '../systems/snatcher';
 import { updatePostmaster } from '../systems/postmaster';
+import { updateWhistler } from '../systems/whistler';
+import { updateChoir } from '../systems/choir';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
 import { updateBottledLight } from '../systems/bottledLight';
@@ -43,6 +45,7 @@ import { updateBarkOverlay } from '../ui/barkOverlay';
 import { updateEnvTextOverlay } from '../ui/envTextOverlay';
 import { updateCongregationInvoice } from '../ui/congregationInvoice';
 import { updatePostmasterOverlay } from '../ui/postmasterTelegraph';
+import { updateWhistlerPrompt } from '../ui/whistlerPrompt';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -221,6 +224,7 @@ function ui(world: WorldState, _dt: number): void {
   updateEnvTextOverlay(world); // 05 §4.3 — the drowned town's signage
   updateCongregationInvoice(world); // 05 §2.1 — the Congregation's ledger
   updatePostmasterOverlay(world); // 05 §2.2 — his bubble + the summon/cut prompt
+  updateWhistlerPrompt(world); // 05 §2.3 — the Choir elite's cut hold
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -356,6 +360,15 @@ export const UPDATE_ORDER: SystemFn[] = [
   // and BEFORE the run reducer + the run terminal (so `deliveredBy` is stamped
   // before the death that drowning caused is folded into a RunResult).
   updatePostmaster,
+  // 05 §2.3: the Choir's roaming elite. The same two constraints as the three
+  // above — AFTER combat (this tick's gaff hits are what open the cut window)
+  // and BEFORE the run reducer + the run terminal (so `deliveredBy` is stamped
+  // in the tick the water closed over the keeper).
+  updateWhistler,
+  // 05 §2.3: the void sings. Order-independent of everything else — it reads the
+  // clock and writes only the town-event queue — but it is placed with the
+  // Whistler because they are the same zone's two halves.
+  updateChoir,
   updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
   updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)

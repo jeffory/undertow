@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { rippleRadiusFor } from '../run/disturbance';
 import type { Disturbance } from '../run/disturbance';
+import { withinLantern } from '../game/darkness';
 
 let root: THREE.Group | null = null;
 const groups = new Map<number, THREE.Group>();
@@ -112,9 +113,25 @@ export function updateRipples(world: WorldState, dt: number): void {
     }
     groups.delete(id);
   }
+  // M8 (plan 05 §2.3): the darkness gate. "geometry, disturbances, and the
+  // line's far end exist but are NOT DRAWN beyond the disc."
+  //
+  // A ripple ring is the most flagrant case in the game: its material is
+  // `depthTest: false` so it draws OVER the water, which means the near-total
+  // zone-4 fog cannot hide it — a telegraph 80 m away would be a bright ring
+  // floating in a black void. So the CUE is withheld while its centre is
+  // outside the lantern's disc (padded by the ring's own radius, because a big
+  // ring whose centre is just past the rim is still partly inside it).
+  //
+  // THE SIM IS UNTOUCHED: the disturbance is still live, still ticking, still
+  // castable-at with a debug aim point. This is the M6 occluded-telegraph
+  // pattern — suppress the picture, never the fact. Outside zone 4
+  // `withinLantern` is unconditionally true, so nothing else changes.
   for (const id of live) {
     const group = groups.get(id);
-    if (group) group.visible = true;
+    if (!group) continue;
+    const d = world.disturbances.find((x) => x.id === id);
+    group.visible = !d || withinLantern(world, d.pos.x, d.pos.z, rippleRadiusFor(d));
   }
   void dt;
 }

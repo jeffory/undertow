@@ -32,6 +32,13 @@ import {
 import { getAsset, hasAsset } from './assets';
 import { attenuatedWaterHeightAt, shoreAttenAt } from '../core/shore';
 import { createRng, LAYOUT } from '../core/rngStreams';
+import { withinLantern } from '../game/darkness';
+
+// M8 (plan 05 §2.3) — how far past the lantern's rim a marker's own glow still
+// counts as inside the disc. A buoy lantern is a metre of sprite; a sinkhole is
+// a wide vortex you should be able to see the near edge of before you are in it.
+const BUOY_CUE_PAD = 1.5;
+const SINKHOLE_CUE_PAD = 6;
 
 export const GROUND_Y = 0.25; // islet shoreline surface, above the water plane
 
@@ -753,7 +760,17 @@ export function updateLake(world: WorldState, _dt: number): void {
     const surf = attenuatedWaterHeightAt(islets, marker.group.position.x, marker.group.position.z, t);
     marker.group.position.y =
       surf + Math.sin(t * 2 + marker.phase) * 0.06 * (1 - sink) - sink * 5;
-    marker.group.visible = sink < 1;
+    // M8 (plan 05 §2.3): a buoy's caged lantern is an ADDITIVE sprite halo —
+    // the one thing on the lake built to be legible from the far side of it.
+    // In the Choir that would be a navigation beacon in a zone whose whole
+    // pressure is not being able to navigate, so the marker is withheld beyond
+    // the lantern's disc. Untouched everywhere else (`withinLantern` is
+    // unconditionally true outside zone 4), and the BUOY itself is untouched
+    // even here: extraction still works by feel, at a buoy you cannot see until
+    // you are on top of it.
+    marker.group.visible =
+      sink < 1 &&
+      withinLantern(world, marker.group.position.x, marker.group.position.z, BUOY_CUE_PAD);
   }
   if (haloMaterial) {
     // gentle shared breath for the buoy lantern halos (one material, no churn)
@@ -766,6 +783,14 @@ export function updateLake(world: WorldState, _dt: number): void {
     marker.outer.rotation.y = -t * 0.32;
     const surf = attenuatedWaterHeightAt(islets, marker.group.position.x, marker.group.position.z, t);
     marker.group.position.y = surf + 0.02;
+    // Same gate: the way DOWN is a cue too, and in the void you find it by
+    // arriving at it. (05 §2.3)
+    marker.group.visible = withinLantern(
+      world,
+      marker.group.position.x,
+      marker.group.position.z,
+      SINKHOLE_CUE_PAD,
+    );
   }
 
   updateTimber(islets, t);

@@ -13,7 +13,7 @@
 export interface BestiaryRecord {
   id: string;
   name: string;
-  zone: 1 | 2 | 3;
+  zone: 1 | 2 | 3 | 4;
   rarity: 'C' | 'U' | 'R' | 'E' | 'Drowned' | 'Boss';
   eligibility: 1 | 2 | 3;
   category: 'catch' | 'crawler' | 'caller' | 'snatcher' | 'dragger' | 'bagman' | 'boss';
@@ -279,8 +279,35 @@ export const TOWNSHIP_BESTIARY_TEXT: BestiaryRecord[] = [
   },
 ];
 
+// --- M8: the Choir (zone 4) ---------------------------------------------------------
+// The void's roaming elite, transcribed VERBATIM from docs/story/choir.md §4
+// ("Section 2: The Whistler"). Its own array for the same reason the kelp and
+// township rosters have theirs: the zone-1 id-coverage test pins BESTIARY_TEXT
+// exactly, and all four feed the single lookup below.
+//
+// The bible writes no `entryWilling` for it. There is no willing way to meet a
+// thing that hooks you, so the field stays absent rather than invented.
+export const CHOIR_BESTIARY_TEXT: BestiaryRecord[] = [
+  {
+    id: 'the-whistler',
+    name: 'The Whistler',
+    zone: 4,
+    rarity: 'E',
+    eligibility: 3,
+    category: 'dragger',
+    silhouette: 'A tall, unjointed shadow whistling two sharp notes just past the lantern\'s reach.',
+    entryFought:
+      'It carries its own rod and line in the pitch dark. It does not wait for a bite; it searches the light until it finds a mouth.',
+  },
+];
+
 const BY_ID = new Map<string, BestiaryRecord>(
-  [...BESTIARY_TEXT, ...KELP_BESTIARY_TEXT, ...TOWNSHIP_BESTIARY_TEXT].map((r) => [r.id, r]),
+  [
+    ...BESTIARY_TEXT,
+    ...KELP_BESTIARY_TEXT,
+    ...TOWNSHIP_BESTIARY_TEXT,
+    ...CHOIR_BESTIARY_TEXT,
+  ].map((r) => [r.id, r]),
 );
 
 export function bestiaryById(id: string): BestiaryRecord | null {

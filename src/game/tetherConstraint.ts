@@ -21,6 +21,7 @@ import {
   PLAYER_ENTITY,
   FISH_ENTITY,
   POSTMASTER_ENTITY,
+  WHISTLER_ENTITY,
   LAND_DISTANCE,
   CUT_HOLD_SECONDS,
   LOW_TENSION_THRESHOLD,
@@ -86,6 +87,18 @@ function resolvePos(world: WorldState, anchor: Anchor): PosAccessor {
           write: (x, z) => {
             b.x = x;
             b.z = z;
+          },
+        };
+      }
+      // 05 §2.3 — the second reverse fight's far end. The Whistler is plain
+      // world state too, reached through the same one seam.
+      if (anchor.entityId === WHISTLER_ENTITY) {
+        const wl = world.whistler;
+        return {
+          read: () => ({ x: wl.x, z: wl.z }),
+          write: (x, z) => {
+            wl.x = x;
+            wl.z = z;
           },
         };
       }

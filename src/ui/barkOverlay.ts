@@ -45,6 +45,13 @@ const STYLE = `
   }
 `;
 
+// 05 §2.3 — the Choir's dread lines are FAINT. In the void the parchment note is
+// the brightest object on screen by an order of magnitude, and a full-strength
+// one would undo the darkness the whole zone is built on. Same note, same
+// position, same fade; a lower peak opacity and a colder cast.
+const FAINT_OPACITY = '0.5';
+const FAINT_FILTER = 'saturate(0.35) brightness(0.82)';
+
 function ensureStyle(): void {
   if (styleEl || typeof document === 'undefined') return;
   styleEl = document.createElement('style');
@@ -61,7 +68,7 @@ function clearFadeTimer(): void {
 
 // The one parchment note, rendered. Title bar, body, optional stamp. Never
 // stacks: a second call replaces what is in the element rather than piling up.
-function renderToast(title: string, body: string, stamp: string | null): void {
+function renderToast(title: string, body: string, stamp: string | null, faint = false): void {
   if (typeof document === 'undefined') return;
   ensureStyle();
   clearFadeTimer();
@@ -86,7 +93,8 @@ function renderToast(title: string, body: string, stamp: string | null): void {
     mask.textContent = stamp;
     toastEl.appendChild(mask);
   }
-  toastEl.style.opacity = '1';
+  toastEl.style.opacity = faint ? FAINT_OPACITY : '1';
+  toastEl.style.filter = faint ? FAINT_FILTER : '';
   toastEl.style.display = 'block';
 
   fadeTimer = setTimeout(() => {
@@ -114,25 +122,44 @@ export function showBarkToast(bark: WorldState['town']['pendingBark']): void {
 // salvage with (docs/story/township.md §7, note-z3-04).
 const SNATCHER_STAMP = 'PARTITION APPROVED';
 
-let lastMoment: { title: string; text: string } | null = null;
+let lastMoment: { title: string; text: string; trigger: string; faint: boolean } | null = null;
 
 export function showMomentToast(moment: WorldState['township']['pendingMoment']): void {
   if (!moment) return;
-  lastMoment = { title: moment.title, text: moment.text };
-  renderToast(moment.title, moment.text, SNATCHER_STAMP);
+  lastMoment = {
+    title: moment.title,
+    text: moment.text,
+    trigger: moment.trigger,
+    faint: moment.faint === true,
+  };
+  // The stamp defaults to the Snatcher's Schedule 6-S line, so every M7 moment
+  // renders exactly as it did; M8's Choir lines carry their own (05 §2.3).
+  renderToast(moment.title, moment.text, moment.stamp ?? SNATCHER_STAMP, moment.faint === true);
 }
 
 // Probe/gate readout: what the note ACTUALLY says right now. The sim's
 // `pendingMoment` is consumed by this overlay within a frame of being parked,
 // so it is never what an outside observer can read — the same reason
 // envTextOverlay exposes `envTextOnScreen()`.
-export function snatcherToastOnScreen(): { visible: boolean; title: string; text: string } {
+export function snatcherToastOnScreen(): {
+  visible: boolean;
+  title: string;
+  text: string;
+  trigger: string;
+  faint: boolean;
+} {
   const el = toastEl;
   const visible = !!el && el.style.display !== 'none' && el.style.opacity !== '0';
   return {
     visible: visible && lastMoment !== null,
     title: lastMoment ? lastMoment.title : '',
     text: lastMoment ? lastMoment.text : '',
+    // 05 §2.3 — the Choir's dread lines are the same note at a lower peak
+    // opacity; the gate reads the trigger and the faintness back off the
+    // element rather than off the sim slot, which the overlay consumes within a
+    // frame of it being parked.
+    trigger: lastMoment ? lastMoment.trigger : '',
+    faint: lastMoment ? lastMoment.faint : false,
   };
 }
 
