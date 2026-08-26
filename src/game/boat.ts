@@ -10,6 +10,7 @@ import type { WorldState } from '../core/world';
 // landed yet, final compile depends on B; the rest of this file is self-contained.
 import { waterHeightAt } from '../render/water';
 import { shoreAttenAt } from '../core/shore';
+import { createWake, stepWake, WAKE_POOL } from '../core/wake';
 import type { Islet } from '../gen/lakeMap';
 // Kinematics (heading/speed integration) live in the pure module boatPhysics.ts
 // and are stepped by the movement SIM system; this render module only reads.
@@ -33,7 +34,7 @@ let hullPivot: THREE.Group | null = null; // pitch/roll pivot holding hull OR ro
 let primHull: THREE.Mesh | null = null; // primitive hull (fallback)
 let rowboatSwapped = false;
 let wake: THREE.Points | null = null;
-let wakeClock = 0;
+const wakeState = createWake();
 
 // --- hull geometry (flat-shaded, vertex colours, no textures) ----------------
 
@@ -179,32 +180,34 @@ function buildHullGeometry(): THREE.BufferGeometry {
 }
 
 function makeWake(): THREE.Points {
-  // a small V of splash points trailing the stern, one draw call
-  const N = 24;
-  const pos = new Float32Array(N * 3);
-  const col = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const spread = ((i % 4) / 4 - 0.5) * 1.2;
-    const dist = (Math.floor(i / 4) / 5) * 2.2 + 0.3;
-    pos[i * 3] = spread;
-    pos[i * 3 + 1] = 0;
-    pos[i * 3 + 2] = -dist - 1.0;
-    const a = 1 - i / N;
-    col[i * 3] = 0.7 * a;
-    col[i * 3 + 1] = 0.75 * a;
-    col[i * 3 + 2] = 0.8 * a;
-  }
+  // world-space splash pool (core/wake.ts, T6): one Points draw call whose
+  // positions/colors are rewritten each frame from the pure particle state.
+  // Additive blending: faded particles blend to nothing over the dark water.
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(WAKE_POOL * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(WAKE_POOL * 3), 3));
+  // soft radial sprite — bare Points render as hard squares (the old wake's
+  // "drifting boxes" read); a 32px gradient splat reads as churned water
+  const cnv = document.createElement('canvas');
+  cnv.width = cnv.height = 32;
+  const g2d = cnv.getContext('2d')!;
+  const grad = g2d.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g2d.fillStyle = grad;
+  g2d.fillRect(0, 0, 32, 32);
   const mat = new THREE.PointsMaterial({
-    size: 0.22,
+    size: 0.42,
+    map: new THREE.CanvasTexture(cnv),
     vertexColors: true,
     transparent: true,
-    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  return new THREE.Points(geo, mat);
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false; // positions live in the buffer, bounds never computed
+  return pts;
 }
 
 export function initBoat(scene: THREE.Scene): void {
@@ -226,9 +229,11 @@ export function initBoat(scene: THREE.Scene): void {
   // primitive bench/oar props are gone (the oar read as a plank stuck through
   // the hull). A proper stowed-oar prop can return with the boat-combat pass.
 
+  // The wake lives at SCENE level in world space — parenting it to the boat
+  // group made it translate/yaw with the hull (bug B3: a wake carried by its
+  // emitter reads as flicker stuck to the stern, never as a trail).
   wake = makeWake();
-  wake.visible = false;
-  group.add(wake);
+  scene.add(wake);
 
   group.position.set(0, 0, 0);
   scene.add(group);
@@ -307,18 +312,27 @@ export function updateBoat(world: WorldState, dt: number): void {
   hullPivot!.rotation.x = pitch;
   hullPivot!.rotation.z = roll;
 
-  // --- wake / splash hint -----------------------------------------------------
+  // --- wake: step the pure world-space pool, write it into the buffers -------
   if (wake) {
-    wakeClock += dt;
-    const moving = Math.abs(b.speed) > 0.15;
-    wake.visible = moving;
-    if (moving) {
-      // gentle rise/fall pulse
-      const a = 0.5 + 0.3 * Math.sin(wakeClock * 10 + b.speed * 3);
-      (wake.material as THREE.PointsMaterial).opacity = a * Math.min(b.speed / 1.5, 1);
-      // NOTE: the wake is a child of the boat group, which already carries the
-      // boat's world transform — setting world coords here double-transformed
-      // it and sent the splash grid drifting across the lake.
+    stepWake(wakeState, { x: b.x, z: b.z, heading: b.heading, speed: b.speed }, dt);
+    const geo = wake.geometry;
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const col = geo.attributes.color as THREE.BufferAttribute;
+    for (let i = 0; i < wakeState.parts.length; i++) {
+      const p = wakeState.parts[i]!;
+      if (p.age >= p.life) {
+        pos.setXYZ(i, 0, -999, 0); // dead slot: parked out of sight
+        col.setXYZ(i, 0, 0, 0);
+        continue;
+      }
+      // ride the (shore-attenuated) water surface where the particle IS —
+      // never where the boat is
+      pos.setXYZ(i, p.x, sampleWater(p.x, p.z, t) + 0.07, p.z);
+      const fade = 1 - p.age / p.life;
+      const a = fade * fade * 0.55;
+      col.setXYZ(i, 0.62 * a, 0.68 * a, 0.7 * a);
     }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
   }
 }
