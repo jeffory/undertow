@@ -18,6 +18,7 @@ import { stepBoatKinematics, stepBoatMovement } from '../game/boatPhysics';
 import { phaseAt, runElapsedMs } from '../game/clock';
 import { tierFor } from '../game/dread';
 import { updateTetherConstraint } from '../game/tetherConstraint';
+import { splashFx } from '../game/splashFx';
 import { updateTetherLog } from '../playtest/tetherLog';
 import { updateDebugPanel } from '../ui/debugPanel';
 import { updateCastFlow } from '../systems/castFlow';
@@ -282,6 +283,7 @@ export const UPDATE_ORDER: SystemFn[] = [
   updateCastFlow, // 03 §3: cast/bite/prompt (after intent, before the tether constraint)
   updateTetherFishAI, // 02 round 2A: tethered-fight FSM — end of intent phase
   updateTetherConstraint, // 02: distance constraint — AFTER intent, BEFORE movement
+  splashFx, // T10: combat splash FX — steps the pool + consumes the fresh event stream sim-side
   updateWaterPhase, // 02 T9: reads the post-pull position (trigger) + sets drift before movement
   updateTetherLog, // 02: playtest instrumentation — consumes the fresh event stream
   movement,

@@ -13,6 +13,7 @@ import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
 import { initLake, updateLake } from './lake';
 import { initRipples, updateRipples } from './ripples';
+import { initSplash, updateSplash } from './splash';
 import { updatePick } from './pick';
 import { initPlayer, updatePlayer } from './player';
 import { initFish, updateFishMesh } from './fish';
@@ -59,6 +60,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initGround(scene);
   initLake(scene);
   initRipples(scene);
+  initSplash(scene);
   initPlayer(scene);
   initFish(scene);
   initLines(scene);
@@ -93,6 +95,7 @@ export function render(world: WorldState, dt: number): void {
   updateGround(world, dt);
   updateLake(world, dt);
   updateRipples(world, dt);
+  updateSplash(world, dt);
   updatePlayer(world, dt);
   updateFishMesh(world, dt);
   updateLines(world, dt);

@@ -23,6 +23,8 @@ import type { BestiaryEvent } from '../bestiary/bestiary';
 import type { Disturbance } from '../run/disturbance';
 import type { FishParams } from '../gen/fishParams';
 import { makeParams } from '../gen/fishParams';
+import type { SplashState } from './splash';
+import { createSplash } from './splash';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
 
@@ -316,6 +318,7 @@ export interface WorldState {
   line: LineStats; // 02 — equipped line
   tuning: TetherTuning; // 02 — the six dials
   tetherEvents: TetherEvent[]; // 02 — produced by tetherConstraint, cleared per tick
+  splash: SplashState; // T10 — combat splash pool (sim-side step+spawn in splashFx)
   water: WaterPhaseState; // 02 — water-phase state (T9 owns the system)
   lure: LureState; // 02 — equipped lure slot (cut/snap cost)
   lake: LakeMap | null; // 03 — the generated procedural lake (run start sets it)
@@ -385,6 +388,7 @@ export function createWorld(seed = 1): WorldState {
     line: { ...BASE_LINE },
     tuning: { ...DEFAULT_TUNING },
     tetherEvents: [],
+    splash: createSplash(),
     water: {
       active: false,
       breath: 15,
