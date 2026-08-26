@@ -13,6 +13,7 @@ import { initSavePanel } from './ui/savePanel';
 import { initQaAnnotate, isQaPaused } from './ui/qaAnnotate';
 import { initTitleScreen } from './ui/titleScreen';
 import { applySavedOptions, initOptionsMenu } from './ui/optionsMenu';
+import { initAudio } from './audio/engine';
 import { toggleBestiary } from './ui/bestiaryScreen';
 import { initHud } from './ui/hud';
 import { applyRunStartPassives } from './loot/runStart';
@@ -110,6 +111,10 @@ initHud();
 
 // CIRCULAR 4 options menu: Esc opens/closes it in-game in every mode.
 initOptionsMenu();
+
+// Procedural audio (t13): binds the first-gesture unlock — browsers block an
+// AudioContext built outside a real click. SCHEDULE B drives it from there.
+initAudio();
 
 // M2.5 shell: title screen + opening story cards over the live drifting lake
 // (docs/story/title-menu.md / opening.md). Debug and gate paths (?debug, ?qa)

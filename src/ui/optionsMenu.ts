@@ -11,15 +11,23 @@
 //   - SCHEDULE A  Resolution of Basin Survey  (render scale → renderer pixel ratio)
 //   - SCHEDULE A  Permissible Murk Level      (fog density multiplier → sky.ts lerp)
 //   - SCHEDULE A  Chromatic Dispersion & Lens Staining (post pass on/off → post.ts)
+//   - SCHEDULE B  Master Volume of Sluice Authority (master gain → audio/engine.ts)
+//   - SCHEDULE B  Basin Resonance & Formation Saws   (lake drone bus on/off)
+//   - SCHEDULE B  Bowed-String Sonification          (line-creak bus on/off)
+//   - SCHEDULE B  Sub-Bass Dread Modulation          (heartbeat bus on/off)
 //   - SCHEDULE C  Reel Stance Mode            (hold/toggle RMB latch → game/input.ts)
 // Everything else renders its verbatim label but is inert, stamped
-// 'AWAITING INSTALLATION' (audio has no system yet; the tilt/palette/dampener
-// rows have no seam this task wires).
+// 'AWAITING INSTALLATION' (the tilt/palette/dampener rows have no seam yet).
+//
+// SCHEDULE B went live in t13 — the whole of audio is synthesized at runtime
+// (src/audio/engine.ts); the graph itself is gesture-gated, but these rows are
+// plain persisted state that applies the moment the context exists.
 
 import { setRenderScale } from '../render/renderer';
 import { setFogDensityScale } from '../render/sky';
 import { setPostEnabled } from '../render/post';
 import { setReelStance } from '../game/input';
+import { setAudioOptions } from '../audio/engine';
 
 const OPTIONS_KEY = 'undertow.options.v1';
 
@@ -32,6 +40,14 @@ export interface UndertowOptions {
   postEnabled: boolean;
   // Reel Stance Mode — Hold RMB / Toggle RMB
   reelStance: 'hold' | 'toggle';
+  // Master Volume of Sluice Authority — 0 / 0.35 / 0.7 / 1 (Off/Low/Standard/Full)
+  masterVolume: number;
+  // Basin Resonance & Formation Saws — the lake drone bed
+  droneEnabled: boolean;
+  // Bowed-String Sonification — the line-tension creak
+  creakEnabled: boolean;
+  // Sub-Bass Dread Modulation — the heartbeat
+  heartbeatEnabled: boolean;
 }
 
 // Defaults = current boot behaviour.
@@ -40,10 +56,18 @@ const DEFAULTS: UndertowOptions = {
   fogDensityScale: 1,
   postEnabled: true,
   reelStance: 'hold',
+  // Audio defaults (t13): master 70%, every bed on.
+  masterVolume: 0.7,
+  droneEnabled: true,
+  creakEnabled: true,
+  heartbeatEnabled: true,
 };
 
 const RENDER_SCALES = [0.5, 0.75, 1];
 const FOG_DENSITY_SCALES = [0.7, 1.0, 1.4];
+// Stepped rather than a free slider: it follows the menu's segmented-button
+// pattern, and it is the only control shape this ledger has.
+const MASTER_LEVELS = [0, 0.35, 0.7, 1];
 
 // --- pure options state -------------------------------------------------------
 
@@ -64,7 +88,25 @@ export function sanitizeOptions(raw: unknown): UndertowOptions {
   const postEnabled =
     typeof o.postEnabled === 'boolean' ? o.postEnabled : DEFAULTS.postEnabled;
   const reelStance = o.reelStance === 'toggle' ? 'toggle' : DEFAULTS.reelStance;
-  return { renderScale, fogDensityScale, postEnabled, reelStance };
+  const masterVolume = MASTER_LEVELS.includes(o.masterVolume as number)
+    ? (o.masterVolume as number)
+    : DEFAULTS.masterVolume;
+  const droneEnabled =
+    typeof o.droneEnabled === 'boolean' ? o.droneEnabled : DEFAULTS.droneEnabled;
+  const creakEnabled =
+    typeof o.creakEnabled === 'boolean' ? o.creakEnabled : DEFAULTS.creakEnabled;
+  const heartbeatEnabled =
+    typeof o.heartbeatEnabled === 'boolean' ? o.heartbeatEnabled : DEFAULTS.heartbeatEnabled;
+  return {
+    renderScale,
+    fogDensityScale,
+    postEnabled,
+    reelStance,
+    masterVolume,
+    droneEnabled,
+    creakEnabled,
+    heartbeatEnabled,
+  };
 }
 
 export interface StorageLike {
@@ -109,6 +151,11 @@ export function applyOptions(o: UndertowOptions): void {
   setFogDensityScale(o.fogDensityScale);
   setPostEnabled(o.postEnabled);
   setReelStance(o.reelStance);
+  // SCHEDULE B (t13). UndertowOptions is structurally a superset of
+  // AudioOptions, so the whole row goes straight over. No-op with no
+  // AudioContext (headless) and safe before the first gesture — the engine
+  // stores the values and applies them when the graph is built.
+  setAudioOptions(o);
 }
 
 // Boot-time one-liner (main.ts): load + apply whatever is stored.
@@ -378,10 +425,44 @@ function renderMenu(): void {
 
   ledger.appendChild(
     schedule('SCHEDULE B: AUDITORY MONITORING', [
-      { label: 'MASTER VOLUME OF SLUICE AUTHORITY', subtext: 'Master Gain', kind: 'inert' },
-      { label: 'BASIN RESONANCE & FORMATION SAWS', subtext: 'Lake Drone', kind: 'inert' },
-      { label: 'BOWED-STRING SONIFICATION', subtext: 'Line Tension Creak', kind: 'inert' },
-      { label: 'SUB-BASS DREAD MODULATION', subtext: 'Heartbeat Pulse', kind: 'inert' },
+      {
+        label: 'MASTER VOLUME OF SLUICE AUTHORITY',
+        subtext: 'Master Gain',
+        kind: 'live',
+        options: [
+          { text: 'Off', apply: () => setAndSave({ masterVolume: 0 }), selected: () => current.masterVolume === 0 },
+          { text: 'Low', apply: () => setAndSave({ masterVolume: 0.35 }), selected: () => current.masterVolume === 0.35 },
+          { text: 'Standard', apply: () => setAndSave({ masterVolume: 0.7 }), selected: () => current.masterVolume === 0.7 },
+          { text: 'Full', apply: () => setAndSave({ masterVolume: 1 }), selected: () => current.masterVolume === 1 },
+        ],
+      },
+      {
+        label: 'BASIN RESONANCE & FORMATION SAWS',
+        subtext: 'Lake Drone',
+        kind: 'live',
+        options: [
+          { text: 'On', apply: () => setAndSave({ droneEnabled: true }), selected: () => current.droneEnabled },
+          { text: 'Off', apply: () => setAndSave({ droneEnabled: false }), selected: () => !current.droneEnabled },
+        ],
+      },
+      {
+        label: 'BOWED-STRING SONIFICATION',
+        subtext: 'Line Tension Creak',
+        kind: 'live',
+        options: [
+          { text: 'On', apply: () => setAndSave({ creakEnabled: true }), selected: () => current.creakEnabled },
+          { text: 'Off', apply: () => setAndSave({ creakEnabled: false }), selected: () => !current.creakEnabled },
+        ],
+      },
+      {
+        label: 'SUB-BASS DREAD MODULATION',
+        subtext: 'Heartbeat Pulse',
+        kind: 'live',
+        options: [
+          { text: 'On', apply: () => setAndSave({ heartbeatEnabled: true }), selected: () => current.heartbeatEnabled },
+          { text: 'Off', apply: () => setAndSave({ heartbeatEnabled: false }), selected: () => !current.heartbeatEnabled },
+        ],
+      },
     ]),
   );
 

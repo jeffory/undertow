@@ -29,6 +29,7 @@ import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt } from '../ui/castPrompt';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
+import { updateAudio } from '../audio/engine';
 
 export type SystemFn = (world: WorldState, dt: number) => void;
 
@@ -175,6 +176,7 @@ function ui(world: WorldState, _dt: number): void {
   updateHud(world);
   updateCastPrompt(world);
   updateBestiaryToggle(world);
+  updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
 
 // --- underwater screen-inversion hook (T9) -------------------------------------

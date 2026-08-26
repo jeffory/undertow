@@ -32,6 +32,11 @@ const fresh: UndertowOptions = {
   fogDensityScale: 1,
   postEnabled: true,
   reelStance: 'hold',
+  // SCHEDULE B (t13): master 70%, every audio bed on.
+  masterVolume: 0.7,
+  droneEnabled: true,
+  creakEnabled: true,
+  heartbeatEnabled: true,
 };
 
 describe('options defaults & sanitization', () => {
@@ -45,11 +50,19 @@ describe('options defaults & sanitization', () => {
       fogDensityScale: 2.5, // not a valid murk tier
       postEnabled: false,
       reelStance: 'toggle',
+      masterVolume: 0.42, // not a valid master step
+      droneEnabled: false,
+      creakEnabled: 'yes', // wrong type
+      heartbeatEnabled: false,
     });
     expect(o.renderScale).toBe(0.5);
     expect(o.fogDensityScale).toBe(1); // fell back to Standard
     expect(o.postEnabled).toBe(false);
     expect(o.reelStance).toBe('toggle');
+    expect(o.masterVolume).toBe(0.7); // fell back to Standard
+    expect(o.droneEnabled).toBe(false);
+    expect(o.creakEnabled).toBe(true); // fell back — a string is not a toggle
+    expect(o.heartbeatEnabled).toBe(false);
   });
 
   it('falls back wholesale on garbage input', () => {
@@ -68,6 +81,14 @@ describe('options defaults & sanitization', () => {
     );
     expect(sanitizeOptions({ fogDensityScale: 3 }).fogDensityScale).toBe(1);
   });
+
+  it('only accepts the four SCHEDULE B master steps', () => {
+    expect([0, 0.35, 0.7, 1].map((v) => sanitizeOptions({ masterVolume: v }).masterVolume)).toEqual(
+      [0, 0.35, 0.7, 1],
+    );
+    expect(sanitizeOptions({ masterVolume: 2 }).masterVolume).toBe(0.7);
+    expect(sanitizeOptions({ masterVolume: -1 }).masterVolume).toBe(0.7);
+  });
 });
 
 describe('localStorage persistence', () => {
@@ -78,6 +99,10 @@ describe('localStorage persistence', () => {
       fogDensityScale: 1.4,
       postEnabled: false,
       reelStance: 'toggle',
+      masterVolume: 0.35,
+      droneEnabled: false,
+      creakEnabled: true,
+      heartbeatEnabled: false,
     };
     saveOptions(cfg, s);
     expect(s.json()).toBe(JSON.stringify(cfg));
@@ -103,6 +128,10 @@ describe('applyOptions reaches every seam', () => {
         fogDensityScale: 0.7,
         postEnabled: false,
         reelStance: 'toggle',
+        masterVolume: 1,
+        droneEnabled: false,
+        creakEnabled: false,
+        heartbeatEnabled: false,
       }),
     ).not.toThrow();
     // and back to defaults is equally safe
