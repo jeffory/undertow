@@ -19,6 +19,12 @@ import type {
   SnatcherKilledEvent,
   SnatcherStoleEvent,
 } from '../enemies/snatcher';
+import type {
+  PostmasterSummonedEvent,
+  PostmasterTelegraphEvent,
+  PostmasterCutEvent,
+  PostmasterDeliveredEvent,
+} from '../bosses/postmaster';
 
 export interface BarkShownEvent {
   type: 'bark.shown';
@@ -38,7 +44,11 @@ export type TownEvent =
   | BossLandedEvent
   | SnatcherLatchedEvent // 05 §2.2 — the Township's second mouth (task t28)
   | SnatcherKilledEvent
-  | SnatcherStoleEvent;
+  | SnatcherStoleEvent
+  | PostmasterSummonedEvent // 05 §2.2 — the Township boss (task t29)
+  | PostmasterTelegraphEvent
+  | PostmasterCutEvent
+  | PostmasterDeliveredEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];

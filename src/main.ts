@@ -30,7 +30,7 @@ import { applyHubMeta } from './render/hubAtmosphere';
 import { hubBeamState, setBeamAngle } from './render/sky';
 import { kelpRenderState } from './render/kelp';
 import { townshipRenderState } from './render/township';
-import { roofForIslet } from './gen/township';
+import { roofForIslet, postOfficeRoof, postOfficeMarker } from './gen/township';
 import { envTextOnScreen } from './ui/envTextOverlay';
 import { envReadCount } from './systems/envText';
 import { createDisturbance } from './run/disturbance';
@@ -38,6 +38,27 @@ import { congregationRenderState } from './render/congregation';
 import { snatcherRenderState } from './render/snatcher';
 import { snatcherToastOnScreen } from './ui/barkOverlay';
 import { haulPoint } from './systems/snatcher';
+import { postmasterArena, atLetterbox, reverseFightConfig } from './systems/postmaster';
+import { postmasterRenderState } from './render/postmaster';
+import {
+  postmasterBubbleOnScreen,
+  postmasterPromptOnScreen,
+} from './ui/postmasterTelegraph';
+import {
+  postmasterLines,
+  postmasterTextFor,
+  FORWARDING_ADDRESS_TEXT,
+} from './content/postmasterLines';
+import {
+  CUT_REACH,
+  GAFF_POOL,
+  POSTMASTER_TARGET_ID,
+  cutArmed,
+  postmasterGaffCost,
+  cutProgress,
+  postmasterFighting,
+  summonProgress,
+} from './bosses/postmaster';
 import {
   SNATCHER_GAFF_HP,
   SNATCHER_TARGET_ID,
@@ -242,6 +263,7 @@ if (/[?&]debug/.test(search)) {
           sinkholesDescended: Math.max(0, n - 1),
           bestiary: [],
           sundries: [],
+          forwardingAddress: false,
         },
       ],
     }));
@@ -608,6 +630,192 @@ if (/[?&]debug/.test(search)) {
     if (s.phase !== 'latched') return -1;
     s.steal = Math.max(0, left);
     return s.steal;
+  };
+
+  // t29 / M7 BOSS seams (tools/m7c-probe.mjs): read the reverse fight from
+  // outside, park the hull at the Post Office roof so a REAL B tap docks onto
+  // it, walk the keeper onto the letterbox, land a real gaff HitEvent on him,
+  // pull the current phase timer to zero so the delivery loop is reachable
+  // without waiting it out, and run the breath down so his own win is testable.
+  (window as unknown as { __postmaster: () => unknown }).__postmaster = () => {
+    const s = world.postmaster;
+    const arena = postmasterArena(world);
+    const fight = world.tether.fights.find((f) => f.id === s.fightId) ?? null;
+    const save = getSave();
+    return {
+      zone: world.run.zone,
+      phase: s.phase,
+      fighting: postmasterFighting(s),
+      fightId: s.fightId,
+      roofId: s.roofId,
+      pos: { x: s.x, z: s.z },
+      speed: s.speed,
+      timer: s.timer,
+      drags: s.drags,
+      rotationStart: s.rotationStart,
+      route: { x: s.routeX, z: s.routeZ },
+      angle: s.angle,
+      reeling: s.reeling,
+      gaffHp: s.gaffHp,
+      gaffHpMax: GAFF_POOL,
+      gaffHits: s.gaffHits,
+      cutArmed: cutArmed(s),
+      cutHeld: s.cutHeld,
+      cutProgress: cutProgress(s),
+      cutReach: CUT_REACH,
+      summonHeld: s.summonHeld,
+      summonProgress: summonProgress(s),
+      summoned: s.summoned,
+      cut: s.cut,
+      delivered: s.delivered,
+      card: s.card,
+      cardText: s.card ? postmasterTextFor(s.card) : null,
+      cardTimer: s.cardTimer,
+      species: s.params ? s.params.speciesId : null,
+      weightKg: s.params ? s.params.weightKg : null,
+      distToPlayer: Math.hypot(s.x - world.player.x, s.z - world.player.z),
+      // the fight, seen from outside: the reverse configuration itself
+      config: reverseFightConfig(world),
+      fight: fight
+        ? {
+            id: fight.id,
+            species: fight.species,
+            anchor: fight.anchor,
+            L: fight.L,
+            tension: fight.tension,
+            reelRate: fight.reelRate ?? null,
+            snapBehavior: fight.snapBehavior ?? null,
+            aiReel: fight.aiReel ?? false,
+            reelActive: fight.reel.active,
+            cutProgress: fight.cut.progress,
+          }
+        : null,
+      fights: world.tether.fights.length,
+      arena: arena
+        ? {
+            roofId: arena.roof.id,
+            isletId: arena.roof.isletId,
+            building: arena.roof.building,
+            marker: arena.marker,
+            atMarker: atLetterbox(world, arena),
+          }
+        : null,
+      mode: world.mode,
+      dockedIslet: world.dockedIslet,
+      player: { x: world.player.x, z: world.player.z, hp: world.player.hp },
+      water: {
+        active: world.water.active,
+        breath: world.water.breath,
+        lethal: world.water.lethal,
+      },
+      lure: world.lure.count,
+      inventory: world.run.inventory.length,
+      lastDrop: world.run.inventory[world.run.inventory.length - 1] ?? null,
+      forwardingAddress: world.run.forwardingAddress,
+      deliveredBy: world.run.deliveredBy,
+      savedAddress: save ? save.metaState.forwardingAddress : null,
+      runEnded: world.run.ended,
+      dread: world.dread,
+      lines: postmasterLines().map((l) => ({ verb: l.verb, line: l.line, canonical: l.isCanonical })),
+      dropText: FORWARDING_ADDRESS_TEXT,
+      bubble: postmasterBubbleOnScreen(),
+      prompt: postmasterPromptOnScreen(),
+      render: postmasterRenderState(),
+      moment: world.township.pendingMoment,
+    };
+  };
+  // Bring the hull to the POST OFFICE roof's edge — inside DOCK_RANGE of its
+  // hull, so the real B verb is what actually docks. Same shape as __toRoof.
+  (window as unknown as { __toPostOffice: () => unknown }).__toPostOffice = () => {
+    const lake = world.lake;
+    if (!lake || !lake.street) return null;
+    const roof = postOfficeRoof(lake.roofs);
+    if (!roof) return null;
+    const iso = lake.islets[roof.isletId];
+    if (!iso) return null;
+    const v = iso.poly[0]!;
+    const out = Math.hypot(v.x - roof.pos.x, v.z - roof.pos.z) || 1;
+    world.boat.x = roof.pos.x + ((v.x - roof.pos.x) / out) * (out + 1.05);
+    world.boat.z = roof.pos.z + ((v.z - roof.pos.z) / out) * (out + 1.05);
+    world.boat.speed = 0;
+    world.boat.heading = Math.atan2(roof.pos.z - world.boat.z, roof.pos.x - world.boat.x);
+    return {
+      roof: { id: roof.id, isletId: roof.isletId, building: roof.building },
+      marker: postOfficeMarker(lake.street, roof),
+      boat: { x: world.boat.x, z: world.boat.z },
+      edgeGap: distanceToHull({ x: world.boat.x, z: world.boat.z }, iso.hull),
+    };
+  };
+  // Walk the docked keeper onto the letterbox (the arena marker). Only moves the
+  // body — the summon itself is a real held E through game/input.ts.
+  (window as unknown as { __toLetterbox: () => unknown }).__toLetterbox = () => {
+    const arena = postmasterArena(world);
+    if (!arena) return null;
+    world.player.x = arena.marker.x;
+    world.player.z = arena.marker.z;
+    world.player.vx = 0;
+    world.player.vz = 0;
+    return { marker: arena.marker, atMarker: atLetterbox(world, arena) };
+  };
+  // A REAL HitEvent on this tick's array, tagged for the Postmaster — the
+  // in-play producer's own shape (the unit tests drive the arc itself).
+  (window as unknown as { __postmasterHit: (heavy?: boolean) => unknown }).__postmasterHit = (
+    heavy = false,
+  ) => {
+    world.combat.hits.push({
+      targetId: POSTMASTER_TARGET_ID,
+      damage: heavy ? 18 : 6,
+      knockbackX: 0,
+      knockbackZ: 0,
+      stagger: heavy ? HEAVY_STAGGER : 0,
+    });
+    return { hits: world.combat.hits.length, gaffHp: world.postmaster.gaffHp };
+  };
+  // Pull the current phase timer to zero so the next phase begins on the next
+  // sim tick. The phase TRANSITION and everything it does are the real code.
+  (window as unknown as { __postmasterSkip: () => unknown }).__postmasterSkip = () => {
+    const s = world.postmaster;
+    if (!postmasterFighting(s)) return null;
+    s.timer = 0;
+    return { phase: s.phase };
+  };
+  // Run the breath down so his own win is reachable in a gate without fifteen
+  // seconds of real time underwater.
+  (window as unknown as { __postmasterBreath: (left?: number) => number }).__postmasterBreath = (
+    left = 0.05,
+  ) => {
+    world.water.breath = Math.max(0, left);
+    return world.water.breath;
+  };
+  // Bring HIM to arm's length of the keeper and point the keeper at him — the
+  // `__congregationToGunwale` precedent. A driver cannot chase a boss around a
+  // roof at wall speed, and the swing/arc/hold it then drives are the real ones.
+  (window as unknown as { __postmasterToReach: (d?: number) => unknown }).__postmasterToReach = (
+    d = 1.1,
+  ) => {
+    const s = world.postmaster;
+    if (!postmasterFighting(s)) return null;
+    const p = world.player;
+    s.x = p.x;
+    s.z = p.z + d;
+    s.speed = 0;
+    p.facing = Math.atan2(s.x - p.x, s.z - p.z); // look at him
+    world.combat.swingFacing = p.facing;
+    return { dist: Math.hypot(s.x - p.x, s.z - p.z), reach: CUT_REACH, facing: p.facing };
+  };
+  // A gaff landing on him through the SAME rule the system applies to a real
+  // swing (postmasterGaffCost). Like __congregationGaff / __snatcherGaff it does
+  // NOT push a HitEvent — combat clears that array at the top of every tick, so
+  // an out-of-band injection is not what the in-play producer does. Returns the
+  // grip left.
+  (window as unknown as { __postmasterGaff: (heavy?: boolean) => number }).__postmasterGaff = (
+    heavy = false,
+  ) => {
+    const s = world.postmaster;
+    if (!postmasterFighting(s)) return -1;
+    s.gaffHits++;
+    s.gaffHp -= postmasterGaffCost(heavy ? HEAVY_STAGGER : 0);
+    return s.gaffHp;
   };
 
   // t27 / M7 TOWNSHIP seams (tools/m7-probe.mjs): read what the drowned Hollow

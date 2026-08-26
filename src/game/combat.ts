@@ -33,6 +33,11 @@
 import type { WorldState } from '../core/world';
 import { spendStamina } from './stamina';
 import { SNATCHER_TARGET_ID } from '../enemies/snatcher';
+import {
+  POSTMASTER_HIT_RADIUS,
+  POSTMASTER_TARGET_ID,
+  postmasterFighting,
+} from '../bosses/postmaster';
 
 // --- tuning constants ---------------------------------------------------------
 export const REACH = 1.6; // m — gaff arc radius (light and heavy)
@@ -136,6 +141,24 @@ export function snatcherGaffArc(world: WorldState): GaffArc | null {
 // swing has to catch is the part of it at the gunwale.
 export const SNATCHER_HIT_RADIUS = 0.6;
 
+// --- M7 boss (plan 05 §2.2): the Postmaster is a THIRD target for the SAME swing
+//
+// "you cannot reel, only move, gaff, and reach" — so the gaff is one of the
+// three verbs the reverse fight leaves you, and it is the ordinary one. No new
+// arc, no new damage model, no new button: the keeper's own swing, measured
+// from the keeper, at the man on the other end of the twine. He is only ever
+// reachable on FOOT (the arena is a roof) and only while the fight is live.
+//
+// He takes no HP. Two landed swings knock his grip off the line
+// (bosses/postmaster.ts GAFF_POOL) and that is the whole damage model — the hit
+// event is the entire interface, and systems/postmaster.ts owns what it means.
+export function postmasterGaffArc(world: WorldState): GaffArc | null {
+  const b = world.postmaster;
+  if (!postmasterFighting(b)) return null;
+  if (world.mode !== 'foot') return null;
+  return { x: world.player.x, z: world.player.z, facing: world.combat.swingFacing };
+}
+
 function startSwing(world: WorldState, isHeavy: boolean): void {
   const c = world.combat;
   c.attackTimer = isHeavy ? HEAVY_SWING_DURATION : LIGHT_SWING_DURATION;
@@ -236,6 +259,41 @@ export function updateCombat(world: WorldState, dt: number): void {
   if (c.attackTimer > 0) world.player.facing = c.swingFacing;
 
   // Active-window hit detection — at most one hit per swing.
+  // M7 boss: the Postmaster takes the swing before anything else. In HIS fight
+  // there is no catch at all (world.fish is null — he hooked you), so this block
+  // and the two below are mutually exclusive in practice; it is first because he
+  // is the reason the swing was thrown.
+  if (c.attackTimer > 0 && !c.swingHitDelivered) {
+    const arc = postmasterGaffArc(world);
+    if (arc) {
+      const isHeavy = c.swingIsHeavy;
+      const dur = isHeavy ? HEAVY_SWING_DURATION : LIGHT_SWING_DURATION;
+      const elapsed = dur - c.attackTimer;
+      const activeStart = isHeavy ? HEAVY_ACTIVE_START : LIGHT_ACTIVE_START;
+      const activeEnd = isHeavy ? HEAVY_ACTIVE_END : LIGHT_ACTIVE_END;
+      const b = world.postmaster;
+      if (elapsed >= activeStart && elapsed < activeEnd) {
+        const arcHalf = (isHeavy ? HEAVY_ARC_DEG : LIGHT_ARC_DEG) / 2;
+        if (
+          arcCircleHit(arc.x, arc.z, arc.facing, b.x, b.z, POSTMASTER_HIT_RADIUS, REACH, arcHalf)
+        ) {
+          const dx = b.x - arc.x;
+          const dz = b.z - arc.z;
+          const dist = Math.hypot(dx, dz) || 1;
+          const kb = isHeavy ? HEAVY_KNOCKBACK : LIGHT_KNOCKBACK;
+          c.hits.push({
+            targetId: POSTMASTER_TARGET_ID,
+            damage: isHeavy ? HEAVY_DAMAGE : lightStageDamage(c.comboStage),
+            knockbackX: (dx / dist) * kb,
+            knockbackZ: (dz / dist) * kb,
+            stagger: isHeavy ? HEAVY_STAGGER : 0,
+          });
+          c.swingHitDelivered = true;
+        }
+      }
+    }
+  }
+
   if (c.attackTimer > 0 && !c.swingHitDelivered) {
     // M7: a surfaced Snatcher takes the swing FIRST. It is at the gunwale, on
     // the line, between the keeper and everything else — and it is the reason

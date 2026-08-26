@@ -31,6 +31,8 @@ import type { CongregationState } from '../bosses/congregation';
 import { createCongregationState } from '../bosses/congregation';
 import type { SnatcherState } from '../enemies/snatcher';
 import { createSnatcherState } from '../enemies/snatcher';
+import type { PostmasterState } from '../bosses/postmaster';
+import { createPostmasterState } from '../bosses/postmaster';
 import { MIN_ZONE } from './zones';
 
 export type Mode = 'boat' | 'foot'; // driven by 03
@@ -309,6 +311,16 @@ export interface RunState {
   // gain) and counts it here — the seam the run receipt's own "stolen" line
   // reads when it lands.
   stolen: number;
+  // --- M7 boss (plan 05 §2.2): the Postmaster's drop. A STORY fact, not haul —
+  // it rides the RunResult onto `metaState.forwardingAddress`, which unlocks the
+  // Post Office's deep function (§1.4 #3) and the Office-correspondence
+  // escalation tier. Like a bestiary credit it survives a death: the Office has
+  // already posted the slip.
+  forwardingAddress: boolean;
+  // Who delivered the keeper, when the run ended by being delivered rather than
+  // merely drowned. Null on every ordinary death. plan 02 declared the
+  // `delivered` tether event with exactly this vocabulary.
+  deliveredBy: 'postmaster' | 'whistler' | 'dragger' | null;
 }
 
 export function createRunState(startedAt: number, startedAtDread: number): RunState {
@@ -339,6 +351,8 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     sinking: [],
     bossSeeded: false,
     stolen: 0,
+    forwardingAddress: false,
+    deliveredBy: null,
   };
 }
 
@@ -431,6 +445,7 @@ export interface WorldState {
   boatCombat: BoatCombatState; // 03 §6 — hull / winch / Dragger (night boat fight)
   congregation: CongregationState; // 05 §2.1 — the Kelp Graves boss (swarm + mass pool)
   snatcher: SnatcherState; // 05 §2.2 — the Township's second mouth on the line
+  postmaster: PostmasterState; // 05 §2.2 — the Township boss: the reverse tether
   combat: CombatState;
   fish: FishState | null;
   ground: GroundState; // M1: walkable islet boundary (collision system)
@@ -493,6 +508,7 @@ export function createWorld(seed = 1): WorldState {
     boatCombat: createBoatCombat(),
     congregation: createCongregationState(),
     snatcher: createSnatcherState(),
+    postmaster: createPostmasterState(),
     combat: {
       comboStage: 0,
       comboWindow: 0,

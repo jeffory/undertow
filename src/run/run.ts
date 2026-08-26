@@ -16,6 +16,7 @@ import type { RunResult } from '../save/schemas';
 import { applyRunStartPassives } from '../loot/runStart';
 import { MIN_ZONE } from '../core/zones';
 import { createCongregationState } from '../bosses/congregation';
+import { createPostmasterState } from '../bosses/postmaster';
 
 // The one non-deterministic step of a run (plan §1.3: the only Math.random).
 export function newRunSeed(): number {
@@ -39,7 +40,10 @@ export function initRun(world: WorldState): void {
   world.run.sinkholesDescended = 0;
   world.run.sinking = [];
   world.run.bossSeeded = false;
+  world.run.forwardingAddress = false;
+  world.run.deliveredBy = null;
   world.congregation = createCongregationState();
+  world.postmaster = createPostmasterState();
   world.run.spawn = { refillTimer: 0, lastPhase: 'dusk', initialSpawned: false };
   world.clock = createClock(world.time.elapsed * 1000);
   world.disturbances = [];
@@ -89,6 +93,8 @@ export function buildRunResult(world: WorldState, extracted: boolean): RunResult
     sinkholesDescended: run.sinkholesDescended,
     bestiary: run.bestiaryEvents.map((e) => ({ ...e })),
     sundries: run.inventory.map((i) => ({ ...i })),
+    forwardingAddress: run.forwardingAddress,
+    ...(run.deliveredBy ? { deliveredBy: run.deliveredBy } : {}),
   };
 }
 

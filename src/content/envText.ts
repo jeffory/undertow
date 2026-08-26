@@ -53,6 +53,18 @@ const ENTRIES: EnvTextEntry[] = [
   { key: 'roof-5', text: 'Someone counted the slates. Someone got to forty-seven.', placeholder: true },
   { key: 'roof-6', text: 'THE DROWNED PINT — CELLAR OPEN. IT WAS ALWAYS OPEN.', placeholder: true },
   { key: 'roof-7', text: 'A ladder to the ridge. It was put here from ABOVE.', placeholder: true },
+  {
+    // plan 05 §2.2 — the letterbox on the drowned District Post Office, and the
+    // Postmaster's arena marker. NOT a placeholder: docs/story/township.md §3
+    // writes it (`env-z3-02-post-office-door`, both lines, verbatim), and the
+    // second line is also the fight's own premise — the sorting shelf is where
+    // he has been putting the parcels for thirty years.
+    key: 'post-office-door',
+    text:
+      'OUTGOING DISPATCH SUSPENDED DUE TO RISING TIDE. ' +
+      'PLEASE DEPOSIT ALL WATERPROOF PARCELS ON THE TOP SORTING SHELF.',
+    placeholder: false,
+  },
 ];
 
 const byKey = new Map<string, EnvTextEntry>(ENTRIES.map((e) => [e.key, e]));

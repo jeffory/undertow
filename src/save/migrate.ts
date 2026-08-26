@@ -46,6 +46,7 @@ export function freshMetaState(): MetaState {
     notesRead: [],
     decants: 0,
     damKeyUsed: false,
+    forwardingAddress: false,
     breadcrumbs: [],
     endingsSeen: {},
     nplus: false,
@@ -208,6 +209,11 @@ export function applyRunResult(save: SaveGame, result: RunResult): SaveGame {
     metaState: {
       ...(save.metaState ?? freshMetaState()),
       memories: (save.metaState?.memories ?? 0) + banked,
+      // M7 (plan 05 §2.2): the forwarding address is LATCHED — once the Office
+      // has your address it does not forget it, and a later run that never met
+      // the Postmaster cannot un-post the slip.
+      forwardingAddress:
+        (save.metaState?.forwardingAddress ?? false) || (normalized.forwardingAddress ?? false),
     },
     // The rig-up loadout is carried through the run end untouched — the Office
     // holds the requisition between runs.

@@ -261,6 +261,22 @@ export const TOWNSHIP_BESTIARY_TEXT: BestiaryRecord[] = [
     entryWilling:
       'It clasps its jaws around your empty hook without biting, holding the steel gently in its throat like a pledge it forgot how to make.',
   },
+  {
+    // THE POSTMASTER — docs/story/township.md §5 "The Postmaster Bestiary
+    // Entry", verbatim. The bible writes no willing variant for him: he is a
+    // boss and there is no willing way to meet him, so the field stays absent
+    // rather than invented.
+    id: 'the-postmaster',
+    name: 'The Postmaster',
+    zone: 3,
+    rarity: 'Boss',
+    eligibility: 2,
+    category: 'boss',
+    silhouette:
+      'A tall, waterlogged figure in a brass-buttoned coat, sorting parcels in the current.',
+    entryFought:
+      'He carried thirty years of unread letters through forty fathoms of dark water. He is not angry about the flood; he is merely glad to finally clear his sorting bag.',
+  },
 ];
 
 const BY_ID = new Map<string, BestiaryRecord>(

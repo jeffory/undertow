@@ -16,6 +16,7 @@ import { initKelp, updateKelp } from './kelp';
 import { initSilt, updateSilt } from './silt';
 import { initCongregation, updateCongregation } from './congregation';
 import { initSnatcher, updateSnatcher } from './snatcher';
+import { initPostmaster, updatePostmaster as updatePostmasterMesh } from './postmaster';
 import { initTown, updateTown } from './town';
 import { initTownship, updateTownship } from './township';
 import { initRipples, updateRipples } from './ripples';
@@ -81,6 +82,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initSilt(scene);
   initCongregation(scene);
   initSnatcher(scene);
+  initPostmaster(scene);
   initTown(scene);
   initTownship(scene);
   initRipples(scene);
@@ -122,6 +124,7 @@ export function render(world: WorldState, dt: number): void {
   updateSilt(world, dt); // M6: the Kelp Graves' drifting silt (one Points layer)
   updateCongregation(world, dt); // M6: the boss swarm (one InstancedMesh, one draw)
   updateSnatcher(world, dt); // M7: the second mouth — fish-pipeline body + wake pool
+  updatePostmasterMesh(world, dt); // M7 boss: the Postmaster — fish-pipeline body, one draw
   updateTown(world, dt);
   updateTownship(world, dt); // M7: the drowned Hollow (decks instanced, buildings on demand)
   updateRipples(world, dt);

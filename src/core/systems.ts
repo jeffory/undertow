@@ -28,6 +28,7 @@ import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateBoatCombat } from '../systems/boatCombat';
 import { updateCongregation } from '../systems/congregation';
 import { updateSnatcher } from '../systems/snatcher';
+import { updatePostmaster } from '../systems/postmaster';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
 import { updateBottledLight } from '../systems/bottledLight';
@@ -41,6 +42,7 @@ import { updateRestorationUI } from '../ui/restorationUI';
 import { updateBarkOverlay } from '../ui/barkOverlay';
 import { updateEnvTextOverlay } from '../ui/envTextOverlay';
 import { updateCongregationInvoice } from '../ui/congregationInvoice';
+import { updatePostmasterOverlay } from '../ui/postmasterTelegraph';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -89,8 +91,15 @@ export function movement(world: WorldState, dt: number): void {
   // game/controller.ts). The fish integrates its own x/z inside its AI stub
   // (game/fish.ts, WORKER C) — movement does not touch the fish.
   if (world.mode === 'foot') {
-    // Reel stance reads its 0.5 move-speed multiplier here (plan 02 §5.1).
-    const reelActive = world.tether.fights.some((f) => f.reel.active);
+    // Reel STANCE reads its 0.5 move-speed multiplier here (plan 02 §5.1). It is
+    // the stance that halves you, not the line: in the reverse fight (05 §2.2)
+    // the reel belongs to the BOSS, and the plan is explicit that there you
+    // "cannot reel, only MOVE, gaff, and reach" — so his winch must not take
+    // your legs. A no-op for every fight built before this round: a foot fight's
+    // A end is always 'player-stance'.
+    const reelActive = world.tether.fights.some(
+      (f) => f.reel.active && f.a.reel.kind === 'player-stance',
+    );
     const speedMult = reelActive ? 0.5 : 1;
     if (world.water.active) {
       // Underwater (plan 02 §8): movement is damped (0.85×/frame) plus the
@@ -211,6 +220,7 @@ function ui(world: WorldState, _dt: number): void {
   updateBarkOverlay(world);
   updateEnvTextOverlay(world); // 05 §4.3 — the drowned town's signage
   updateCongregationInvoice(world); // 05 §2.1 — the Congregation's ledger
+  updatePostmasterOverlay(world); // 05 §2.2 — his bubble + the summon/cut prompt
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -341,6 +351,11 @@ export const UPDATE_ORDER: SystemFn[] = [
   // the run reducer (so a completed steal is folded as an abandon variant in
   // the very tick it happened).
   updateSnatcher,
+  // 05 §2.2: the Township BOSS — the reverse tether. Same two constraints as the
+  // two above: AFTER combat (this tick's gaff hits are what open the cut window)
+  // and BEFORE the run reducer + the run terminal (so `deliveredBy` is stamped
+  // before the death that drowning caused is folded into a RunResult).
+  updatePostmaster,
   updateDreadSystem, // 03 §4: run reducer (haul + Dread gains) + peak + tier hooks
   updateSpawnDirectorSystem, // 03 §9: disturbance budget refill + M1 land-fish scaffold
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)

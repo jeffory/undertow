@@ -72,6 +72,13 @@ export const RunResultSchema = z.object({
   sinkholesDescended: z.number().int().min(0).default(0),
   bestiary: z.array(BestiaryEventSchema).default([]),
   sundries: z.array(SundryItemSchema).default([]),
+  // M7 (plan 05 §2.2): this run cut the Postmaster's line and took the Office's
+  // forwarding address. Folded onto `metaState.forwardingAddress` at persist —
+  // a STORY fact, so like a bestiary credit it survives a death.
+  forwardingAddress: z.boolean().default(false),
+  // Who delivered the keeper, when the run ended by being delivered. plan 02's
+  // own vocabulary (the `delivered` tether event). Absent on ordinary deaths.
+  deliveredBy: z.enum(['postmaster', 'whistler', 'dragger']).optional(),
 });
 export type RunResult = z.infer<typeof RunResultSchema>;
 
@@ -127,6 +134,12 @@ export const MetaStateSchema = z.object({
   notesRead: z.array(z.string()).default([]),
   decants: z.number().int().min(0).default(0),
   damKeyUsed: z.boolean().default(false),
+  // M7 (plan 05 §2.2 / §1.4 #3): the Postmaster's drop. plan §1.4 already gates
+  // restoration rows on the condition `forwardingAddress:true`, and §0.2's
+  // eight-field MetaState had nowhere to put it — this is the ninth field, added
+  // the way every other deferred slot was: DEFAULTED, so no version bump is
+  // needed and every save that predates it loads with the address unposted.
+  forwardingAddress: z.boolean().default(false),
   breadcrumbs: z.array(z.string()).default([]),
   endingsSeen: EndingsSeenSchema.default({}),
   nplus: z.boolean().default(false),

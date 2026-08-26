@@ -2,7 +2,11 @@
 // M2 ships the single base line; the other three are data-only additions later,
 // with their snap behaviors in the tetherConstraint snap switch from day one.
 
-export type SnapBehavior = 'free' | 'stun' | 'damagePlayer'; // base, Bellwire, Widow's Hair
+// 'hold' is not a LINE stat — no line in §6.2 behaves this way. It exists for
+// the per-fight override `TetherFight.snapBehavior` (05 §2.2): in the reverse
+// fight the line is the BOSS's delivery twine, and his twine does not part.
+// Declared here so the constraint's snap switch is exhaustive over one union.
+export type SnapBehavior = 'free' | 'stun' | 'damagePlayer' | 'hold';
 
 export interface LineStats {
   id: string;                // 'waxed-linen' | 'braided-sinew' | 'bellwire' | 'widows-hair'

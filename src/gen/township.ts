@@ -117,6 +117,15 @@ const ROOF_CHAMFER = 0.28;
 // held out of the ordinary-house rotation.
 export const STEEPLE_BUILDING = 'bell-tower';
 export const MARQUEE_BUILDING = 'schoolhouse';
+// plan 05 §2.2 — the Township boss's arena. The drowned District Post Office is
+// already one of the houses in the rotation below; the boss round only needs to
+// be able to FIND it, and to hang one extra env point on its street-facing
+// eaves (the letterbox). Nothing about the street's layout moves for it — no
+// extra draw is taken from the LAYOUT stream, and every roof, lamp and existing
+// env point keeps the id and position it had.
+export const POST_OFFICE_BUILDING = 'post-office';
+/** content/envText.ts key for the letterbox marker — the summon spot. */
+export const POST_OFFICE_ENV_KEY = 'post-office-door';
 export const HOUSE_BUILDINGS = [
   'smokehouse',
   'chandlery',
@@ -137,6 +146,9 @@ const LAMP_HEIGHT_MAX = 3.4;
 
 const ENV_RADIUS_ROOF = 6.5; // m — reads while you are on (or alongside) the roof
 const ENV_RADIUS_MARQUEE = 16; // m — the marquee reads from the boat, down the street
+// m — the letterbox is a doorstep, not a signboard: you have to be AT it. Matches
+// the boss's own SUMMON_RANGE so what you can read is what you can knock on.
+const ENV_RADIUS_LETTERBOX = 4.5;
 
 export type RoofSlot = 'house' | 'steeple' | 'marquee';
 
@@ -454,6 +466,23 @@ export function computeTownship(lake: TownshipLakeInput, spawn?: Vec2): Township
     cinema.footprint = footprintFor(cinema.halfX, cinema.halfZ) * 1.12;
   }
 
+  // THE POST OFFICE ALWAYS STANDS (plan 05 §2.2 — it is the boss arena, and a
+  // Township with no Postmaster in it is a Township missing a milestone). The
+  // house rotation gives 'post-office' to every third roof, but the steeple and
+  // the marquee overwrite two of them, and on a short street that can take the
+  // only one: ~14% of seeds came out without a post office at all. So if the
+  // rotation lost it, the LAST plain house on the street becomes it — the Office
+  // at the far end of the road, which is where it would be. No draw is taken
+  // from the LAYOUT stream for this, so no roof, lamp or env point moves.
+  if (!roofs.some((r) => r.slot === 'house' && r.building === POST_OFFICE_BUILDING)) {
+    for (let i = roofs.length - 1; i >= 0; i--) {
+      const r = roofs[i]!;
+      if (r.slot !== 'house') continue;
+      r.building = POST_OFFICE_BUILDING;
+      break;
+    }
+  }
+
   // --- the drowned streetlamps -------------------------------------------------
   // On the kerb, between the roof slots, alternating banks. Poles break the
   // surface; the glass carries the sodium-amber the zone is named for.
@@ -508,6 +537,23 @@ export function computeTownship(lake: TownshipLakeInput, spawn?: Vec2): Township
     });
   }
 
+  // --- the letterbox (plan 05 §2.2, the boss arena marker) ---------------------
+  // One extra point on the post office's street-facing eaves, APPENDED after
+  // everything else so no existing env point's id moves. It is what the keeper
+  // holds E at to summon the Postmaster — the marker and the sign are the same
+  // object, which is why the summon needs no HUD of its own.
+  const postOffice = roofs.find((r) => r.slot === 'house' && r.building === POST_OFFICE_BUILDING);
+  if (postOffice) {
+    const at = postOfficeMarker(street, postOffice);
+    envPoints.push({
+      id: envPoints.length,
+      key: POST_OFFICE_ENV_KEY,
+      pos: at,
+      radius: ENV_RADIUS_LETTERBOX,
+      roofId: postOffice.id,
+    });
+  }
+
   return { street, islets: [], roofs, lamps, envPoints };
 }
 
@@ -525,6 +571,31 @@ export function computeTownshipIslets(field: TownshipField, idBase: number, zone
 }
 
 // --- lookups the sim + render share --------------------------------------------
+
+/**
+ * The drowned District Post Office's roof — the boss arena (plan 05 §2.2).
+ * The FIRST one in street order, so a street long enough to cycle the house
+ * rotation twice still has exactly one arena.
+ */
+export function postOfficeRoof(roofs: readonly Roof[]): Roof | null {
+  for (const r of roofs) {
+    if (r.slot === 'house' && r.building === POST_OFFICE_BUILDING) return r;
+  }
+  return null;
+}
+
+/**
+ * The letterbox: the middle of the post office's STREET-FACING eaves, a step in
+ * from the rim so the keeper can stand on it. Pure — the summon gate and the
+ * env point read the same point.
+ */
+export function postOfficeMarker(street: Street, roof: Roof): Vec2 {
+  const inset = Math.max(0.6, roof.halfZ - 1.1);
+  return {
+    x: roof.pos.x - street.perp.x * roof.side * inset,
+    z: roof.pos.z - street.perp.z * roof.side * inset,
+  };
+}
 
 /** The roof standing on islet `isletId`, or null. */
 export function roofForIslet(roofs: readonly Roof[], isletId: number | null): Roof | null {

@@ -642,9 +642,52 @@ export const TOWNSHIP_SPECIES: SpeciesPreset[] = [
     dragStaminaCostPerM: 2,
     routedDrag: false,
   },
+  {
+    // THE POSTMASTER (plan 05 §2.2) — "a tall, waterlogged figure in a
+    // brass-buttoned coat, sorting parcels in the current". No new asset: the
+    // long-coat read is bought entirely from the fish generator's own dials.
+    //   • humanRatio 0.85 — the highest in the game; he is a man, mostly;
+    //   • the girth curve holds a broad, FLAT, near-constant width through the
+    //     middle — that is the coat, not a body — over a narrower base;
+    //   • one bump near the HEAD end, standing proud of that flat line — the
+    //     MAILBAG over the shoulder, which render/postmaster.ts stands on end so
+    //     it reads as a tall dorsal hump on a figure rather than a fish's back;
+    //   • snout 0.3 (a blunt human head under a cap), limbBudget 3 (the arms
+    //     that are still sorting), palette 5 (the boss deep-dark, near-black).
+    // He is a BOSS rarity, so RARITY_TONE deepens the dorsal another 28%.
+    id: 'the-postmaster',
+    name: 'The Postmaster',
+    rarity: 'Boss',
+    eligibility: 2,
+    category: 'boss',
+    tier: 5,
+    lengthM: 2.9,
+    spineSegments: 12,
+    girthCurve: [0.26, 0.34, 0.4, 0.46, 0.62, 0.66, 0.66, 0.68, 0.86, 0.72, 0.52, 0.34],
+    snout: 0.3,
+    finCount: 4,
+    finKinds: [D(), 'ridge'],
+    eyeCount: 2,
+    eyeSize: 0.18,
+    jawSplit: 0.2, // he does not bite. He delivers.
+    limbBudget: 3,
+    humanRatio: 0.85,
+    swimFreq: 1.1, // unhurried. He has thirty years of backlog and all night.
+    swimAmp: 0.4,
+    palette: 5,
+    stats: { mass: 9, stamina: 400, pullForce: 8, swimSpeed: 6.5, hp: 900 },
+    patterns: { orbit: 0.4, lunge: 0, dive: 0, drag: 0.6 },
+    wrongnessInfluence: 0.6,
+    lungeCooldown: 4,
+    lungeStaminaCost: 20,
+    dragSpeed: 3.2,
+    dragStaminaCostPerM: 1.4,
+    routedDrag: true,
+  },
 ];
 
 export const SNATCHER_SPECIES_ID = 'gallows-snatcher';
+export const POSTMASTER_SPECIES_ID = 'the-postmaster';
 
 export const CONGREGATION_SPECIES_ID = 'the-congregation';
 

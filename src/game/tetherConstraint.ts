@@ -20,6 +20,7 @@ import { riderTensionBias } from './tether';
 import {
   PLAYER_ENTITY,
   FISH_ENTITY,
+  POSTMASTER_ENTITY,
   LAND_DISTANCE,
   CUT_HOLD_SECONDS,
   LOW_TENSION_THRESHOLD,
@@ -72,6 +73,19 @@ function resolvePos(world: WorldState, anchor: Anchor): PosAccessor {
           write: (x, z) => {
             f.x = x;
             f.z = z;
+          },
+        };
+      }
+      // 05 §2.2 — the reverse fight's far end. Same shape as the two above: the
+      // Postmaster is plain world state, not an EntityStore row, and the
+      // constraint reaches him through the one seam it already had.
+      if (anchor.entityId === POSTMASTER_ENTITY) {
+        const b = world.postmaster;
+        return {
+          read: () => ({ x: b.x, z: b.z }),
+          write: (x, z) => {
+            b.x = x;
+            b.z = z;
           },
         };
       }
@@ -174,15 +188,17 @@ function playerMoveDir(world: WorldState): Vec2 {
 }
 
 // Reel hold flag, resolved per fight from the a-end's ReelSource (A.3). The
-// player's reel input is ignored while a.reel.kind is 'ai'/'winch-post'/'none'.
-function resolveReelHold(world: WorldState, end: TetherEndpoint): boolean {
-  switch (end.reel.kind) {
+// player's reel input is ignored while a.reel.kind is 'ai'/'winch-post'/'none'
+// — which is the whole of "you cannot reel" in the reverse fight (05 §2.2): the
+// boss occupies the A end, so RMB is never consulted.
+function resolveReelHold(world: WorldState, fight: TetherFight): boolean {
+  switch (fight.a.reel.kind) {
     case 'player-stance':
       return world.intent.secondary;
     case 'winch-post':
       return world.boat.atWinchPost; // 03 fills
     case 'ai':
-      return false; // 05 fills aiReelIntent; M2 stub = false
+      return fight.aiReel === true; // 05 §2.2 — the Postmaster takes line
     case 'none':
       return false;
   }
@@ -237,7 +253,7 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
   // 1. REEL (plan §3 branch 1, Addendum A.3)
   const reel = fight.reel;
   const drainPlayer = fight.a.reel.kind === 'player-stance';
-  reel.hold = resolveReelHold(world, fight.a);
+  reel.hold = resolveReelHold(world, fight);
   reel.active = reel.hold && (!drainPlayer || player.stamina > 0);
   reel.speedMult = reel.active ? 0.5 : 1;
   if (reel.active) {
@@ -268,7 +284,18 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
       cut.fired = true;
       cut.progress = 1;
       const cost = resolveCutCost(fight);
-      if (cost !== null && (cost !== 'hull-segment' || world.boat.atCleat)) {
+      // 05 §2.2 — a fight where NEITHER end carries an F-ring cost (the reverse
+      // fight: the boss's end is 'contextual', the player's is 'none'). The hold
+      // simply does not resolve: the keeper cannot spend a lure to walk away
+      // from a line they do not own. Unreachable for every fight built before
+      // this round, all of which carry a 'lure' or 'hull-segment' end.
+      if (cost === null) {
+        cut.held = 0;
+        cut.progress = 0;
+        cut.fired = false;
+        return false;
+      }
+      if (cost !== 'hull-segment' || world.boat.atCleat) {
         if (cost === 'lure') payLure(world);
         world.tetherEvents.push({ type: 'cut', fightId: fight.id, lineId: line.id, cost });
       }
@@ -409,8 +436,15 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
 
   // 5. SNAP (plan §3 branch 5 / §5.3) — switch on the line's SnapBehavior.
   if (fight.tension >= line.tensionCeiling) {
-    const behavior = line.snap;
-    if (behavior === 'stun') {
+    // The equipped line's behaviour, unless the FIGHT overrides it (05 §2.2 —
+    // the reverse fight is fought on the boss's own twine).
+    const behavior = fight.snapBehavior ?? line.snap;
+    if (behavior === 'hold') {
+      // 05 §2.2 — his delivery twine does not part. Tension parks at the
+      // ceiling; nothing is paid, nothing ends. "Run until it breaks" is not a
+      // way to win an argument with the Post Office.
+      fight.tension = line.tensionCeiling;
+    } else if (behavior === 'stun') {
       // Bellwire: fish stunned ~2s, tension reset, line never snaps (once/fight is 05's).
       const f = catchFish(world, fight);
       if (f && f.hp > 0) {

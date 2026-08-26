@@ -150,7 +150,16 @@ export function updateWaterPhase(world: WorldState, dt: number): void {
     updateDrift(world);
     updateTowardShore(world);
     // Reaching the shore exits the phase and resets breath to full.
-    if (!inDeepWater(world)) surface(world);
+    if (!inDeepWater(world)) {
+      surface(world);
+      return;
+    }
+    // 05 §2.2 — THE DROWNING PRESSURE THE COMMENT ABOVE PROMISED, claimed by the
+    // Postmaster. `water.lethal` is opt-in state, set by whatever put the keeper
+    // under; the swamp branch has read it since 03 §6.1 and this branch now
+    // reads it the same way. Nothing sets it on an ordinary drag, so an ordinary
+    // water phase still merely clamps at 0 exactly as it always has.
+    if (water.breath <= 0 && water.lethal) world.player.hp = 0;
     return;
   }
 

@@ -80,6 +80,7 @@ function sampleSave(): SaveGame {
       notesRead: [],
       decants: 0,
       damKeyUsed: false,
+      forwardingAddress: false,
       breadcrumbs: [],
       endingsSeen: {},
       nplus: false,

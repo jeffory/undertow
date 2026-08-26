@@ -10,6 +10,7 @@
 import type { EntityId } from '../core/entity';
 import { Rng } from '../core/rng';
 import type { WorldState, TetherFishAI } from '../core/world';
+import type { SnapBehavior } from './line';
 
 export type Vec2 = { x: number; z: number };
 export type SpeciesId = string;
@@ -89,6 +90,15 @@ export interface TetherFight {
   // "scales pullForce so the fight starts heavy and lightens". Same seam shape
   // as reelRate — undefined → ×1, so every other fight is untouched.
   pullForceMult?: number;
+  // Per-fight snap-behaviour override (05 §2.2): the REVERSE fight's line is the
+  // boss's delivery twine, not the keeper's equipped line, so it holds at the
+  // ceiling instead of parting ('hold'). Same seam shape as reelRate — undefined
+  // → world.line.snap, so every other fight snaps exactly as it always has.
+  snapBehavior?: SnapBehavior;
+  // The AI end's reel intent this tick (05 §2.2). Read ONLY by the constraint's
+  // `resolveReelHold` 'ai' case — the case plan 02 declared and left for 05 to
+  // fill. Undefined/false on every fight nobody is reeling from the far end.
+  aiReel?: boolean;
   // A THIRD ENTITY riding this line (05 §2.2): the Snatcher's second mouth.
   // Absent on every other fight — see TetherRider above for why this is a
   // rider and not a third endpoint.
@@ -157,6 +167,11 @@ export interface TetherState {
 // to world.player / world.fish in the constraint's position accessor.
 export const PLAYER_ENTITY = -1;
 export const FISH_ENTITY = -2;
+// 05 §2.2 — the Township boss. He is deliberately NOT the catch slot: a reverse
+// fight has no catch (he hooked YOU), and giving him world.fish would hand him
+// the catch's butcher check, its LAND prompt and its low-tension exhaustion for
+// free. Resolves to world.postmaster in the constraint's position accessor.
+export const POSTMASTER_ENTITY = -3;
 
 export const M2_SPECIES: SpeciesId = 'capsule';
 
@@ -276,6 +291,7 @@ export function startTetherFight(
     L: number;
     reelRate: number;
     pullForceMult: number;
+    snapBehavior: SnapBehavior;
   }>,
 ): TetherFight | null {
   const fish = world.fish;
@@ -285,7 +301,10 @@ export function startTetherFight(
 
   if (anchor === 'player') {
     // M2 default (A.2 conventions): a = the player, b = the catch from FishStats.
-    if (!fish) return null;
+    // The reverse fight (05 §2.2) supplies BOTH endpoints itself and has no
+    // catch at all, so the catch-required guard only applies when the default
+    // catch endpoint is the one actually used.
+    if (!fish && !(opts?.a && opts?.b)) return null;
     a = {
       anchor: { kind: 'entity', entityId: PLAYER_ENTITY },
       owner: 'player',
@@ -297,8 +316,8 @@ export function startTetherFight(
     b = {
       anchor: { kind: 'entity', entityId: FISH_ENTITY },
       owner: 'enemy',
-      mass: fish.tether.mass,
-      radius: fish.radius,
+      mass: fish ? fish.tether.mass : 1,
+      radius: fish ? fish.radius : 1,
       reel: { kind: 'none' },
       cut: { kind: 'none' },
     };
@@ -344,6 +363,7 @@ export function startTetherFight(
     L,
     ...(opts?.reelRate !== undefined ? { reelRate: opts.reelRate } : {}),
     ...(opts?.pullForceMult !== undefined ? { pullForceMult: opts.pullForceMult } : {}),
+    ...(opts?.snapBehavior !== undefined ? { snapBehavior: opts.snapBehavior } : {}),
     tension: 0,
     reel: {
       hold: false,

@@ -368,11 +368,19 @@ describe('township: a roof IS an islet (the mapping)', () => {
 });
 
 describe('township: environmental-text points', () => {
-  it('one point per roof, plus the marquee', () => {
+  it('one point per roof, plus the marquee and the letterbox', () => {
     for (const seed of SEEDS) {
       const m = generateLake(seed, 3);
-      expect(m.envPoints.length).toBe(m.roofs.length + 1);
-      const roofIds = m.envPoints.filter((p) => p.key !== 'marquee').map((p) => p.roofId).sort((a, b) => a - b);
+      // M7 boss (05 §2.2): the drowned Post Office carries a SECOND point — the
+      // letterbox marker the Postmaster is summoned at — appended after every
+      // other point so no existing env point's id moved. It is GUARANTEED: the
+      // arena has to exist on every street.
+      expect(m.roofs.some((r) => r.slot === 'house' && r.building === 'post-office')).toBe(true);
+      expect(m.envPoints.length).toBe(m.roofs.length + 2);
+      const roofIds = m.envPoints
+        .filter((p) => p.key !== 'marquee' && p.key !== 'post-office-door')
+        .map((p) => p.roofId)
+        .sort((a, b) => a - b);
       expect(roofIds).toEqual(m.roofs.map((r) => r.id));
       const marquee = m.envPoints.find((p) => p.key === 'marquee')!;
       expect(marquee.radius).toBeGreaterThan(10); // reads from the boat, down the street

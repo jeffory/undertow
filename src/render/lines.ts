@@ -13,6 +13,27 @@ import type { WorldState } from '../core/world';
 import type { TetherFight } from '../game/tether';
 import { groundYAt } from './lake';
 import { WATER_FISH_Y } from './fishMesh';
+import { PLAYER_ENTITY, FISH_ENTITY, POSTMASTER_ENTITY } from '../game/tether';
+
+// The end of the line that is NOT the hauling end. For every M2/M6 fight that is
+// world.fish; for a reverse fight (05 §2.2) it is the boss. Falls back to the
+// player so a fight whose far end has despawned draws a zero-length line rather
+// than throwing.
+function farEnd(world: WorldState, fight: TetherFight): { x: number; z: number } {
+  const ep = fight.a.owner === 'player' ? fight.b : fight.a;
+  if (ep.anchor.kind === 'boat') return { x: world.boat.x, z: world.boat.z };
+  if (ep.anchor.kind === 'fixed') return ep.anchor.point;
+  if (ep.anchor.entityId === POSTMASTER_ENTITY) {
+    return { x: world.postmaster.x, z: world.postmaster.z };
+  }
+  if (ep.anchor.entityId === FISH_ENTITY && world.fish) {
+    return { x: world.fish.x, z: world.fish.z };
+  }
+  if (ep.anchor.entityId === PLAYER_ENTITY) return { x: world.player.x, z: world.player.z };
+  const es = world.entities;
+  const i = ep.anchor.entityId * 3;
+  return { x: es.positions[i] ?? world.player.x, z: es.positions[i + 2] ?? world.player.z };
+}
 
 // --- tuning ----------------------------------------------------------------
 const SEGMENTS = 16; // bezier samples
@@ -276,15 +297,21 @@ function updateRig(
     P0.y = groundYAt(world, P0.x, P0.z) + ROD_TIP_OFFSET.up;
   }
 
-  // Hook anchor on the catch at the fight's waterline (dive → sink). On foot
+  // Hook anchor on the FAR END at the fight's waterline (dive → sink). On foot
   // both anchors ride the terrain surface so the line stays attached to the
-  // rod and the catch.
+  // rod and the thing on the other end.
+  //
+  // 05 §2.2 — "renders every fight in world.tether.fights … the boat / reverse
+  // fights slot in through the same per-fight endpoint loop" was the promise
+  // this file opened with, but the far end was hard-wired to world.fish. A
+  // REVERSE fight has no catch at all (the boss hooked you), so the far end is
+  // resolved from the fight's own non-player endpoint. Identical for every
+  // fight built before this round: their far end IS world.fish.
+  const far = farEnd(world, fight);
   const diving = rig.dive > 0 || (fish ? (fish.state as string) === 'dive' : false);
-  const hookBase = isFoot
-    ? groundYAt(world, fish ? fish.x : p.x, fish ? fish.z : p.z)
-    : WATER_FISH_Y;
+  const hookBase = isFoot ? groundYAt(world, far.x, far.z) : WATER_FISH_Y;
   const hookY = hookBase + HOOK_Y - (diving ? DIVE_DROP : 0);
-  P2.set(fish ? fish.x : p.x, hookY, fish ? fish.z : p.z);
+  P2.set(far.x, hookY, far.z);
 
   // Control point: the slack line droops DOWN (gravity), not sideways. The old
   // control point was midpoint + a chord-perpendicular offset — chordPerp
