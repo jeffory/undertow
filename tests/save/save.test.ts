@@ -81,6 +81,7 @@ function sampleSave(): SaveGame {
       decants: 0,
       damKeyUsed: false,
       forwardingAddress: false,
+      truthSeen: false,
       breadcrumbs: [],
       endingsSeen: {},
       nplus: false,

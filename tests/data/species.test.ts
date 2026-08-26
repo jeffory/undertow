@@ -12,6 +12,7 @@ import {
   speciesById,
   speciesDisplayName,
   TIER_TABLES,
+  MARENS_ECHO_SPECIES_ID,
   type SpeciesPreset,
 } from '../../src/data/species';
 import { rollSpeciesAtSet } from '../../src/run/species';
@@ -77,7 +78,11 @@ describe('the 12 Shallows roster', () => {
       expect(Math.abs(w - 1), `${sp.id} patterns`).toBeLessThan(1e-9);
       expect(sp.stats.mass, sp.id).toBeGreaterThan(0);
       expect(sp.stats.stamina, sp.id).toBeGreaterThan(0);
-      expect(sp.stats.pullForce, sp.id).toBeGreaterThan(0);
+      // 05 §2.3 — ONE species in the game has no pull force, and it is the one
+      // whose whole design is that it never pulls. Everything else must have
+      // one, which is what this invariant is for.
+      if (sp.id === MARENS_ECHO_SPECIES_ID) expect(sp.stats.pullForce, sp.id).toBe(0);
+      else expect(sp.stats.pullForce, sp.id).toBeGreaterThan(0);
       expect(sp.stats.hp, sp.id).toBeGreaterThan(0);
     }
   });

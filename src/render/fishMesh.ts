@@ -53,7 +53,8 @@ const GLOW_MATERIAL = new THREE.MeshBasicMaterial({
 // is a TWO-TONE fish: a dark saturated dorsal `back`, a mid `body`, a pale
 // cream `belly`, a `head` cap, a pale translucent `fin`, a dark glassy `eye`.
 // Four variants across the roster (teal / olive-bronze / silver-blue / pale
-// sickly) plus the red-ribbon Maren's Fox and the boss's deep-dark.
+// sickly) plus the red-ribbon Maren's Fox, the boss's deep-dark, and — M8 — the
+// drowned linen Maren's Echo stands in.
 interface Palette {
   body: number;
   back: number;
@@ -77,6 +78,17 @@ const PALETTES: Palette[] = [
   { body: 0x8a5a46, back: 0x4a2a22, belly: 0xe6d8c6, head: 0x5f3a2e, fin: 0xcfb8a6, eye: 0x0d0b0c, band: [0x9e3a2a, 0x4a5f52] },
   // 5 deep-dark — the old-pike boss, near-black teal
   { body: 0x2c4a4e, back: 0x101f22, belly: 0x8a9c96, head: 0x1c3438, fin: 0x5f8a84, eye: 0x050607, band: [0x3f6666, 0x6e3a2a] },
+  // 6 drowned linen — Maren's Echo (M8 boss). The only near-WHITE palette in the
+  // game, and it exists because the zone it is seen in is black: in the Choir the
+  // lantern's pool is the whole world, and a figure in drenched white linen is
+  // the one thing that pool can pick out — and because she holds out past the
+  // pool's edge, her preset carries the additive `glow` pass so that pale is
+  // still pale at eighteen metres (see data/species.ts for that argument). The
+  // DORSAL is deep drowned teal, not grey:
+  // bone in the light and lake-water in the folds, which is what thirty years of
+  // wet linen actually looks like, and it keeps her off the roster's grey-white
+  // floor (tests/render/fishMesh.test.ts).
+  { body: 0xc9c6b8, back: 0x33524f, belly: 0xe8e6da, head: 0x9aa39c, fin: 0xd6d8cf, eye: 0x1a2422, band: [0xaeb4ae, 0x6a7a76] },
 ];
 
 // Rarity tone: higher rarities darken the dorsal and saturate the mid — the

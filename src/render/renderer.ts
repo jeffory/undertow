@@ -19,6 +19,7 @@ import { initSnatcher, updateSnatcher } from './snatcher';
 import { initPostmaster, updatePostmaster as updatePostmasterMesh } from './postmaster';
 import { initWhistler, updateWhistler as updateWhistlerMesh } from './whistler';
 import { initChoir, updateChoir as updateChoirMotes } from './choir';
+import { initMarensEcho, updateMarensEcho as updateMarensEchoMesh } from './marensEcho';
 import { initTown, updateTown } from './town';
 import { initTownship, updateTownship } from './township';
 import { initRipples, updateRipples } from './ripples';
@@ -91,6 +92,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initPostmaster(scene);
   initWhistler(scene);
   initChoir(scene);
+  initMarensEcho(scene);
   initTown(scene);
   initTownship(scene);
   initRipples(scene);
@@ -135,6 +137,7 @@ export function render(world: WorldState, dt: number): void {
   updatePostmasterMesh(world, dt); // M7 boss: the Postmaster — fish-pipeline body, one draw
   updateWhistlerMesh(world, dt); // M8: the Whistler — not drawn at all until it strikes
   updateChoirMotes(world, dt); // M8: the Choir — 40 emissive motes, two draws
+  updateMarensEchoMesh(world, dt); // M8 boss: the Echo — fish-pipeline body, one draw
   updateTown(world, dt);
   updateTownship(world, dt); // M7: the drowned Hollow (decks instanced, buildings on demand)
   updateRipples(world, dt);

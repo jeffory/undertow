@@ -80,6 +80,17 @@ import { whistlerRenderState } from './render/whistler';
 import { whistlerPromptOnScreen } from './ui/whistlerPrompt';
 import { choirCursor } from './systems/choir';
 import { whistlerFightConfig, keeperPoint, landmarks, DEEP_CLEARANCE } from './systems/whistler';
+// t32 / M8 boss — Maren's Echo's readouts (the ?debug __echo seam below).
+import { echoFightConfig, echoMarkerFor, atEchoMarker } from './systems/marensEcho';
+import {
+  SUMMON_RANGE as ECHO_SUMMON_RANGE,
+  HOLD_LENGTH as ECHO_HOLD_LENGTH,
+  choirDim as echoChoirDim,
+  landWindowFraction,
+} from './bosses/marensEcho';
+import { marensEchoRenderState } from './render/marensEcho';
+import { echoPromptOnScreen } from './ui/echoPrompt';
+import { truthSceneOnScreen } from './ui/truthScene';
 import {
   CHOIR_MOTE_COUNT,
   choirMoteAt,
@@ -299,6 +310,7 @@ if (/[?&]debug/.test(search)) {
           bestiary: [],
           sundries: [],
           forwardingAddress: false,
+          truthSeen: false,
         },
       ],
     }));
@@ -1211,6 +1223,101 @@ if (/[?&]debug/.test(search)) {
     if (!whistlerFighting(s)) return null;
     s.timer = 0;
     return { phase: s.phase, reeling: s.reeling };
+  };
+
+  // t32 / M8 BOSS seams (tools/m8b-probe.mjs): read MAREN'S ECHO (the marker,
+  // the hold, the proximity curve, the truth scene, the drop) and drive the two
+  // things a gate cannot row out for — parking the hull on the marker, and
+  // shortening the line without waiting out a real reel at 1.5 m/s.
+  (window as unknown as { __echo: () => unknown }).__echo = () => {
+    const s = world.marensEcho;
+    const fight = world.tether.fights.find((f) => f.id === s.fightId) ?? null;
+    const at = keeperPoint(world);
+    const marker = echoMarkerFor(world);
+    return {
+      zone: world.run.zone,
+      phase: s.phase,
+      fightId: s.fightId,
+      pos: { x: s.x, z: s.z },
+      facing: s.facing,
+      bearing: s.bearing,
+      swayPhase: s.swayPhase,
+      marker,
+      atMarker: marker ? atEchoMarker(world, marker) : false,
+      distToMarker: marker ? Math.hypot(at.x - marker.x, at.z - marker.z) : null,
+      summonRange: ECHO_SUMMON_RANGE,
+      summonHeld: s.summonHeld,
+      summoned: s.summoned,
+      distance: s.distance,
+      floor: s.floor,
+      holdLength: ECHO_HOLD_LENGTH,
+      tensionFraction: s.tensionFraction,
+      landWindow: landWindowFraction(s.floor),
+      landEligible: fight ? fight.land.eligible : false,
+      reeledSeconds: s.reeledSeconds,
+      swayIndex: s.swayIndex,
+      hp: s.hp,
+      landed: s.landed,
+      willing: s.willing,
+      goneHome: s.goneHome,
+      truth: { ...s.truth },
+      truthSeen: world.run.truthSeen,
+      savedTruth: (() => {
+        const save = getSave();
+        return save ? save.metaState.truthSeen : null;
+      })(),
+      config: echoFightConfig(world),
+      fight: fight
+        ? {
+            id: fight.id,
+            species: fight.species,
+            anchor: fight.anchor,
+            L: fight.L,
+            tension: fight.tension,
+            reelRate: fight.reelRate ?? null,
+            snapBehavior: fight.snapBehavior ?? null,
+            tensionSource: fight.tensionSource ?? null,
+            reelActive: fight.reel.active,
+            landEligible: fight.land.eligible,
+          }
+        : null,
+      fights: world.tether.fights.length,
+      fish: world.fish ? { hp: world.fish.hp } : null,
+      player: { x: at.x, z: at.z, hp: world.player.hp, stamina: world.player.stamina },
+      lure: { id: world.lure.id, count: world.lure.count },
+      haul: world.run.haul.map((h) => ({ species: h.species, tier: h.tier, clean: h.clean })),
+      inventory: world.run.inventory.map((i) => ({ id: i.id, name: i.name, rarity: i.rarity })),
+      bestiary: world.run.bestiaryEvents.filter((e) => e.speciesId === 'marens-echo'),
+      choirDim: echoChoirDim(s),
+      runEnded: world.run.ended,
+      moment: world.township.pendingMoment,
+      toast: snatcherToastOnScreen(),
+      prompt: echoPromptOnScreen(),
+      scene: truthSceneOnScreen(),
+      render: marensEchoRenderState(),
+      events: peekTownEvents().filter((e) => e.type.startsWith('echo.')),
+    };
+  };
+  // Park the hull ON the marker — the one thing a gate driver cannot do by
+  // rowing (the deepest point of a 220 m lake is a long row at 6 m/s).
+  (window as unknown as { __toEchoMarker: () => unknown }).__toEchoMarker = () => {
+    const marker = echoMarkerFor(world);
+    if (!marker) return null;
+    world.boat.x = marker.x;
+    world.boat.z = marker.z;
+    world.boat.speed = 0;
+    return marker;
+  };
+  // Shorten HER line directly, so a gate can reach the decision window without
+  // twenty seconds of real reeling. Everything the shortening causes — the
+  // proximity curve, the LAND arming, the snap at the floor — is the real code
+  // on the next tick; this only moves L.
+  (window as unknown as { __echoReelTo: (d: number) => unknown }).__echoReelTo = (d: number) => {
+    const s = world.marensEcho;
+    const fight = world.tether.fights.find((f) => f.id === s.fightId);
+    if (!fight) return null;
+    fight.L = Math.max(s.floor, d);
+    return { L: fight.L, floor: s.floor };
   };
 
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =

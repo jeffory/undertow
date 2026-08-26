@@ -26,6 +26,7 @@ import * as THREE from 'three';
 import type { WorldState } from '../core/world';
 import { CHOIR_ZONE } from '../core/zones';
 import { CHOIR_MOTE_COUNT, choirMoteAt } from '../gen/choir';
+import { choirDim } from '../bosses/marensEcho';
 
 // Cold blue-green — the one colour in the game that is neither the lantern's
 // sodium nor the water's bone-teal. Bioluminescence, not lamplight.
@@ -126,12 +127,25 @@ export function choirRenderState(): {
   motes: number;
   draws: number;
   singing: number;
+  dim: number;
 } {
   const on = !!root && root.visible;
-  return { visible: on, motes: on ? CHOIR_MOTE_COUNT : 0, draws: on ? 2 : 0, singing: lastSinger };
+  return {
+    visible: on,
+    motes: on ? CHOIR_MOTE_COUNT : 0,
+    draws: on ? 2 : 0,
+    singing: lastSinger,
+    dim: lastDim,
+  };
 }
 
 let lastSinger = -1;
+// THE choirDim SEAM (M8 boss, plan 05 §2.3: "the choir motes dim slightly while
+// she holds"). One multiplier on the per-mote gain, sourced from her state — so
+// the void drops its voices back while Maren's Echo is on the line, the way a
+// room goes quiet when someone who matters walks into it. Exactly 1 whenever she
+// is not in the water, which is what keeps a Choir without her byte-identical.
+let lastDim = 1;
 
 /** Where a mote is right now, in world space — the probe's screenshot anchor. */
 export function choirMoteWorld(
@@ -163,6 +177,7 @@ export function updateChoir(world: WorldState, _dt: number): void {
       ? 1 - (t - sang.lastAt) / SING_FLARE_SECONDS
       : 0;
   lastSinger = flare > 0 ? sang.lastMote : -1;
+  lastDim = choirDim(world.marensEcho);
 
   for (let i = 0; i < CHOIR_MOTE_COUNT; i++) {
     const m = choirMoteAt(lake.seed, i, t);
@@ -171,7 +186,8 @@ export function updateChoir(world: WorldState, _dt: number): void {
     // The breath — a slow sine on the mote's own phase, never in unison.
     const pulse = 0.72 + 0.28 * Math.sin((t * PULSE_HZ + m.phase) * Math.PI * 2);
     // …and the flare, when this is the mote that just sang.
-    const gain = m.brightness * pulse * (i === lastSinger ? 1 + SING_FLARE_GAIN * flare : 1);
+    const gain =
+      m.brightness * pulse * (i === lastSinger ? 1 + SING_FLARE_GAIN * flare : 1) * lastDim;
     coreColors.setXYZ(i, CORE_COLOR.r * gain, CORE_COLOR.g * gain, CORE_COLOR.b * gain);
     haloColors.setXYZ(i, HALO_COLOR.r * gain, HALO_COLOR.g * gain, HALO_COLOR.b * gain);
   }

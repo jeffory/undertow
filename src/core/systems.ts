@@ -30,6 +30,7 @@ import { updateCongregation } from '../systems/congregation';
 import { updateSnatcher } from '../systems/snatcher';
 import { updatePostmaster } from '../systems/postmaster';
 import { updateWhistler } from '../systems/whistler';
+import { updateMarensEcho } from '../systems/marensEcho';
 import { updateChoir } from '../systems/choir';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
@@ -46,6 +47,8 @@ import { updateEnvTextOverlay } from '../ui/envTextOverlay';
 import { updateCongregationInvoice } from '../ui/congregationInvoice';
 import { updatePostmasterOverlay } from '../ui/postmasterTelegraph';
 import { updateWhistlerPrompt } from '../ui/whistlerPrompt';
+import { updateEchoPrompt } from '../ui/echoPrompt';
+import { updateTruthScene } from '../ui/truthScene';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -225,6 +228,8 @@ function ui(world: WorldState, _dt: number): void {
   updateCongregationInvoice(world); // 05 §2.1 — the Congregation's ledger
   updatePostmasterOverlay(world); // 05 §2.2 — his bubble + the summon/cut prompt
   updateWhistlerPrompt(world); // 05 §2.3 — the Choir elite's cut hold
+  updateEchoPrompt(world); // 05 §2.3 — the Echo's summon marker + the decision
+  updateTruthScene(world); // 05 §2.3 — the three beats, over dark water
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -365,6 +370,11 @@ export const UPDATE_ORDER: SystemFn[] = [
   // and BEFORE the run reducer + the run terminal (so `deliveredBy` is stamped
   // in the tick the water closed over the keeper).
   updateWhistler,
+  // 05 §2.3: the Choir BOSS. Same slot rule as the four encounters above —
+  // AFTER combat (a formality here: she has no target id and nothing to hit) and
+  // BEFORE the run reducer, which is the load-bearing half: the LAND she ends on
+  // is folded into a real clean catch on the same tick's event stream.
+  updateMarensEcho,
   // 05 §2.3: the void sings. Order-independent of everything else — it reads the
   // clock and writes only the town-event queue — but it is placed with the
   // Whistler because they are the same zone's two halves.

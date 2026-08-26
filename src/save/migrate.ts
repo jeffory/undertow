@@ -47,6 +47,7 @@ export function freshMetaState(): MetaState {
     decants: 0,
     damKeyUsed: false,
     forwardingAddress: false,
+    truthSeen: false,
     breadcrumbs: [],
     endingsSeen: {},
     nplus: false,
@@ -214,6 +215,10 @@ export function applyRunResult(save: SaveGame, result: RunResult): SaveGame {
       // the Postmaster cannot un-post the slip.
       forwardingAddress:
         (save.metaState?.forwardingAddress ?? false) || (normalized.forwardingAddress ?? false),
+      // M8 (plan 05 §2.3): the truth is LATCHED for the same reason — a later
+      // run that never rowed out to the deepest water cannot un-tell you what
+      // she said.
+      truthSeen: (save.metaState?.truthSeen ?? false) || (normalized.truthSeen ?? false),
     },
     // The rig-up loadout is carried through the run end untouched — the Office
     // holds the requisition between runs.

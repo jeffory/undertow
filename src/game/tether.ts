@@ -99,6 +99,15 @@ export interface TetherFight {
   // `resolveReelHold` 'ai' case — the case plan 02 declared and left for 05 to
   // fill. Undefined/false on every fight nobody is reeling from the far end.
   aiReel?: boolean;
+  // Per-fight TENSION SOURCE (05 §2.3): Maren's Echo's tension does not come
+  // from over-extension, it comes from PROXIMITY — "tension rises with proximity
+  // and drains your stamina directly". With this set, the constraint skips its
+  // own two tension writes (the taut gain and the slack decay) and her system
+  // writes `fight.tension` instead; the clamp, the ceiling and the SNAP are
+  // untouched, so her line parts through exactly the machinery every other line
+  // parts through. Undefined on every fight anyone has ever fought, which is
+  // what keeps zones 1-3 byte-identical.
+  tensionSource?: 'proximity';
   // A THIRD ENTITY riding this line (05 §2.2): the Snatcher's second mouth.
   // Absent on every other fight — see TetherRider above for why this is a
   // rider and not a third endpoint.
@@ -176,6 +185,13 @@ export const POSTMASTER_ENTITY = -3;
 // one zone deeper: a reverse fight has no catch, so it is not world.fish.
 // Resolves to world.whistler in the constraint's position accessor.
 export const WHISTLER_ENTITY = -4;
+// 05 §2.3 — the Choir BOSS. She is not the catch slot either, and here the
+// reason is load-bearing rather than tidy: world.fish carries an hp pool, the
+// butcher check that ends a fight when that pool hits zero, and the gaff's
+// target id. A boss whose acceptance criterion is that NO HP REACHES ZERO
+// ANYWHERE cannot live in the one slot that has hp. Resolves to
+// world.marensEcho in the constraint's position accessor.
+export const MARENS_ECHO_ENTITY = -5;
 
 export const M2_SPECIES: SpeciesId = 'capsule';
 
@@ -296,6 +312,7 @@ export function startTetherFight(
     reelRate: number;
     pullForceMult: number;
     snapBehavior: SnapBehavior;
+    tensionSource: 'proximity';
   }>,
 ): TetherFight | null {
   const fish = world.fish;
@@ -368,6 +385,7 @@ export function startTetherFight(
     ...(opts?.reelRate !== undefined ? { reelRate: opts.reelRate } : {}),
     ...(opts?.pullForceMult !== undefined ? { pullForceMult: opts.pullForceMult } : {}),
     ...(opts?.snapBehavior !== undefined ? { snapBehavior: opts.snapBehavior } : {}),
+    ...(opts?.tensionSource !== undefined ? { tensionSource: opts.tensionSource } : {}),
     tension: 0,
     reel: {
       hold: false,

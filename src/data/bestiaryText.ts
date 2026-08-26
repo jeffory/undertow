@@ -285,8 +285,10 @@ export const TOWNSHIP_BESTIARY_TEXT: BestiaryRecord[] = [
 // township rosters have theirs: the zone-1 id-coverage test pins BESTIARY_TEXT
 // exactly, and all four feed the single lookup below.
 //
-// The bible writes no `entryWilling` for it. There is no willing way to meet a
-// thing that hooks you, so the field stays absent rather than invented.
+// The bible writes no `entryWilling` for the WHISTLER: there is no willing way
+// to meet a thing that hooks you, so the field stays absent rather than
+// invented. Maren's Echo below is the opposite case — the bible writes one, and
+// it is the worst paragraph in the game.
 export const CHOIR_BESTIARY_TEXT: BestiaryRecord[] = [
   {
     id: 'the-whistler',
@@ -298,6 +300,25 @@ export const CHOIR_BESTIARY_TEXT: BestiaryRecord[] = [
     silhouette: 'A tall, unjointed shadow whistling two sharp notes just past the lantern\'s reach.',
     entryFought:
       'It carries its own rod and line in the pitch dark. It does not wait for a bite; it searches the light until it finds a mouth.',
+  },
+  {
+    // MAREN'S ECHO — docs/story/choir.md §5.6, verbatim. The ONE boss record in
+    // the game that carries an `entryWilling`: the bible writes a willing
+    // variant for her because there is a willing way to meet her, and it is
+    // worse. bestiary/bestiary.ts has carried the `willing` flag since M4 with
+    // nothing able to set it; the M8 boss round is where it finally can be.
+    id: 'marens-echo',
+    name: "Maren's Echo",
+    zone: 4,
+    rarity: 'Boss',
+    eligibility: 3,
+    category: 'boss',
+    silhouette:
+      'A figure in drenched linen hovering in the void, facing away from the boat.',
+    entryFought:
+      "Not Maren, but the shape the water made to hold the memory of her. When you reel, it does not fight the steel; it mirrors the exhaustion in your wrists until your own hands surrender.",
+    entryWilling:
+      "When taken with the thimble, it turns to look at you. It has no eyes, only the reflection of the lantern room thirty years ago, and it whispers that the child fell asleep before the water touched the crib.",
   },
 ];
 

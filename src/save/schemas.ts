@@ -53,7 +53,10 @@ export type SundryItem = z.infer<typeof SundryItemSchema>;
 
 export const BestiaryEventSchema = z.object({
   speciesId: z.string(),
-  event: z.enum(['hooked', 'clean', 'butchered']),
+  // 'willing' (05 §2.3) is additive: every save written before it parses
+  // unchanged, and an old build reading a new save simply drops rows it does not
+  // know — which is why this needed no version bump.
+  event: z.enum(['hooked', 'clean', 'butchered', 'willing']),
 });
 export type BestiaryEvent = z.infer<typeof BestiaryEventSchema>;
 
@@ -76,6 +79,10 @@ export const RunResultSchema = z.object({
   // forwarding address. Folded onto `metaState.forwardingAddress` at persist —
   // a STORY fact, so like a bestiary credit it survives a death.
   forwardingAddress: z.boolean().default(false),
+  // M8 (plan 05 §2.3): this run reeled Maren's Echo in and was told the truth.
+  // Folded onto `metaState.truthSeen` at persist — a STORY fact like the
+  // address, and one you cannot un-know, so it survives a death too.
+  truthSeen: z.boolean().default(false),
   // Who delivered the keeper, when the run ended by being delivered. plan 02's
   // own vocabulary (the `delivered` tether event). Absent on ordinary deaths.
   deliveredBy: z.enum(['postmaster', 'whistler', 'dragger']).optional(),
@@ -140,6 +147,10 @@ export const MetaStateSchema = z.object({
   // the way every other deferred slot was: DEFAULTED, so no version bump is
   // needed and every save that predates it loads with the address unposted.
   forwardingAddress: z.boolean().default(false),
+  // M8 (plan 05 §2.3): the truth scene has been read. The tenth field, added the
+  // way the ninth was — DEFAULTED, so no version bump and every older save loads
+  // with the keeper still not knowing. M10's endings read this.
+  truthSeen: z.boolean().default(false),
   breadcrumbs: z.array(z.string()).default([]),
   endingsSeen: EndingsSeenSchema.default({}),
   nplus: z.boolean().default(false),

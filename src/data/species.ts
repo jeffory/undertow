@@ -742,9 +742,85 @@ export const CHOIR_SPECIES: SpeciesPreset[] = [
     dragStaminaCostPerM: 1.8,
     routedDrag: true,
   },
+  {
+    // MAREN'S ECHO — the M8 boss, plan 05 §2.3: "not her; the town's memory of
+    // her, wearing the flood". The preset is the Postmaster's trick used for the
+    // opposite purpose: the rig is STOOD UPRIGHT by the render side, so the
+    // girth curve is read bottom-up as a figure — a small head, narrow
+    // shoulders, and a hem of drenched linen widening into the dark.
+    //
+    // Every dial that could make her a monster is turned OFF, on purpose:
+    //   • eyeCount 0 — "it has no eyes, only the reflection of the lantern room";
+    //   • jawSplit 0 — the only preset in the game with no mouth at all. She has
+    //     no verb to bite you with, in the data as well as in the code;
+    //   • humanRatio 0.96 — the most human thing in the water, which is exactly
+    //     what makes her unbearable;
+    //   • swimFreq 0.55 — the slowest sway in the game. She is not swimming; she
+    //     is standing in a current, mirroring the rise and fall of your
+    //     shoulders (choir.md §5.2);
+    //   • patterns — orbit 1, and a ZERO in every hostile column. There is no
+    //     lunge weight to roll, no drag weight to roll. The FSM she would use is
+    //     never even constructed (she is not world.fish), but the data says the
+    //     same thing the code does.
+    // Boss rarity, and therefore tier 5 like every other boss — the roster's own
+    // ladder (tests/data/species.test.ts) is C1 U2 R3 E4 Boss5 and she is not an
+    // exception to it. She IS landed, unlike the other three, and the receipt's
+    // tier column tops out at 4 (Drowned) — so it is her CATCH RECORD that is
+    // filed at the top of that ladder, in systems/marensEcho.ts, and not her.
+    id: 'marens-echo',
+    name: "Maren's Echo",
+    rarity: 'Boss',
+    eligibility: 3,
+    category: 'boss',
+    tier: 5,
+    lengthM: 2.4,
+    spineSegments: 12,
+    // Read BOTTOM-UP, because the render side stands the rig on end (index 0 is
+    // the tail, which the quarter-turn puts in the water): a broad hem of
+    // drenched linen at the waterline, narrowing through the body to a small
+    // bowed head at the top. The Postmaster's curve is the same trick with the
+    // hump the other way up.
+    girthCurve: [0.76, 0.74, 0.7, 0.66, 0.62, 0.58, 0.55, 0.52, 0.5, 0.44, 0.3, 0.15],
+    snout: 0.08, // a face turned away, and nothing on it
+    finCount: 2,
+    finKinds: ['ridge'],
+    eyeCount: 0,
+    eyeSize: 0.05,
+    jawSplit: 0, // she does not bite. She does not do anything.
+    limbBudget: 2, // two arms, at her sides
+    humanRatio: 0.96,
+    swimFreq: 0.55,
+    swimAmp: 0.34,
+    palette: 6, // drowned linen — added for her (render/fishMesh.ts)
+    // The second and last preset in the game to carry `glow`, and for the
+    // opposite reason to the Whistler's. The Whistler is lit from inside because
+    // it is a thing that hunts in the dark. She holds at EIGHTEEN METRES in a
+    // zone whose lighting model is "geometry only where light touches" — past
+    // the lantern's useful falloff, an unlit body is not a silhouette, it is
+    // nothing at all, and the whole encounter is a silhouette you have to look
+    // at. The additive pass (render/fishMesh.ts GLOW_MATERIAL, opacity 0.45 over
+    // a near-white palette) reads as the lantern's own light remembered on wet
+    // linen rather than as bioluminescence: cold, faint, and the only pale thing
+    // in forty fathoms.
+    glow: true,
+    stats: { mass: 3.2, stamina: 100, pullForce: 0, swimSpeed: 0, hp: 100 },
+    patterns: { orbit: 1, lunge: 0, dive: 0, drag: 0 },
+    // The floor the roster allows. The zone-4 wrongness curve should barely move
+    // her: every other species gets stranger the deeper you go, and she is the
+    // one thing down there that is exactly what it looks like.
+    wrongnessInfluence: 0.4,
+    lungeCooldown: 0,
+    lungeStaminaCost: 0,
+    dragSpeed: 0,
+    dragStaminaCostPerM: 0,
+    routedDrag: false,
+  },
 ];
 
 export const WHISTLER_SPECIES_ID = 'the-whistler';
+
+// 05 §2.3 — the Choir BOSS. Landed like a catch, which is the point of her.
+export const MARENS_ECHO_SPECIES_ID = 'marens-echo';
 
 export const SNATCHER_SPECIES_ID = 'gallows-snatcher';
 export const POSTMASTER_SPECIES_ID = 'the-postmaster';

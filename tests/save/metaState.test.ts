@@ -23,10 +23,11 @@ const run = () => ({
 });
 
 describe('MetaState schema (plan 05 §0.2)', () => {
-  // Nine, not eight: plan §0.2 lists eight, but §1.4 gates restoration rows on
+  // Ten, not eight: plan §0.2 lists eight, but §1.4 gates restoration rows on
   // `forwardingAddress:true` and §2.2 makes the Postmaster drop it, so M7 added
-  // the ninth the way every deferred slot was added — DEFAULTED, no version bump.
-  it('carries the eight fields plan §0.2 names, plus §2.2 forwardingAddress', () => {
+  // the ninth; §2.3's truth scene is the tenth (M10's endings read it). Both were
+  // added the way every deferred slot was — DEFAULTED, no version bump.
+  it('carries the eight fields plan §0.2 names, plus forwardingAddress + truthSeen', () => {
     expect(Object.keys(freshMetaState()).sort()).toEqual(
       [
         'breadcrumbs',
@@ -38,6 +39,7 @@ describe('MetaState schema (plan 05 §0.2)', () => {
         'memories',
         'notesRead',
         'nplus',
+        'truthSeen',
       ].sort(),
     );
   });
@@ -53,6 +55,7 @@ describe('MetaState schema (plan 05 §0.2)', () => {
       decants: 2,
       damKeyUsed: true,
       forwardingAddress: true,
+      truthSeen: true,
       breadcrumbs: ['tin-locket'],
       endingsSeen: { haul: true },
       nplus: true,

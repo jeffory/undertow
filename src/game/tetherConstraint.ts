@@ -22,6 +22,7 @@ import {
   FISH_ENTITY,
   POSTMASTER_ENTITY,
   WHISTLER_ENTITY,
+  MARENS_ECHO_ENTITY,
   LAND_DISTANCE,
   CUT_HOLD_SECONDS,
   LOW_TENSION_THRESHOLD,
@@ -99,6 +100,18 @@ function resolvePos(world: WorldState, anchor: Anchor): PosAccessor {
           write: (x, z) => {
             wl.x = x;
             wl.z = z;
+          },
+        };
+      }
+      // 05 §2.3 — the Choir BOSS's end. Same one seam again; see
+      // bosses/marensEcho.ts for why a no-combat boss must not be world.fish.
+      if (anchor.entityId === MARENS_ECHO_ENTITY) {
+        const me = world.marensEcho;
+        return {
+          read: () => ({ x: me.x, z: me.z }),
+          write: (x, z) => {
+            me.x = x;
+            me.z = z;
           },
         };
       }
@@ -331,6 +344,9 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
 
   // 4. CONSTRAINT (plan §3 branch 4, Addendum A.3) — mass-split position
   //    correction + tension from real overshoot, brace on the player endpoint.
+  // `proximityTension` is the per-fight override (05 §2.3): undefined on every
+  // fight but hers, so this is one boolean read per taut step everywhere else.
+  const proximityTension = fight.tensionSource === 'proximity';
   // The drag cooldown ticks every step, taut or slack — decaying it only while
   // taut froze the cooldown on a slack line, and decaying it after a fire ate
   // one dt of the fresh cooldown on the firing step.
@@ -379,7 +395,13 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
     const snagB = arrestOnKelp(world, fight.b, pb, { x: pb.x - nx * corrB, z: pb.z - nz * corrB });
     aPos.write(snagA.x, snagA.z);
     bPos.write(snagB.x, snagB.z);
-    fight.tension += excess * tuning.kTension * dt;
+    // 05 §2.3 — THE ONE GATED BRANCH. A proximity-sourced fight (Maren's Echo)
+    // does not earn tension from over-extension: her system writes the number
+    // from the live separation, because her whole design is "tension rises with
+    // PROXIMITY, not lunges". Everything else about this step — the correction,
+    // the brace, the kelp arrest, the drag window — is untouched, and so is the
+    // clamp and the SNAP below.
+    if (!proximityTension) fight.tension += excess * tuning.kTension * dt;
 
     // Drag detection (plan §4.2): displacement actually applied to the HAULED
     // end — the endpoint that is not the catch. For an M2 player fight that is
@@ -437,7 +459,7 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
         drag.cooldown = DRAG_COOLDOWN;
       }
     }
-  } else {
+  } else if (!proximityTension) {
     fight.tension -= tuning.slackDecay * dt;
   }
   // A THIRD ENTITY on the line (05 §2.2): while a rider holds on, tension gains

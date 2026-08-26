@@ -15,10 +15,10 @@
 //   • §3 `AmbientZoneLine` (6) → the void's unanchored navigation observations.
 //                                Staged as data here (see CHOIR_AMBIENT below).
 //   • §5 Maren's Echo — the summon marker, the four sway lines, the three-beat
-//     truth scene, the snap line, the Echo's Scale, the boss bestiary record.
-//     NOT THIS ROUND: Maren's Echo is a separate later round by the task's own
-//     first sentence, and putting her words in before her fight exists would be
-//     copy with nothing to say them.
+//     truth scene, the snap line, the Echo's Scale. LANDED IN THE BOSS ROUND
+//     (M8 round 2, plan 05 §2.3): the encounter now exists, so its words are
+//     here, VERBATIM, at the bottom of this file. Her bestiary record went where
+//     every bestiary record goes — data/bestiaryText.ts.
 //
 // THE BAND IS THE CONTRACT. enemies/whistler.ts names a BAND (1/2/3) and this
 // module owns what words that band says, so a copy revision never touches the
@@ -218,3 +218,123 @@ export const CHOIR_AMBIENT: readonly AmbientZoneLine[] = [
     text: 'Drifting lights part as the boat glides through. They do not scatter; they make room in the choir stalls.',
   },
 ];
+
+// --- MAREN'S ECHO — the tonal pivot (docs/story/choir.md §5) ---------------------
+//
+// The round §5 was written for. Every string below is the bible VERBATIM: the
+// summon marker (§5.1), the four sway lines (§5.2), the three-beat truth scene
+// (§5.3), the snap line (§5.4) and the Echo's Scale drop (§5.5). Her bestiary
+// record (§5.6) lives where every other bestiary record lives —
+// data/bestiaryText.ts. Nothing here is a placeholder: the encounter's copy was
+// finished before its code existed, which is most of why it reads.
+//
+// The SIM never names a line. It names a MOMENT (a sway index, a beat number)
+// and this module owns the words — the same contract the Whistler's bands and
+// the Postmaster's verbs are under, so a revision of choir.md stays a data swap.
+
+/** The toast title her moments carry. She has a name; the Office files it anyway. */
+export const ECHO_TITLE = "MAREN'S ECHO";
+
+/** §5.1 — the marker's own docket. The Office has a form for a held breath. */
+export const ECHO_SUMMON_HEADER = "[SUMMON NODE: ACOUSTIC DISTURBANCE 00-ECHO]";
+/** §5.1 — what is standing in forty fathoms of quiet, out past the light. */
+export const ECHO_SUMMON_TEXT = "A circle of emissive lights holding silence like a held breath. A single silhouette stands in forty fathoms of quiet, wrapped in drenched white linen.";
+
+export interface EchoSwayLine {
+  id: string;
+  text: string;
+}
+
+/** The bible's audit ceiling for a sway line (§7 checklist: cap 140). */
+export const SWAY_LINE_MAX_CHARS = 140;
+
+/**
+ * §5.2 — shown at timed intervals while the keeper HOLDS without reeling.
+ * "Patient, unhurried, and calm — the Echo will wait forever."
+ */
+export const ECHO_SWAY_LINES: readonly EchoSwayLine[] = [
+  {
+    "id": "sway_state_01",
+    "text": "It sways with the slow pulse of the basin, mirroring the rise and fall of your shoulders."
+  },
+  {
+    "id": "sway_state_02",
+    "text": "The line hangs loose between you. It does not pull; it waits for your hands to tire."
+  },
+  {
+    "id": "sway_state_03",
+    "text": "Water drifts through her white linen. She has thirty years of patience, and nowhere else to be."
+  },
+  {
+    "id": "sway_state_04",
+    "text": "No struggle on the cord. If you do not reel, both of you will stand here until the oil burns dry."
+  }
+];
+
+/** The sway line for the n-th hold interval. The rotation simply cycles. */
+export function echoSwayLineAt(index: number): EchoSwayLine {
+  const n = ECHO_SWAY_LINES.length;
+  const i = ((index % n) + n) % n;
+  return ECHO_SWAY_LINES[i]!;
+}
+
+export type TruthTheme = 'the_warden' | 'the_shocked' | 'the_willing';
+
+export interface TruthSceneBeat {
+  beat: number;
+  theme: TruthTheme;
+  title: string;
+  text: string;
+}
+
+/** The bible's audit: each beat is strictly under 60 words. */
+export const TRUTH_BEAT_MAX_WORDS = 60;
+
+/**
+ * §5.3 — THE TRUTH SCENE. Three fullscreen beats over dark water, shown once the
+ * reel is finished and she is landed. It is what the whole game has been walking
+ * toward: the Mouth is a warden, the restored are the shocked, and the ones who
+ * go home go willingly.
+ */
+export const TRUTH_SCENE: readonly TruthSceneBeat[] = [
+  {
+    "beat": 1,
+    "theme": "the_warden",
+    "title": "Beat 1: The Warden",
+    "text": "The Mouth is no devourer. It is a warden, appointed to keep the drowned valley in quiet, unbroken custody. Its cold ledgers do not punish; they protect the silence of four hundred souls resting beneath forty fathoms. It only demands tribute because you refuse to leave the gate."
+  },
+  {
+    "beat": 2,
+    "theme": "the_shocked",
+    "title": "Beat 2: The Shocked",
+    "text": "Your iron hook brings no salvation. Hauling a soul to the dry strand only tears them from peace, shocking them back into shivering, waterlogged flesh to inhabit damp shops and placate your thirty-year penance. They smile on the cobbles because they pity the man who cannot stop pulling."
+  },
+  {
+    "beat": 3,
+    "theme": "the_willing",
+    "title": "Beat 3: The Willing",
+    "text": "The ones who vanish at night are not lost; they go home willingly. They walk down the jetty back into the dark water, returning to the Choir where the silence is deep and whole. Maren told you thirty years ago: they are not waiting to be retrieved."
+  }
+];
+
+/** §5.4 — the header over the snap. Not a failure card: a docket. */
+export const ECHO_SNAP_HEADER = "[LINE SNAP / OVER-STRAIN]";
+/** §5.4 — tension reached 100. She goes home, unhooked and at peace. */
+export const ECHO_SNAP_LINE = "The line snaps. The Echo does not flee; she drifts backward into the choir of lights, unhooked and at peace. Gone home.";
+
+export interface EchoDropCopy {
+  id: string;
+  name: string;
+  category: string;
+  flavorHeader: string;
+  dropText: string;
+}
+
+/** §5.5 — the Drowned-tier trophy the landing pays out. */
+export const ECHOS_SCALE: EchoDropCopy = {
+  "id": "echos-scale",
+  "name": "The Echo's Scale",
+  "category": "drowned_item",
+  "flavorHeader": "EXHIBIT 4-E: RESIDUAL CASTING",
+  "dropText": "A single translucent scale, curved like a fingernail and cold as river ice. Held up to the tallow flame, it reflects not your face, but the parlor window of 14 Willow Street on the night the reservoir rose. It carries no weight in the palm."
+};

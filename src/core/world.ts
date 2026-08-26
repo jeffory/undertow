@@ -35,6 +35,8 @@ import type { PostmasterState } from '../bosses/postmaster';
 import { createPostmasterState } from '../bosses/postmaster';
 import type { WhistlerState } from '../enemies/whistler';
 import { createWhistlerState } from '../enemies/whistler';
+import type { MarensEchoState } from '../bosses/marensEcho';
+import { createMarensEchoState } from '../bosses/marensEcho';
 import type { ChoirState } from '../gen/choir';
 import { createChoirState } from '../gen/choir';
 import { MIN_ZONE } from './zones';
@@ -331,6 +333,12 @@ export interface RunState {
   // merely drowned. Null on every ordinary death. plan 02 declared the
   // `delivered` tether event with exactly this vocabulary.
   deliveredBy: 'postmaster' | 'whistler' | 'dragger' | null;
+  // --- M8 boss (plan 05 §2.3): this run reeled Maren's Echo all the way in and
+  // was told the truth (the Mouth is a warden; the restored are the shocked; the
+  // ones who go home go willingly). A STORY fact like the forwarding address, so
+  // it rides the RunResult onto `metaState.truthSeen` and survives a death — you
+  // cannot un-know it — and M10's endings read it from there.
+  truthSeen: boolean;
 }
 
 export function createRunState(startedAt: number, startedAtDread: number): RunState {
@@ -363,6 +371,7 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
     stolen: 0,
     forwardingAddress: false,
     deliveredBy: null,
+    truthSeen: false,
   };
 }
 
@@ -468,6 +477,7 @@ export interface WorldState {
   snatcher: SnatcherState; // 05 §2.2 — the Township's second mouth on the line
   postmaster: PostmasterState; // 05 §2.2 — the Township boss: the reverse tether
   whistler: WhistlerState; // 05 §2.3 — the Choir's roaming elite: the second reverse tether
+  marensEcho: MarensEchoState; // 05 §2.3 — the Choir BOSS: the fight with no verbs
   choir: ChoirState; // 05 §2.3 — the emissive void's singing cursor
   combat: CombatState;
   fish: FishState | null;
@@ -533,6 +543,7 @@ export function createWorld(seed = 1): WorldState {
     snatcher: createSnatcherState(),
     postmaster: createPostmasterState(),
     whistler: createWhistlerState(),
+    marensEcho: createMarensEchoState(),
     choir: createChoirState(),
     combat: {
       comboStage: 0,

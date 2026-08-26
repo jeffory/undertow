@@ -5,8 +5,8 @@
 // fought — the species is only known at the moment it is hooked); `cleanCatch`
 // only from an exhausted-and-landed catch (a butcher never grants the
 // checkmark); `willing` is the Maren's Thimble variant — a distinct, worse
-// record, wired with the thimble in a later round (the flag exists from day
-// one). A species with no entry state is "undiscovered" — the UI shows a dark
+// record, and as of the M8 boss (05 §2.3) it finally has a producer: a
+// 'willing' event, recorded when Maren's Echo is landed on the thimble. A species with no entry state is "undiscovered" — the UI shows a dark
 // silhouette card and hides the name.
 //
 // Events accumulate on world.run.bestiaryEvents during the run (the reducer +
@@ -28,7 +28,11 @@ export interface BestiaryEntryState {
   catches: number; // landed catches (clean or otherwise)
 }
 
-export type BestiaryEventKind = 'hooked' | 'clean' | 'butchered';
+// 05 §2.3 — 'willing' is the FOURTH kind, and the first producer the `willing`
+// flag has ever had: Maren's Echo taken with Maren's Thimble. It was declared in
+// the entry state in M4 with nothing able to set it ("wired with the thimble in
+// a later round"), and the M8 boss is the round where a willing catch exists.
+export type BestiaryEventKind = 'hooked' | 'clean' | 'butchered' | 'willing';
 
 export interface BestiaryEvent {
   speciesId: string;
@@ -68,6 +72,11 @@ export function applyBestiaryEvents(
         break;
       case 'butchered':
         entry.kills += 1;
+        break;
+      case 'willing':
+        // It came willingly. The record does not change what happened — it
+        // changes what the record SAYS (data/bestiaryText.ts `entryWilling`).
+        entry.willing = true;
         break;
     }
     out[ev.speciesId] = entry;

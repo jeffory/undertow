@@ -11,7 +11,7 @@
 
 import type { WorldState } from '../core/world';
 import { getSave } from '../core/save';
-import { SHALLOWS_SPECIES } from '../data/species';
+import { SHALLOWS_SPECIES, ALL_SPECIES } from '../data/species';
 import { bestiaryById, type BestiaryRecord } from '../data/bestiaryText';
 import { mergedBestiary, bestiaryStatus } from '../bestiary/bestiary';
 import type { BestiaryEntryState } from '../bestiary/bestiary';
@@ -172,6 +172,21 @@ function showBestiary(world: WorldState): void {
     const entry = entries[species.id];
     grid.appendChild(buildCard(record, entry));
   }
+  // …and anything from a DEEPER zone the keeper has actually met. The ledger is
+  // the Shallows roster by design (undiscovered Shallows slots are the dark
+  // silhouette cards that make the grid a checklist), but a zone-2/3/4 record
+  // the player has earned — the Congregation, the Snatcher, the Postmaster, the
+  // Whistler, Maren's Echo — has had nowhere to be read until now. They appear
+  // only once met, so the grid never spoils what is further down.
+  const shallows = new Set(SHALLOWS_SPECIES.map((sp) => sp.id));
+  for (const species of ALL_SPECIES) {
+    if (shallows.has(species.id)) continue;
+    const entry = entries[species.id];
+    if (!entry || !entry.fought) continue;
+    const record = bestiaryById(species.id);
+    if (!record) continue;
+    grid.appendChild(buildCard(record, entry));
+  }
 
   const foot = document.createElement('div');
   foot.className = 'foot';
@@ -230,7 +245,14 @@ function buildCard(
 
   const entryEl = document.createElement('div');
   entryEl.className = 'entry';
-  entryEl.textContent = record.entryFought;
+  // 05 §2.3 — THE WILLING VARIANT. plan 04 §6.1 declared it in M4 ("a distinct,
+  // worse record") and the text slot has sat filled-in-places and unread ever
+  // since, because nothing could set the flag. The M8 boss can: a species taken
+  // willingly shows its OTHER paragraph, and there is no toggle and no second
+  // card — the record simply says something worse, and does not mention that it
+  // used to say anything else.
+  const willing = !!entry && entry.willing && !!record.entryWilling;
+  entryEl.textContent = willing ? record.entryWilling! : record.entryFought;
   card.appendChild(entryEl);
 
   const mark = document.createElement('div');

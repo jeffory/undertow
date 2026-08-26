@@ -199,6 +199,30 @@ export function rollDrownedUnique(rng: Rng): SundryItem {
   };
 }
 
+// A NAMED story unique (05 §2.3 — the Echo's Scale). Not a draw: a boss whose
+// whole design is "guaranteed clean catch" cannot pay out a random trinket, and
+// a story trophy must never be reachable from an ordinary Drowned roll either —
+// so it is not in DROWNED_UNIQUES (the random pool) at all. What it DOES reuse
+// is the pipeline: the same SundryItem shape, the same 'Drowned' rarity, the
+// same unwired-gimmick effect convention, so the receipt, the box, the save and
+// the rig-up screen all read it as exactly what it is — a Drowned-tier item.
+export interface NamedUniqueDef {
+  id: string; // stable item id — a story item is the same item every time
+  key: string; // gimmick id (unwired hook), like every other Drowned unique
+  name: string;
+  slot: Slot;
+}
+
+export function namedDrownedUnique(def: NamedUniqueDef): SundryItem {
+  return {
+    id: def.id,
+    name: def.name,
+    rarity: 'Drowned',
+    slot: def.slot,
+    effects: [{ key: def.key, value: 0 }],
+  };
+}
+
 // The full landed-catch drop: roll the slot, then rarity, then the item. Returns
 // null when nothing surfaces ("the boat recovers nothing but the line"). A
 // Drowned rarity short-circuits the slot roll — it drops a named unique.

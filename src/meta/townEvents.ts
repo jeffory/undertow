@@ -26,6 +26,12 @@ import type {
   PostmasterDeliveredEvent,
 } from '../bosses/postmaster';
 import type {
+  EchoSummonedEvent,
+  EchoSwayEvent,
+  EchoLandedEvent,
+  EchoGoneHomeEvent,
+} from '../bosses/marensEcho';
+import type {
   WhistlerHeardEvent,
   WhistlerHookedEvent,
   WhistlerCutEvent,
@@ -60,7 +66,11 @@ export type TownEvent =
   | WhistlerHeardEvent // 05 §2.3 — the three proximity bands, in order
   | WhistlerHookedEvent
   | WhistlerCutEvent
-  | WhistlerDeliveredEvent;
+  | WhistlerDeliveredEvent
+  | EchoSummonedEvent // 05 §2.3 — the Choir BOSS (task t32)
+  | EchoSwayEvent
+  | EchoLandedEvent
+  | EchoGoneHomeEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];
