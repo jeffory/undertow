@@ -23,6 +23,9 @@ if it isn't here with `in build: yes`, it isn't a decision.
 | 2026-08-26 | AI | QA | adopt blind A/B + pre-written scoring rubric for art rounds (docs/qa-rubric.md) | yes |
 
 | 2026-08-26 | AI | QA | tether-gate scenario B is a KNOWN residual flake under machine load (driver taps at wall speed vs 10x sim); a single B-timeout on a loaded box is not a regression — sample 3x / quiet machine first. Seed now pinned; step cap scales with timescale. Lesson recorded: my one-sample stash A/B wrongly rejected t16 — sample gates before rejecting. | yes |
+| 2026-08-27 | AI | M7 township | ROOFS ARE ISLETS: a zone-3 rooftop is an ordinary `Islet` with `kind: 'roof'`, appended to `lake.islets` after every other placement. Docking, hull collision, grounding (a flat `deckRise` instead of the rock dome), the foot cast flow and the boat obstacle response are then inherited unchanged; only the LOOK is special-cased (render/lake.ts skips `kind !== 'walkable'`, render/township.ts draws a submerged building). Rejected alternative: a parallel `lake.roofs` collidable class, which would have duplicated the walkable-surface contract. | yes |
+| 2026-08-27 | AI | M7 township | the M1 land-fish scaffold no longer spawns on a `kind: 'roof'` islet — the foot cast flow refuses to cast while a land fish is alive, so a stray scaffold fish made rooftop fishing impossible. Natural shores are untouched. | yes |
+| 2026-08-27 | AI | M7 township | the drowned marquee STRADDLES the waterline (plane centre +0.34 m, lettering high on the board) rather than sitting fully under it: the water plane is opaque from above, so a truly submerged sign is an invisible sign. | yes |
 
 ## Rejected / superseded (do NOT resurrect without a new USER decision)
 

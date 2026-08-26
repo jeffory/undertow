@@ -25,6 +25,11 @@ const NOISE_OCTAVES = 3; // fBm octaves (each 0.5 amplitude of the last)
 const DOME_POW = 1.45; // radial falloff: ~1 at centre → 0 at the rim
 const NOISE_MIX = 0.28; // how much the noise perturbs the dome (0 = smooth dome)
 
+// M7: the fallback deck height (m above GROUND_Y) for a roof islet that carries
+// no explicit `deckRise`. gen/township.ts varies the real ones per roof so the
+// drowned street does not read as one flat pontoon.
+export const ROOF_DECK_RISE = 0.5;
+
 // --- deterministic hash → [0,1). Integer lattice only (cell coords are ints),
 // so the same (seed, cell) always yields the same value on every platform.
 function hash2(seed: number, x: number, z: number): number {
@@ -118,6 +123,14 @@ export function isletPeakRise(iso: Islet): number {
 // dragged past the shore into the water reads as at the waterline, never
 // sinking or floating above the shore line.
 export function isletHeightAt(iso: Islet, x: number, z: number): number {
+  // M7 (plan 05 §2.2): a ROOF is an islet whose walkable surface is a FLAT deck,
+  // not a rock dome — a slate roof does not rise toward its middle. The one
+  // branch here is the whole "roofs are walkable terrain" story: groundYAt, the
+  // player's feet, the fish, the tether line and the render deck plate all read
+  // the same constant, so standing on a rooftop is exactly as solid as standing
+  // on a shore. Natural islets carry no `deckRise`, so this is dead code in
+  // every zone but the Township.
+  if (iso.kind === 'roof') return iso.deckRise ?? ROOF_DECK_RISE;
   const seed = isletHeightSeed(iso);
   const maxR = isletMaxRadius(iso);
   if (maxR <= 1e-4) return 0;

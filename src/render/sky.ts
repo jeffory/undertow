@@ -25,7 +25,7 @@ import {
 } from '../game/clock';
 import type { ClockPhase } from '../game/clock';
 import { hubLightCurve } from '../meta/bottledLight';
-import { zoneFogMultiplier } from '../core/zones';
+import { zoneFogMultiplier, zoneFogTint } from '../core/zones';
 
 // Palette (spec 8.1 / plan 01 §3.2): dark teal over near-black water base.
 const SKY_TOP = 0x080e12; // deep near-black with a hint of teal
@@ -147,6 +147,8 @@ const tmpTop = new THREE.Color();
 const tmpHorizon = new THREE.Color();
 const tmpBottom = new THREE.Color();
 const tmpFog = new THREE.Color();
+// M7 (plan 05 §2.2): the zone's own hue nudge, applied AFTER the phase lerp.
+const tmpZoneTint = new THREE.Color();
 
 // --- lighthouse beam state -----------------------------------------------------
 let beamMesh: THREE.Mesh | null = null;
@@ -325,12 +327,19 @@ export function updateSky(world: WorldState, dt: number): void {
   curDensity += (skyPaletteForPhase(phase).fogDensity - curDensity) * k;
 
   if (fog) {
+    const zone = world.run ? world.run.zone : 1;
     fog.color.copy(curFog);
+    // M7 (plan 05 §2.2): the Township "adds sodium-lamp amber". A SMALL lerp of
+    // the already-phase-lerped colour toward the zone's hue — the phase palette
+    // still owns the fog, this only seasons it. Zones 1/2 have strength 0, so
+    // the line below is a no-op there and their fog stays byte-identical.
+    const tint = zoneFogTint(zone);
+    if (tint.strength > 0) fog.color.lerp(tmpZoneTint.setHex(tint.color), tint.strength);
     // Three multipliers compose here (M6, plan 05 §2.1): the Night Clock's
     // phase-lerped base density, the options menu's murk scale, and the ZONE's
     // own multiplier — the Kelp Graves' "fog denser than Shallows". Zone 1 is
     // exactly ×1, so the Shallows is byte-identical to pre-M6.
-    fog.density = curDensity * fogDensityScale * zoneFogMultiplier(world.run ? world.run.zone : 1);
+    fog.density = curDensity * fogDensityScale * zoneFogMultiplier(zone);
   }
 
   // Rewrite the gradient sphere's vertex colors from the drifting palette

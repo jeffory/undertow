@@ -366,6 +366,33 @@ export interface TownBarkSimState {
   visits: Record<string, number>;
 }
 
+// --- M7 township (plan 05 §2.2, task t27) --------------------------------------
+// The drowned Hollow's transient state. The street itself (roofs, lamps, env
+// points) rides the LakeMap — this is only what the RUN knows about it: which
+// roof the keeper is standing on, which environmental-text point is in reach,
+// which ones have already been read this run, and the one line waiting for the
+// parchment overlay. The sim owns all four; the ui system consumes `pendingEnv`.
+export interface TownshipState {
+  /** Roof id the keeper is docked on, or null (aboard / on a natural islet). */
+  onRoof: number | null;
+  /** Env-point id currently within its read radius, or null. */
+  nearEnv: number | null;
+  /** env-point id → read at least once this run (plan §4.3 "persists per-run"). */
+  read: Record<number, boolean>;
+  /** One env line waiting for the ui overlay; the overlay clears it. */
+  pendingEnv: PendingEnvText | null;
+}
+
+export interface PendingEnvText {
+  envId: number;
+  key: string;
+  text: string;
+}
+
+export function createTownshipState(): TownshipState {
+  return { onRoof: null, nearEnv: null, read: {}, pendingEnv: null };
+}
+
 export interface PendingBark {
   text: string;
   residentId: string;
@@ -402,6 +429,7 @@ export interface WorldState {
   clock: NightClock; // 03 — the Night Clock (epoch + phase length)
   run: RunState; // 03 — the run reducer state (haul / cast / result)
   town: TownState; // 05 — the lighthouse-door restoration verb (M5 hub)
+  township: TownshipState; // 05 §2.2 — the drowned Hollow: roof state + env text
   consumables: RunConsumables; // 05 §1.7 — the run's Bottled Light charges
   disturbances: Disturbance[]; // 03 — live disturbance ripples (cast targets)
   // Gate-driver camera override (plan 06 composed shots): when set, the render
@@ -485,6 +513,7 @@ export function createWorld(seed = 1): WorldState {
     clock: createClock(0),
     run: createRunState(0, 0),
     town: { near: false, held: 0, open: false, barks: { fired: {}, visits: {} }, pendingBark: null },
+    township: createTownshipState(),
     consumables: { bottledLight: 0 },
     disturbances: [],
   };

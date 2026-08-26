@@ -545,7 +545,9 @@ function computeRockSpawns(lake: LakeMap): void {
   rockSpawns.length = 0;
   rocksAdded = false;
   for (const iso of lake.islets) {
-    if (iso.kind === 'rock') continue; // pure obstacles stay bare
+    // pure obstacles stay bare — and a ROOF is not rock: M7's drowned buildings
+    // (kind 'roof') get no shoreline crags scattered over their slates.
+    if (iso.kind !== 'walkable') continue;
     // start islet + every 3rd walkable islet keeps the tri budget well under 450k
     if (iso.id !== 0 && iso.id % 3 !== 0) continue;
     const count = iso.id === 0 ? 3 : 1; // the start islet gets a small crag cluster
@@ -689,6 +691,10 @@ function rebuild(lake: LakeMap): void {
   computeTimberSpawns(lake);
 
   for (const iso of lake.islets) {
+    // M7 (plan 05 §2.2): a roof islet is a walkable polygon whose LOOK is a
+    // submerged town building, not slate — render/township.ts draws it. Skipping
+    // it here is the whole visual half of the roof-as-islet mapping.
+    if (iso.kind === 'roof') continue;
     lakeGroup.add(buildIsletMesh(iso));
   }
   for (const wreck of lake.wrecks) lakeGroup.add(buildWreck(wreck));

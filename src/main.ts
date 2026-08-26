@@ -29,15 +29,22 @@ import { decant, decantsRemaining, useBottledLight } from './meta/bottledLight';
 import { applyHubMeta } from './render/hubAtmosphere';
 import { hubBeamState, setBeamAngle } from './render/sky';
 import { kelpRenderState } from './render/kelp';
+import { townshipRenderState } from './render/township';
+import { roofForIslet } from './gen/township';
+import { envTextOnScreen } from './ui/envTextOverlay';
+import { envReadCount } from './systems/envText';
+import { createDisturbance } from './run/disturbance';
 import { congregationRenderState } from './render/congregation';
 import { hookCongregation } from './systems/castFlow';
 import { seedCongregation } from './spawn/director';
 import { massFraction, pullForceMultFor, attachedCount, gaffTearFor } from './bosses/congregation';
 import { HEAVY_STAGGER } from './game/combat';
 import { siltRenderState } from './render/silt';
-import { zoneFogMultiplier } from './core/zones';
+import { zoneFogMultiplier, zoneFogTint } from './core/zones';
 import { setShoreRestoration, shoreWarmth } from './render/water';
 import { townBuildingCount, townInstanceCount, townModelCount } from './render/town';
+import { groundYAt } from './render/lake';
+import { distanceToHull } from './core/poly';
 import { PHASE_LENGTH_S } from './game/clock';
 import * as THREE from 'three';
 
@@ -441,6 +448,103 @@ if (/[?&]debug/.test(search)) {
     f.x = at.x + 0.9;
     f.z = at.z;
     return { L: fight.L, eligible: fight.land.eligible };
+  };
+
+  // t27 / M7 TOWNSHIP seams (tools/m7-probe.mjs): read what the drowned Hollow
+  // is worth right now, row the boat down the drowned street, park it at a
+  // roof's edge so a REAL B tap docks onto the slates, and drop a ripple in the
+  // street beside the roof so the ordinary foot cast flow has something to cast
+  // at from up there.
+  (window as unknown as { __township: () => unknown }).__township = () => {
+    const lake = world.lake;
+    const roofs = lake ? lake.roofs : [];
+    const roof = lake ? roofForIslet(roofs, world.dockedIslet) : null;
+    return {
+      zone: world.run.zone,
+      roofs: roofs.length,
+      steeples: roofs.filter((r) => r.slot === 'steeple').length,
+      marquees: roofs.filter((r) => r.slot === 'marquee').length,
+      lamps: lake ? lake.lamps.length : 0,
+      envPoints: lake ? lake.envPoints.length : 0,
+      islets: lake ? lake.islets.length : 0,
+      roofIslets: lake ? lake.islets.filter((i) => i.kind === 'roof').length : 0,
+      street: lake?.street ?? null,
+      render: townshipRenderState(),
+      fogTint: zoneFogTint(world.run.zone),
+      mode: world.mode,
+      dockedIslet: world.dockedIslet,
+      onRoof: world.township.onRoof,
+      standingOn: roof ? { id: roof.id, slot: roof.slot, building: roof.building } : null,
+      nearEnv: world.township.nearEnv,
+      envRead: envReadCount(world),
+      env: envTextOnScreen(),
+      player: { x: world.player.x, z: world.player.z },
+      boat: { x: world.boat.x, z: world.boat.z },
+      groundY: world.dockedIslet != null ? groundYAt(world, world.player.x, world.player.z) : null,
+    };
+  };
+  // Park the hull at the head of the drowned street, bow down the road, so a
+  // chase-height camera frames the flooded main street the way play does.
+  (window as unknown as { __toStreet: (t?: number) => unknown }).__toStreet = (t = 0.12) => {
+    const lake = world.lake;
+    if (!lake || !lake.street) return null;
+    const st = lake.street;
+    const along = st.length * Math.max(0, Math.min(1, t));
+    world.boat.x = st.origin.x + st.dir.x * along;
+    world.boat.z = st.origin.z + st.dir.z * along;
+    world.boat.speed = 0;
+    world.boat.heading = Math.atan2(st.dir.z, st.dir.x);
+    const marquee = lake.envPoints.find((p) => p.key === 'marquee') ?? null;
+    return { at: { x: world.boat.x, z: world.boat.z }, heading: world.boat.heading, street: st, marquee };
+  };
+  // Bring the hull to a roof's edge — inside DOCK_RANGE of its hull, so the
+  // real B verb (game/input.ts) is what actually docks.
+  (window as unknown as { __toRoof: (i?: number) => unknown }).__toRoof = (i = 0) => {
+    const lake = world.lake;
+    const roof = lake?.roofs[i];
+    if (!lake || !roof) return null;
+    const iso = lake.islets[roof.isletId];
+    if (!iso) return null;
+    // straight out from the roof centre through its first vertex, one metre
+    // past the rim: close enough to dock, outside the polygon the hull slides on
+    const v = iso.poly[0]!;
+    const out = Math.hypot(v.x - roof.pos.x, v.z - roof.pos.z) || 1;
+    world.boat.x = roof.pos.x + ((v.x - roof.pos.x) / out) * (out + 1.05);
+    world.boat.z = roof.pos.z + ((v.z - roof.pos.z) / out) * (out + 1.05);
+    world.boat.speed = 0;
+    world.boat.heading = Math.atan2(roof.pos.z - world.boat.z, roof.pos.x - world.boat.x);
+    return {
+      roof: { id: roof.id, slot: roof.slot, building: roof.building, isletId: roof.isletId },
+      boat: { x: world.boat.x, z: world.boat.z },
+      edgeGap: distanceToHull({ x: world.boat.x, z: world.boat.z }, iso.hull),
+    };
+  };
+  // A ripple in the street beside the roof the keeper is standing on, inside
+  // CAST_RANGE — the ordinary director never anchors on a roof, so this is how
+  // the gate gives the foot cast flow a target from the slates.
+  (window as unknown as { __roofRipple: () => unknown }).__roofRipple = () => {
+    const lake = world.lake;
+    if (!lake || !lake.street) return null;
+    const roof = roofForIslet(lake.roofs, world.dockedIslet);
+    if (!roof) return null;
+    const st = lake.street;
+    // Out into the channel, measured from the KEEPER (who may be anywhere on the
+    // deck after walking it) rather than from the roof centre — so the ripple is
+    // always past the road-side eaves AND always inside CAST_RANGE of them.
+    const dx = -st.perp.x * roof.side;
+    const dz = -st.perp.z * roof.side;
+    const rel = (world.player.x - roof.pos.x) * dx + (world.player.z - roof.pos.z) * dz;
+    const toEdge = roof.halfZ + rel; // 0 at the road-side eaves, 2·halfZ at the back
+    const off = Math.min(9, Math.max(4, toEdge + 3.5));
+    const pos = { x: world.player.x + dx * off, z: world.player.z + dz * off };
+    const d = createDisturbance(world.run.nextDisturbanceId++, pos, 2, 12345);
+    world.disturbances.push(d);
+    world.run.debugCastPoint = { x: pos.x, z: pos.z };
+    return {
+      id: d.id,
+      pos,
+      fromPlayer: Math.hypot(world.player.x - pos.x, world.player.z - pos.z),
+    };
   };
 
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =

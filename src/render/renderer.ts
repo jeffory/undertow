@@ -16,6 +16,7 @@ import { initKelp, updateKelp } from './kelp';
 import { initSilt, updateSilt } from './silt';
 import { initCongregation, updateCongregation } from './congregation';
 import { initTown, updateTown } from './town';
+import { initTownship, updateTownship } from './township';
 import { initRipples, updateRipples } from './ripples';
 import { initSplash, updateSplash } from './splash';
 import { updatePick } from './pick';
@@ -79,6 +80,7 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initSilt(scene);
   initCongregation(scene);
   initTown(scene);
+  initTownship(scene);
   initRipples(scene);
   initSplash(scene);
   initPlayer(scene);
@@ -118,6 +120,7 @@ export function render(world: WorldState, dt: number): void {
   updateSilt(world, dt); // M6: the Kelp Graves' drifting silt (one Points layer)
   updateCongregation(world, dt); // M6: the boss swarm (one InstancedMesh, one draw)
   updateTown(world, dt);
+  updateTownship(world, dt); // M7: the drowned Hollow (decks instanced, buildings on demand)
   updateRipples(world, dt);
   updateSplash(world, dt);
   updatePlayer(world, dt);

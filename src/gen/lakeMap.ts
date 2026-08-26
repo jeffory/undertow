@@ -21,6 +21,8 @@ import { prunedPathGraph } from './delaunay';
 import type { Edge } from './delaunay';
 import { computeKelpColumns } from './kelp';
 import type { KelpColumn } from './kelp';
+import { computeTownship, computeTownshipIslets, emptyTownship } from './township';
+import type { EnvPoint, Roof, Street, Streetlamp } from './township';
 
 // --- tuning (plan §2.2-2.5, tuned for a ~200x200 lake) ------------------------
 
@@ -62,7 +64,11 @@ const BOTTLE_NOTES = [
 
 // --- shapes (plan §2.5) ---------------------------------------------------------
 
-export type IsletKind = 'walkable' | 'rock';
+// 'roof' is M7's drowned-town addition (plan 05 §2.2): a rooftop breaking the
+// zone-3 flood IS an islet — same walkable polygon, same hull collision, same
+// docking verb — it just renders as a submerged building instead of slate.
+// See gen/township.ts for the whole roof-as-islet mapping.
+export type IsletKind = 'walkable' | 'rock' | 'roof';
 
 export interface IsletFeature {
   kind: string;
@@ -79,6 +85,10 @@ export interface Islet {
   zone: number;
   features: IsletFeature[]; // rock/reeds clusters — M4 renders
   hasSinkhole: boolean;
+  // M7: a `kind: 'roof'` islet's FLAT deck height (m above GROUND_Y). Absent on
+  // every natural islet, which keeps zone-1/2 maps byte-identical; isletHeight
+  // .ts returns it verbatim instead of running the rock dome.
+  deckRise?: number;
 }
 
 export type WreckKind = 'hull' | 'jetty' | 'steamer';
@@ -145,6 +155,15 @@ export interface LakeMap {
   // copy of the layout stream after every other placement, so adding them left
   // the whole existing map byte-identical; empty outside zone 2.
   kelp: KelpColumn[];
+  // M7 (plan 05 §2.2): the Township's drowned Hollow. Grown from its OWN salted
+  // copy of the layout stream after the kelp field, so adding it left every
+  // existing map byte-identical; all empty outside zone 3. The roofs' walkable
+  // polygons are APPENDED to `islets` as `kind: 'roof'` records — see
+  // gen/township.ts for the mapping.
+  street: Street | null;
+  roofs: Roof[];
+  lamps: Streetlamp[];
+  envPoints: EnvPoint[];
   disturbanceSpawns: DisturbanceSpawn[]; // empty for round 1; the director refills
 }
 
@@ -431,6 +450,22 @@ function buildLake(runSeed: number, zone: number): LakeMap {
     spawn,
   );
 
+  // --- step 6: the Township's drowned street (plan 05 §2.2) ---------------------
+  // Its own salted stream, drawn LAST, and only in zone 3. The roof islets are
+  // appended to `islets` here — after every natural-islet index has been used
+  // by the graph, the sinkholes and the placements above, so none of them can
+  // shift and `startIslet`/graph indices stay exactly what they were.
+  const township =
+    zone === 3
+      ? computeTownship(
+          { seed: runSeed, zone, bounds, islets, graph: { edges }, sinkholes, buoys, wrecks },
+          spawn,
+        )
+      : emptyTownship();
+  for (const roofIso of computeTownshipIslets(township, islets.length, zone)) {
+    islets.push(roofIso);
+  }
+
   return {
     seed: runSeed,
     zone,
@@ -444,6 +479,10 @@ function buildLake(runSeed: number, zone: number): LakeMap {
     microEvent,
     buoys,
     kelp,
+    street: township.street,
+    roofs: township.roofs,
+    lamps: township.lamps,
+    envPoints: township.envPoints,
     disturbanceSpawns: [],
   };
 }

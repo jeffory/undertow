@@ -75,3 +75,27 @@ export const ZONE_FOG_MULT: Record<number, number> = {
 export function zoneFogMultiplier(zone: number): number {
   return ZONE_FOG_MULT[clampZone(zone)] ?? 1;
 }
+
+// --- zone fog TINT (plan 05 §2.2) ---------------------------------------------
+// M7's Township "adds sodium-lamp amber" (spec §8.1). The zone nudges the fog
+// HUE a little warmer — it does NOT fight the Night Clock's phase lerp, which
+// still owns the colour: sky.ts lerps the phase-drifted fog colour this far
+// toward the zone tint and no further. Zone 1/2 strength is exactly 0, so
+// `fog.color.copy(curFog)` is byte-identical to pre-M7 there; zones 4-5 are 0
+// until their own milestone dials them.
+export interface ZoneFogTint {
+  color: number; // hex — the hue the zone pulls the fog toward
+  strength: number; // 0..1 — how far. Small: this is a seasoning, not a repaint.
+}
+
+export const ZONE_FOG_TINT: Record<number, ZoneFogTint> = {
+  1: { color: 0x000000, strength: 0 },
+  2: { color: 0x000000, strength: 0 },
+  3: { color: 0xffa24e, strength: 0.1 },
+  4: { color: 0x000000, strength: 0 },
+  5: { color: 0x000000, strength: 0 },
+};
+
+export function zoneFogTint(zone: number): ZoneFogTint {
+  return ZONE_FOG_TINT[clampZone(zone)] ?? { color: 0x000000, strength: 0 };
+}

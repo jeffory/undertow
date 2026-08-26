@@ -31,12 +31,14 @@ import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
 import { updateBottledLight } from '../systems/bottledLight';
 import { updateBarks } from '../systems/barks';
+import { updateEnvText } from '../systems/envText';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
 import { updateFightTutorial } from '../ui/fightTutorial';
 import { updateVerbHints } from '../ui/verbHints';
 import { updateRestorationUI } from '../ui/restorationUI';
 import { updateBarkOverlay } from '../ui/barkOverlay';
+import { updateEnvTextOverlay } from '../ui/envTextOverlay';
 import { updateCongregationInvoice } from '../ui/congregationInvoice';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
@@ -206,6 +208,7 @@ function ui(world: WorldState, _dt: number): void {
   updateVerbHints(world);
   updateRestorationUI(world);
   updateBarkOverlay(world);
+  updateEnvTextOverlay(world); // 05 §4.3 — the drowned town's signage
   updateCongregationInvoice(world); // 05 §2.1 — the Congregation's ledger
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
@@ -339,6 +342,7 @@ export const UPDATE_ORDER: SystemFn[] = [
   updateTownDoor, // 05 §1.1: the lighthouse-door hold that opens the restoration ledger
   updateBottledLight, // 05 §1.7: L pops a Bottled Light — tension reset + full stamina
   updateBarks, // 05 §1.5: restored residents' doorstep barks (proximity + cooldown)
+  updateEnvText, // 05 §2.2/§4.3: the Township's approach-to-read signage (zone-3 only)
   animation,
   updateRunTerminal, // 03 §7: extraction / death / run summary — a SIM system (timers scale)
   renderSystem,
