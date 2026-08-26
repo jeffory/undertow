@@ -286,14 +286,20 @@ function updateRig(
   const hookY = hookBase + HOOK_Y - (diving ? DIVE_DROP : 0);
   P2.set(fish ? fish.x : p.x, hookY, fish ? fish.z : p.z);
 
-  // Control point: midpoint + sideways sag (catenary in top-down) with a touch
-  // of vertical droop to sell it in the low camera.
+  // Control point: the slack line droops DOWN (gravity), not sideways. The old
+  // control point was midpoint + a chord-perpendicular offset — chordPerp
+  // always picks the same rotational side of the chord, so the bulge bowed the
+  // same way in every fight (USER report: "it always curves a specific
+  // direction"). That read was tuned for the old top-down camera; at the low
+  // chase camera a vertical catenary droop is both physical and readable.
+  // PERP stays computed for the thrash jitter below.
   CHORD.subVectors(P2, P0);
   MID.addVectors(P0, P2).multiplyScalar(0.5);
   const sag = lineSag(fight.tension, ceiling);
   chordPerp(CHORD, PERP);
-  CTRL.copy(MID).addScaledVector(PERP, sag);
-  CTRL.y -= sag * 0.25;
+  CTRL.copy(MID);
+  CTRL.y -= sag;
+  if (CTRL.y < 0.08) CTRL.y = 0.08; // the belly never dips under the water
 
   // Thrash — small perpendicular jitter on the control point while a drag is
   // fresh; sells the yank.
