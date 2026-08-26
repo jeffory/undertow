@@ -26,7 +26,7 @@ const HULL_WIDEST = 1.7; // max beam (x)
 // scale to match HULL_LEN. Kinematics / bob / wake / lantern mount all keep
 // riding on the boat group, untouched.
 const ROWBOAT_LENGTH = 3.698;
-const ROWBOAT_SCALE = HULL_LEN / ROWBOAT_LENGTH;
+export const ROWBOAT_SCALE = HULL_LEN / ROWBOAT_LENGTH;
 const ROWBOAT_YAW = Math.PI / 2;
 
 let boat: THREE.Group | null = null;

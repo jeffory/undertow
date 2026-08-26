@@ -12,6 +12,7 @@ import type { WorldState } from '../core/world';
 import { GROUND_Y } from './ground';
 import { groundYAt } from './lake';
 import { getAsset, getAssetClips, hasAsset } from './assets';
+import { ROWBOAT_SCALE } from '../game/boat';
 
 const DODGE_DURATION = 0.25; // seconds; matches the 0.25s i-frame roll window
 
@@ -240,11 +241,17 @@ export function updatePlayer(world: WorldState, dt: number): void {
     const oz = -0.25; // a step aft of centre, clear of the bench
     root.position.x = b.x + Math.sin(b.heading) * oz + Math.cos(b.heading) * ox;
     root.position.z = b.z + Math.cos(b.heading) * oz - Math.sin(b.heading) * ox;
-    root.position.y = b.y + 0.32;
+    // The hull model renders at ROWBOAT_SCALE (~0.865) of its native size, so
+    // a full-size keeper read ~15% oversized aboard (USER report) — match the
+    // hull's scale (this restores the review-sheet proportions exactly), and
+    // scale the deck offset with it.
+    root.scale.setScalar(ROWBOAT_SCALE);
+    root.position.y = b.y + 0.32 * ROWBOAT_SCALE;
     root.rotation.y = b.heading;
     root.rotation.z = 0;
     return;
   }
+  root.scale.setScalar(1);
 
   const p = world.player;
   root.position.x = p.x;
