@@ -21,6 +21,7 @@
 import type { WorldState } from '../core/world';
 import type { RigLoadout, SaveGame } from '../save/schemas';
 import { rodDef, lineDef, type RodDef } from '../content/rigCatalog';
+import { bottledLightCharges } from './bottledLight';
 
 export type RigGateContext = {
   licenseGrade: number; // save.license.grade (1..7)
@@ -100,14 +101,17 @@ export function sanitizeRigLoadout(save: SaveGame): {
 
 // Feed the loadout's gear onto a FRESH world's existing slots. Trinkets are
 // NOT touched here — applyRunStartPassives already applies them from the same
-// rigLoadout.trinketIds (the two share one source). Rods and consumables have
-// no wired effect yet and are deliberately silent (persisted, gated only).
+// rigLoadout.trinketIds (the two share one source). Rods have no wired effect
+// yet and are deliberately silent (persisted, gated only); of the consumables,
+// only Bottled Light has a verb (05 §1.7) — its packed bottles become the run's
+// charge pool here, and bait/food stay inert.
 export function applyRigGear(world: WorldState, save: SaveGame): void {
   const kept = sanitizeRigLoadout(save);
   const line = kept.lineId ? lineDef(kept.lineId) : null;
   if (line) world.line.id = line.id;
   const lure = kept.lureIds[0];
   if (lure) world.lure.id = lure;
+  world.consumables.bottledLight = bottledLightCharges(kept.consumables);
 }
 
 // Reconcile a stale loadout back into the save (drop gated-out ids). Returns

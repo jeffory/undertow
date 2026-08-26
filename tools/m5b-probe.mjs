@@ -3,7 +3,8 @@
 // on foot:
 //   boot foot mode → assert the v4 save carries an EMPTY rigLoadout → drop
 //   sundries into the box (line/lure/trinket/consumable) → open the door →
-//   assert the two-button register (RESTORATION / RIG-UP) → switch to RIG-UP →
+//   assert the register's door nav (RESTORATION / RIG-UP / DECANT) → switch to
+//   RIG-UP →
 //   assert the FORM 6-R copy + rod gating (Dredger/Longliner RESTRICTED) →
 //   equip a line + trinket → SIGN & ROW OUT → assert the loadout persisted →
 //   RELOAD → assert the equipped trinket applied at run start (+15 HP) →
@@ -130,15 +131,18 @@ const nav = await page.evaluate(() => {
   const el = document.querySelector('#restoration .door-nav');
   return el ? [...el.querySelectorAll('button')].map((b) => b.textContent) : null;
 });
+// t21 added the decant station as the third door — the rig-up must still be
+// the second button.
 assert(
-  nav && nav.length === 2 && /RESTORATION/.test(nav[0]) && /RIG-UP/.test(nav[1]),
-  `the door is a two-button register (${nav?.join(' | ')})`,
+  nav && nav.length === 3 && /RESTORATION/.test(nav[0]) && /RIG-UP/.test(nav[1]) && /DECANT/.test(nav[2]),
+  `the door is a three-button register (${nav?.join(' | ')})`,
 );
 
 // --- RIG-UP REGISTER -------------------------------------------------------------
 console.log('=== RIG-UP ===');
 await page.evaluate(() => {
-  document.querySelector('#restoration .door-nav button:last-child')?.click();
+  // the rig-up is the SECOND button (t21 appended the decant station third)
+  document.querySelector('#restoration .door-nav button:nth-child(2)')?.click();
 });
 await sleep(200);
 

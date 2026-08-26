@@ -11,6 +11,7 @@
 // Pure data: no `three`, no DOM.
 
 import type { BuildingRestoredEvent } from './restoration';
+import type { BottledLightDecantedEvent, BottledLightUsedEvent } from './bottledLight';
 import type { PendingBark } from '../core/world';
 
 export interface BarkShownEvent {
@@ -22,7 +23,11 @@ export interface BarkShownEvent {
   visitCount: number;
 }
 
-export type TownEvent = BuildingRestoredEvent | BarkShownEvent;
+export type TownEvent =
+  | BuildingRestoredEvent
+  | BarkShownEvent
+  | BottledLightDecantedEvent // 05 §1.7 / §0.2 (task t21)
+  | BottledLightUsedEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];

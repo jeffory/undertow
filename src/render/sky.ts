@@ -24,6 +24,7 @@ import {
   beamSweepHzForPhase,
 } from '../game/clock';
 import type { ClockPhase } from '../game/clock';
+import { hubLightCurve } from '../meta/bottledLight';
 
 // Palette (spec 8.1 / plan 01 §3.2): dark teal over near-black water base.
 const SKY_TOP = 0x080e12; // deep near-black with a hint of teal
@@ -41,6 +42,9 @@ const BEAM_OPACITY = 0.07;
 const BEAM_RADIUS = 9;
 const BEAM_LENGTH = 130;
 const BEAM_MIN_LANTERN_Y = 2.5; // lighthouse lantern sits at world y≈3.3; boat/keeper lamps are ≤1.7
+// The cold end of the beam's colour ramp (plan 05 §1.1 "colour cools"): a pale
+// blue-white with no sodium left in it. Nine decants lerp 80% of the way here.
+const BEAM_COOL_COLOR = 0xb6cfe4;
 
 let fog: THREE.FogExp2 | null = null;
 let moon: THREE.DirectionalLight | null = null;
@@ -55,6 +59,78 @@ let fogDensityScale = 1;
 
 export function setFogDensityScale(mult: number): void {
   fogDensityScale = mult;
+}
+
+// --- the hub light's decant seam (plan 05 §1.1 / §1.7, task t21) ---------------
+// "The hub light: a beam + point light on the lighthouse, `intensity`, `color`,
+// and `sweepFrequency` all driven by `1 − f(totalDecants)`. … bottling visibly
+// slows and dims it, permanently, across all future runs."
+//
+// The curve itself is meta/bottledLight.ts (pure, testable without three); this
+// is only the seam — the same shape as setFogDensityScale above, called at boot
+// from the save's `metaState.decants` and again the moment a bottle is poured.
+// The lantern-room PointLight is dimmed and cooled from the SAME curve, off the
+// base values captured when the beam first finds it (the lake rebuild re-makes
+// the light, so the base is re-captured with it).
+let hubDecants = 0;
+const beamWarmColor = new THREE.Color(BEAM_COLOR);
+const beamColdColor = new THREE.Color(BEAM_COOL_COLOR);
+const beamTint = new THREE.Color();
+let lanternBaseIntensity = 0;
+const lanternBaseColor = new THREE.Color();
+
+export function setHubDecants(decants: number): void {
+  hubDecants = Math.max(0, Math.floor(decants));
+  applyHubLight();
+}
+
+// What the beam is worth right now — the probe/gate readout (and the seam's own
+// self-check: these are the numbers a screenshot is showing).
+export function hubBeamState(): {
+  decants: number;
+  intensityScale: number;
+  sweepScale: number;
+  coolness: number;
+  opacity: number;
+  color: number;
+  lanternIntensity: number;
+} {
+  const curve = hubLightCurve(hubDecants);
+  beamTint.copy(beamWarmColor).lerp(beamColdColor, curve.coolness);
+  return {
+    decants: hubDecants,
+    intensityScale: curve.intensityScale,
+    sweepScale: curve.sweepScale,
+    coolness: curve.coolness,
+    opacity: BEAM_OPACITY * curve.intensityScale,
+    color: beamTint.getHex(),
+    lanternIntensity: lanternBaseIntensity * curve.intensityScale,
+  };
+}
+
+// GATE SEAM ONLY (tools/m5c-probe.mjs): pin the sweep so a before/after pair of
+// beam screenshots is the same framing at the same angle. Nothing in the game
+// calls this — the sweep is otherwise driven entirely by the clock phase and
+// the decant curve.
+export function setBeamAngle(radians: number): void {
+  beamAngle = radians;
+}
+
+function applyHubLight(): void {
+  const curve = hubLightCurve(hubDecants);
+  beamTint.copy(beamWarmColor).lerp(beamColdColor, curve.coolness);
+  if (beamMesh) {
+    const mat = beamMesh.material as THREE.MeshBasicMaterial;
+    mat.opacity = BEAM_OPACITY * curve.intensityScale;
+    mat.color.copy(beamTint);
+  }
+  // The lantern room itself (plan §1.1 "a beam + point light on the
+  // lighthouse"): same curve, off the captured base.
+  const lamp = beamTarget as THREE.PointLight | null;
+  if (lamp && lamp.isPointLight) {
+    lamp.intensity = lanternBaseIntensity * curve.intensityScale;
+    lamp.color.copy(lanternBaseColor).lerp(beamColdColor, curve.coolness);
+  }
 }
 
 // Night Clock phase lerp state (03 §5.2): the sky/fog palette drifts toward the
@@ -165,12 +241,22 @@ function updateBeam(scene: THREE.Scene, phase: ClockPhase, dt: number): void {
   if (!beamTarget) {
     beamTarget = findBeamTarget(scene);
     if (!beamTarget) return;
+    // Capture the lantern room's untouched values before any dimming — the
+    // lake rebuild mints a fresh PointLight, so this re-captures with it.
+    const lamp = beamTarget as THREE.PointLight;
+    if (lamp.isPointLight) {
+      lanternBaseIntensity = lamp.intensity;
+      lanternBaseColor.copy(lamp.color);
+    }
     ensureBeam(scene);
+    applyHubLight(); // a re-found beam re-reads the decants already poured
   }
   if (!beamMesh) return;
 
-  // Sweep at the phase's beam rate (dusk slow → false-dawn fast).
-  beamAngle += beamSweepHzForPhase(phase) * Math.PI * 2 * dt;
+  // Sweep at the phase's beam rate (dusk slow → false-dawn fast), SLOWED by
+  // every decant (plan §1.1: sweepFrequency is on the same 1 − f curve — the
+  // meta-clock visibly winds down as the light is bottled).
+  beamAngle += beamSweepHzForPhase(phase) * hubLightCurve(hubDecants).sweepScale * Math.PI * 2 * dt;
 
   const origin = beamTarget.getWorldPosition(tmpPos);
   beamDir.set(Math.cos(beamAngle), -0.06, Math.sin(beamAngle)).normalize();

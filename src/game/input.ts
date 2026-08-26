@@ -53,6 +53,7 @@ const KEY_CODE = new Map<string, string>([
   ['KeyE', 'land'], // M2 T6: accept the LAND prompt (clean catch)
   ['KeyB', 'mode'], // M1 scaffold: toggle world.mode (boat <-> foot)
   ['KeyT', 'tether'], // M2 scaffold: start a tether fight (foot mode)
+  ['KeyL', 'bottledLight'], // M5 §1.7: pop a Bottled Light (tension reset)
   ['Digit1', 'lure1'],
   ['Digit2', 'lure2'],
   ['Digit3', 'lure3'],
@@ -160,6 +161,11 @@ export function updateInput(world: WorldState): void {
   intent.lure1 = consumeTap('Digit1');
   intent.lure2 = consumeTap('Digit2');
   intent.lure3 = consumeTap('Digit3');
+
+  // BOTTLED LIGHT is a tap (L): one bottle, one press — the consumable system
+  // (systems/bottledLight.ts) consumes the flag and refuses when the run pool
+  // is empty. Deliberately NOT a hold: the verb is a panic button.
+  intent.bottledLight = consumeTap('KeyL');
 
   // LAND is a contextual prompt press (E) — a tap, not a hold (plan 02 §5.5).
   intent.acceptLand = consumeTap('KeyE');

@@ -402,6 +402,49 @@ export function rigUpSlot(slotId: string): RigUpSlotCopy | null {
   return RIG_UP_ROWS.find((row) => row.slotId === slotId) ?? null;
 }
 
+// --- the decant station (plan 05 §1.7, task t21) --------------------------------
+// The lighthouse door's THIRD register. town.md has no §-copy for the decant
+// station yet, so these rows are AUTHORED in the Office's voice (voice.md:
+// municipal, aggrieved, never explains itself) and carried in the same
+// RigUpSlotCopy shape as the rig-up labels, through the same seam — a later
+// copy pass is a data swap, not a code change. The form reference quotes the
+// bottle note the pour triggers (bottle-notes.md note-09: "RE: LIGHTHOUSE
+// EMISSIONS — Unauthorized Siphoning of Illumination").
+const DECANT_ROWS: RigUpSlotCopy[] = [
+  {
+    slotId: 'decant_header',
+    formRef: 'FORM 9-L: APPLICATION TO DRAW UPON THE LIGHT',
+    label: 'DECANTING OF MUNICIPAL ILLUMINATION',
+    flavorText:
+      'The Office reminds you that the light is not yours to bottle. The light is the town\'s. The town is the Office\'s.',
+  },
+  {
+    slotId: 'decant_action',
+    formRef: 'SCHEDULE L: PERMITTED DRAWS',
+    label: 'DRAW ONE PHIAL',
+    flavorText:
+      'Nine (9) draws are provided for the lifetime of the appointment. No further allocation will be made, and no draw is returnable.',
+  },
+  {
+    slotId: 'decant_exhausted',
+    formRef: 'SCHEDULE L: ALLOCATION CLOSED',
+    label: 'NO FURTHER DRAWS',
+    flavorText: 'The allocation is spent. The lamp keeps what is left of itself.',
+  },
+  {
+    slotId: 'decant_toll',
+    formRef: 'APPENDIX L-1: EFFECT ON THE APPARATUS',
+    label: 'THE LAMP DIMS',
+    flavorText: 'Nobody comments. The light comments, by dimming.',
+  },
+];
+
+export const DECANT_COPY: readonly RigUpSlotCopy[] = DECANT_ROWS;
+
+export function decantCopy(slotId: string): RigUpSlotCopy | null {
+  return DECANT_ROWS.find((row) => row.slotId === slotId) ?? null;
+}
+
 // --- restricted-tackle notices (town.md §5, task t19) ---------------------------
 // Two distinct RESTRICTED. NICE TRY. variants: one for license-grade shortfalls,
 // one for workshops not yet on the dry register.

@@ -15,6 +15,7 @@ export interface Intent {
   lure1: boolean;
   lure2: boolean;
   lure3: boolean;
+  bottledLight: boolean; // L tap — pop a Bottled Light (05 §1.7, tension reset)
   aimX: number; // world-space aim direction x (reserved)
   aimY: number;
 }
@@ -33,6 +34,7 @@ export function createIntent(): Intent {
     lure1: false,
     lure2: false,
     lure3: false,
+    bottledLight: false,
     aimX: 0,
     aimY: 1,
   };

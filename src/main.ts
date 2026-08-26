@@ -25,6 +25,10 @@ import { BUILDINGS } from './content/buildings';
 import { restore, restoredIds, startingDreadFor } from './meta/restoration';
 import { unlockContextFor } from './meta/runMeta';
 import { emitTownEvent, peekTownEvents } from './meta/townEvents';
+import { decant, decantsRemaining, useBottledLight } from './meta/bottledLight';
+import { applyHubMeta } from './render/hubAtmosphere';
+import { hubBeamState, setBeamAngle } from './render/sky';
+import { setShoreRestoration, shoreWarmth } from './render/water';
 import { townBuildingCount, townInstanceCount, townModelCount } from './render/town';
 import { PHASE_LENGTH_S } from './game/clock';
 import * as THREE from 'three';
@@ -57,7 +61,13 @@ initRun(world);
 // Load the save on boot (task t12 #5): IndexedDB row → zod-validated SaveGame.
 // Once it's in hand, apply the run-start passives (license + equipped trinkets)
 // to the fresh boot world.
-void initSaveSystem().then(() => applyRunStartPassives(world));
+// 05 §1.1/§1.7: the hub light and the shore water are read off the town's own
+// memory at boot — every decant already poured is still dimming the beam, and
+// every building already standing is still staining the water.
+void initSaveSystem().then((save) => {
+  applyRunStartPassives(world);
+  applyHubMeta(save.metaState);
+});
 
 // ?timescale=N gate-driver hook (debug only): run N fixed steps per rAF frame
 // so automated gates play faster than real time. FIXED_DT is untouched, so all
@@ -163,7 +173,8 @@ if (/[?&]debug/.test(search)) {
   (window as unknown as { __openRigUp: () => void }).__openRigUp = () => {
     world.town.open = true;
     requestAnimationFrame(() => {
-      document.querySelector('#restoration .door-nav button:last-child')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      // the rig-up is the SECOND door-nav button (t21 appended DECANT third)
+      document.querySelector('#restoration .door-nav button:nth-child(2)')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
   };
   (window as unknown as { __toBuilding: (id: string) => unknown }).__toBuilding = (id: string) => {
@@ -217,8 +228,59 @@ if (/[?&]debug/.test(search)) {
     if (!out.ok) return { ok: false, reason: out.reason };
     if (out.event) emitTownEvent(out.event);
     void updateSave((s) => ({ ...s, metaState: out.meta }));
+    // the ledger's own pay path pushes the same seam (05 §1.1: the shore water
+    // reddens with the restored count) — the gate seam must not skip it
+    applyHubMeta(out.meta);
     return { ok: true, event: out.event };
   };
+  // t21 seams (tools/m5c-probe.mjs): pour a decant headlessly (the same path
+  // the FORM 9-L button takes), pop a Bottled Light mid-fight, and read what
+  // the beam / the shore water are worth right now.
+  (window as unknown as { __decant: () => unknown }).__decant = () => {
+    const save = getSave();
+    if (!save) return { ok: false, reason: 'no-save' };
+    const out = decant(save.metaState);
+    if (!out.ok || !out.item) return { ok: false, reason: out.reason };
+    if (out.event) emitTownEvent(out.event);
+    const item = out.item;
+    void updateSave((s) => ({
+      ...s,
+      metaState: out.meta,
+      box: [...s.box, item],
+      rigLoadout: {
+        ...s.rigLoadout,
+        consumables: s.rigLoadout.consumables.includes(item.id)
+          ? s.rigLoadout.consumables
+          : [...s.rigLoadout.consumables, item.id],
+      },
+    }));
+    applyHubMeta(out.meta);
+    return { ok: true, event: out.event, item, remaining: decantsRemaining(out.meta) };
+  };
+  (window as unknown as { __grantLight: (n: number) => number }).__grantLight = (n: number) => {
+    world.consumables.bottledLight = Math.max(0, Math.floor(n));
+    return world.consumables.bottledLight;
+  };
+  (window as unknown as { __useLight: () => unknown }).__useLight = () => {
+    const ev = useBottledLight(world);
+    if (ev) emitTownEvent(ev);
+    return ev;
+  };
+  (window as unknown as { __beamAngle: (a: number) => void }).__beamAngle = (a: number) => {
+    setBeamAngle(a);
+  };
+  // A/B seam for the shore-stain shot pair (tools/m5c-shore-shot.mjs): flip the
+  // restored-count the WATER is reading without touching the save, so the two
+  // frames differ by the stain alone and by nothing else in the scene.
+  (window as unknown as { __setShoreWarm: (n: number) => number }).__setShoreWarm = (n: number) => {
+    setShoreRestoration(n);
+    return shoreWarmth();
+  };
+  (window as unknown as { __hubLight: () => unknown }).__hubLight = () => ({
+    beam: hubBeamState(),
+    shoreWarm: shoreWarmth(),
+    charges: world.consumables.bottledLight,
+  });
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
     (x: number, z: number) => {
       const ctx = currentRenderContext();

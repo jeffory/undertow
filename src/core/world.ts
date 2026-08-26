@@ -327,6 +327,15 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
   };
 }
 
+// --- M5 run consumables (plan 05 §1.7, task t21) ------------------------------
+// What the rig-up packed and the run may still spend. Only Bottled Light has a
+// verb today (meta/bottledLight.ts): the charges are counted off the saved
+// loadout at run start (meta/rigLoadout.ts `applyRigGear`) and spent in-run for
+// a full-stamina + tension reset. Bait/food remain persisted-but-inert.
+export interface RunConsumables {
+  bottledLight: number; // charges left this run
+}
+
 // --- M5 town / hub (plan 05 §1.1/§1.3, task t18) ------------------------------
 // The hub's transient interaction state. The MetaState itself lives in the save
 // (save/schemas.ts `metaState`); this is only the doorstep: is the keeper at the
@@ -385,6 +394,7 @@ export interface WorldState {
   clock: NightClock; // 03 — the Night Clock (epoch + phase length)
   run: RunState; // 03 — the run reducer state (haul / cast / result)
   town: TownState; // 05 — the lighthouse-door restoration verb (M5 hub)
+  consumables: RunConsumables; // 05 §1.7 — the run's Bottled Light charges
   disturbances: Disturbance[]; // 03 — live disturbance ripples (cast targets)
   // Gate-driver camera override (plan 06 composed shots): when set, the render
   // system uses this framing instead of the boat/player follow. Cleared on run
@@ -466,6 +476,7 @@ export function createWorld(seed = 1): WorldState {
     clock: createClock(0),
     run: createRunState(0, 0),
     town: { near: false, held: 0, open: false, barks: { fired: {}, visits: {} }, pendingBark: null },
+    consumables: { bottledLight: 0 },
     disturbances: [],
   };
 }

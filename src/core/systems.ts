@@ -28,6 +28,7 @@ import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateBoatCombat } from '../systems/boatCombat';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
+import { updateBottledLight } from '../systems/bottledLight';
 import { updateBarks } from '../systems/barks';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
@@ -310,6 +311,7 @@ export const UPDATE_ORDER: SystemFn[] = [
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)
   updateDescent, // 03 §2.5: sinkhole descent (zoneFloor rises; the clock does not reset)
   updateTownDoor, // 05 §1.1: the lighthouse-door hold that opens the restoration ledger
+  updateBottledLight, // 05 §1.7: L pops a Bottled Light — tension reset + full stamina
   updateBarks, // 05 §1.5: restored residents' doorstep barks (proximity + cooldown)
   animation,
   updateRunTerminal, // 03 §7: extraction / death / run summary — a SIM system (timers scale)

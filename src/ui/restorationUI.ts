@@ -37,6 +37,8 @@ import { emitTownEvent } from '../meta/townEvents';
 import { DOOR_HOLD_SECONDS } from '../systems/townDoor';
 import { freshMetaState } from '../save/migrate';
 import { renderRigUpInto } from './rigUpScreen';
+import { renderDecantInto } from './decantScreen';
+import { applyHubMeta } from '../render/hubAtmosphere';
 
 let overlayEl: HTMLDivElement | null = null;
 let styleEl: HTMLStyleElement | null = null; // injected once, reused
@@ -187,17 +189,19 @@ function renderRegister(): void {
   const register = el('div', 'register');
   overlayEl.appendChild(register);
 
-  // The door's two-button register: the restoration ledger and the rig-up
-  // requisition share one masthead and one overlay (plan 05 §1.2 "RESTORATION /
-  // RIG-UP"). Defaults to the restoration tab.
+  // The door's three-button register: the restoration ledger, the rig-up
+  // requisition and the decant station share one masthead and one overlay
+  // (plan 05 §1.2 "RESTORATION / RIG-UP"; §1.7's decant station is the third
+  // door, task t21). Defaults to the restoration tab.
   const nav = el('div', 'door-nav');
   const restBtn = el('button', 'active', 'REGISTER OF RESTORATION') as HTMLButtonElement;
   const rigBtn = el('button', undefined, 'FORM 6-R · RIG-UP') as HTMLButtonElement;
-  rigBtn.addEventListener('click', () => {
-    if (overlayEl && pendingWorld) renderRigUpInto(overlayEl, pendingWorld, () => renderRegister());
-  });
+  rigBtn.addEventListener('click', () => showRigUp());
+  const decBtn = el('button', undefined, 'FORM 9-L · DECANT') as HTMLButtonElement;
+  decBtn.addEventListener('click', () => showDecant());
   nav.appendChild(restBtn);
   nav.appendChild(rigBtn);
+  nav.appendChild(decBtn);
   register.appendChild(nav);
 
   register.appendChild(el('div', 'masthead', 'THE OFFICE OF PUBLIC WORKS'));
@@ -285,6 +289,22 @@ function renderRegister(): void {
   );
 }
 
+// The three panels are one overlay: each switcher re-renders the whole
+// #restoration node and hands the others back as callbacks, so the nav works
+// from whichever register is up.
+function showRigUp(): void {
+  if (!overlayEl || !pendingWorld) return;
+  renderRigUpInto(overlayEl, pendingWorld, () => renderRegister(), () => showDecant());
+}
+
+function showDecant(): void {
+  if (!overlayEl || !pendingWorld) return;
+  renderDecantInto(overlayEl, pendingWorld, {
+    onSwitchToRestoration: () => renderRegister(),
+    onSwitchToRigUp: () => showRigUp(),
+  });
+}
+
 // Pay, persist, re-render in place. The write goes through core/save's
 // updateSave so the IndexedDB row and the in-memory singleton never diverge.
 async function payFor(id: string): Promise<void> {
@@ -297,6 +317,9 @@ async function payFor(id: string): Promise<void> {
   if (!result.ok) return;
   if (result.event) emitTownEvent(result.event);
   await updateSave((s) => ({ ...s, metaState: result.meta }));
+  // 05 §1.1: the shore water reddens with every restoration (and the beam keeps
+  // whatever the decants left it) — one seam, pushed the frame the works close.
+  applyHubMeta(result.meta);
   renderRegister();
 }
 

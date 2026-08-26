@@ -34,6 +34,9 @@ let chipHaulVal: HTMLSpanElement | null = null;
 let chipDreadVal: HTMLSpanElement | null = null;
 let chipZoneVal: HTMLSpanElement | null = null;
 let chipHullVal: HTMLSpanElement | null = null;
+let chipLightVal: HTMLSpanElement | null = null;
+let chipLightEl: HTMLElement | null = null;
+let lastLight: number | null = null;
 let lastZone: string | null = null;
 let lastHull: string | null = null;
 let gaugeEl: HTMLDivElement | null = null;
@@ -64,6 +67,9 @@ function tensionFillColor(p: number): string {
   return `#${((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1)}`;
 }
 
+// The chip node itself (for the chips that hide when they have nothing to say).
+let lastChipEl: HTMLElement | null = null;
+
 function chip(label: string): HTMLSpanElement {
   const el = document.createElement('div');
   el.className = 'hud-chip';
@@ -75,6 +81,7 @@ function chip(label: string): HTMLSpanElement {
   el.appendChild(l);
   el.appendChild(v);
   rootEl!.appendChild(el);
+  lastChipEl = el;
   return v;
 }
 
@@ -150,6 +157,11 @@ function buildDom(): void {
   chipHaulVal = chip('HAUL');
   chipDreadVal = chip('DREAD');
   chipHullVal = chip('HULL');
+  // 05 §1.7: how many Bottled Lights are still in the boat. Hidden while the
+  // rig carries none — the HUD never advertises a verb the run cannot do.
+  chipLightVal = chip('BOTTLED LIGHT');
+  chipLightEl = lastChipEl;
+  if (chipLightEl) chipLightEl.style.display = 'none';
 
   gaugeEl = document.createElement('div');
   gaugeEl.id = 'hud-gauge';
@@ -204,6 +216,13 @@ export function updateHud(world: WorldState): void {
   if (hullLabel !== lastHull) {
     lastHull = hullLabel;
     if (chipHullVal) chipHullVal.textContent = hullLabel;
+  }
+
+  const light = world.consumables.bottledLight;
+  if (light !== lastLight) {
+    lastLight = light;
+    if (chipLightVal) chipLightVal.textContent = light > 0 ? `${light} · L` : '0';
+    if (chipLightEl) chipLightEl.style.display = light > 0 ? 'flex' : 'none';
   }
 
   const tier = tierFor(world.dread);

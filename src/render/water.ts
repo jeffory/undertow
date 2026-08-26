@@ -37,6 +37,43 @@ const CREST_START_FRAC = 0.45; // crest accent begins at 45% of max wave height
 const FOAM_LO_FRAC = 0.88; // foam threshold: only the rare aligned crests
 const FOAM_HI_FRAC = 0.98; // foam saturates here (top of the range)
 
+// --- the shore stain (plan 05 §1.1, task t21) ----------------------------------
+// "The water lapping at the shore gets a redder, more liquid look with each
+// restoration — a *subtle* palette lerp the player is not supposed to name.
+// Nobody comments." (town.md §6 says it out loud once, in an ambient line the
+// player may never read: "The lapping at the jetty is quiet and faintly
+// rust-coloured. Nobody on the strand mentions the stain.")
+//
+// It is a NEAR-SHORE band only: the lerp is weighted by the same baked shore
+// attenuation the swell mask uses (vShore 0 at the rim → 1 in open water), so
+// the open lake is untouched at any restoration count. SHORE_RED_MAX is the
+// ceiling of the whole effect at 8/8 restorations, right at the waterline —
+// deliberately small enough to read as a stain in the water rather than a tint
+// pass on the frame.
+const SHORE_RED_DEEP = 0x1a0b0c; // the near-black base, walked toward dried blood
+const SHORE_RED_CREST = 0x6a3a34; // the crest accent, walked off teal toward rust
+const SHORE_RED_MAX = 0.34; // max lerp weight at the rim with the town fully back
+const SHORE_RED_FALLOFF = 0.42; // vShore above this is open water — untouched
+// The base lerp alone is invisible: near-shore water renders at ~2/255, so
+// re-mixing one near-black toward another moves nothing a player could see.
+// Two more terms carry it, both still weighted by the same near-shore band:
+//   • a faint ADDITIVE rust in the water itself (survives the near-black
+//     albedo multiply the diffuse terms go through);
+//   • a warm cast on the LAPPING — the shoreline surf, which is the brightest
+//     thing at the waterline and the one town.md §6 actually names ("The
+//     lapping at the jetty is quiet and faintly rust-coloured").
+const SHORE_RED_ADD = 0.0045; // linear red added at the rim at 8/8 (~4/255 sRGB)
+const SHORE_RED_FOAM = 0xc89a86; // dusty rust the shore foam leans toward
+const SHORE_FOAM_TINT = 0.3; // max lerp of the lapping toward that rust
+
+// 0xRRGGBB → a GLSL vec3 literal, so the palette stays declared once up here.
+function glslRgb(hex: number): string {
+  const r = ((hex >> 16) & 255) / 255;
+  const g = ((hex >> 8) & 255) / 255;
+  const b = (hex & 255) / 255;
+  return `vec3(${r.toFixed(4)}, ${g.toFixed(4)}, ${b.toFixed(4)})`;
+}
+
 const WAVE_MAX = WAVE_MAX_HEIGHT;
 const CREST_START = CREST_START_FRAC * WAVE_MAX;
 const FOAM_LO = FOAM_LO_FRAC * WAVE_MAX;
@@ -95,11 +132,19 @@ uniform vec3 uAmbient;
 uniform vec3 uDeepColor;
 uniform vec3 uShallowColor;
 uniform vec3 uFoamColor;
+uniform float uShoreWarm; // 05 §1.1 — restoredCount/8, the shore stain's weight
 
 const float FOAM_LO = ${FOAM_LO.toFixed(4)};
 const float FOAM_HI = ${FOAM_HI.toFixed(4)};
 const float CREST_START = ${CREST_START.toFixed(4)};
 const float WAVE_MAX = ${WAVE_MAX.toFixed(4)};
+const vec3 SHORE_RED_DEEP = ${glslRgb(SHORE_RED_DEEP)};
+const vec3 SHORE_RED_CREST = ${glslRgb(SHORE_RED_CREST)};
+const float SHORE_RED_MAX = ${SHORE_RED_MAX.toFixed(4)};
+const float SHORE_RED_FALLOFF = ${SHORE_RED_FALLOFF.toFixed(4)};
+const vec3 SHORE_RED_ADD = vec3(${SHORE_RED_ADD.toFixed(5)}, ${(SHORE_RED_ADD * 0.18).toFixed(5)}, ${(SHORE_RED_ADD * 0.13).toFixed(5)});
+const vec3 SHORE_RED_FOAM = ${glslRgb(SHORE_RED_FOAM)};
+const float SHORE_FOAM_TINT = ${SHORE_FOAM_TINT.toFixed(4)};
 
 #include <fog_pars_fragment>
 
@@ -114,7 +159,16 @@ void main() {
   // wave range ramps toward the bone-teal crest accent (the old full-range
   // gradient washed the whole plane pale).
   float t = clamp((vHeight - CREST_START) / (WAVE_MAX - CREST_START), 0.0, 1.0);
-  vec3 base = mix(uDeepColor, uShallowColor, t);
+
+  // The shore stain (05 §1.1): the restored town bleeds a rust tint into the
+  // NEAR-SHORE band only. vShore is 0 at the rim and 1 in open water, so the
+  // weight dies off entirely by SHORE_RED_FALLOFF — the lake itself never
+  // changes colour, only the water lapping the street.
+  float nearShore = 1.0 - smoothstep(0.0, SHORE_RED_FALLOFF, vShore);
+  float stain = clamp(uShoreWarm, 0.0, 1.0) * nearShore * SHORE_RED_MAX;
+  vec3 deepC = mix(uDeepColor, SHORE_RED_DEEP, stain);
+  vec3 crestC = mix(uShallowColor, SHORE_RED_CREST, stain);
+  vec3 base = mix(deepC, crestC, t);
 
   // Moon directional, FACET-gated: discrete lit/unlit facets (low-poly look).
   // Added (not multiplied through the near-black base) so moon-facing facets
@@ -204,8 +258,15 @@ void main() {
   float edgeFoam = smoothstep(0.32, 0.60, surf);
 
   // crest foam saturates to full white at the peaks — the concept's bright ~2%
-  // lives in foam caps and the lantern, not in a lifted midrange (luma gate)
-  color = mix(color, uFoamColor, clamp(foam * 1.1 + edgeFoam * 0.45, 0.0, 1.0));
+  // lives in foam caps and the lantern, not in a lifted midrange (luma gate).
+  // The SHORE lapping is mixed separately so the restored town can warm it
+  // (05 §1.1) without touching the crest caps out on the open lake.
+  color = mix(color, uFoamColor, clamp(foam * 1.1, 0.0, 1.0));
+  vec3 lapColor = mix(uFoamColor, SHORE_RED_FOAM, clamp(uShoreWarm, 0.0, 1.0) * SHORE_FOAM_TINT);
+  color = mix(color, lapColor, clamp(edgeFoam * 0.45, 0.0, 1.0));
+
+  // …and the faint rust in the water itself, same near-shore weight.
+  color += SHORE_RED_ADD * stain;
 
   // Cheap fresnel-ish darkening at grazing angles (also fattens the fog blend).
   // Weakened from the original 0.5 so the darker palette's moonlit facets stay
@@ -232,7 +293,26 @@ const uniforms = {
   uDeepColor: { value: new THREE.Color(DEEP_COLOR) },
   uShallowColor: { value: new THREE.Color(SHALLOW_COLOR) },
   uFoamColor: { value: new THREE.Color(FOAM_COLOR) },
+  uShoreWarm: { value: 0 },
 };
+
+// --- the restoration seam (plan 05 §1.1, task t21) -----------------------------
+// The hub's other atmospheric consequence, in the same shape as sky.ts's
+// setFogDensityScale / setHubDecants: the meta layer pushes the restored count
+// in at boot and again the moment a building goes up, and the shader's
+// near-shore band does the rest. RESTORED_MAX is the ledger's eight rows
+// (content/buildings.ts) — the weight is restoredCount/8, clamped.
+export const RESTORED_MAX = 8;
+
+export function setShoreRestoration(restoredCount: number): void {
+  const n = Math.min(RESTORED_MAX, Math.max(0, Math.floor(restoredCount)));
+  uniforms.uShoreWarm.value = n / RESTORED_MAX;
+}
+
+// What the shore is stained by right now (the probe/gate readout).
+export function shoreWarmth(): number {
+  return uniforms.uShoreWarm.value;
+}
 
 let sceneRef: THREE.Scene | null = null;
 let plane: THREE.Mesh | null = null;

@@ -97,6 +97,7 @@ interface RigUpCtx {
   box: SundryItem[];
   ctx: RigGateContext;
   onSwitchToRestoration: () => void;
+  onSwitchToDecant: () => void;
 }
 
 function el(tag: string, cls?: string, text?: string): HTMLElement {
@@ -126,6 +127,7 @@ export function renderRigUpInto(
   overlayEl: HTMLElement,
   world: WorldState,
   onSwitchToRestoration: () => void,
+  onSwitchToDecant: () => void = () => {},
 ): void {
   ensureRigStyle();
   overlayEl.textContent = '';
@@ -147,6 +149,7 @@ export function renderRigUpInto(
     box: save.box,
     ctx: rigGateContext(save),
     onSwitchToRestoration,
+    onSwitchToDecant,
   };
   renderPanel(ctx);
 }
@@ -166,8 +169,11 @@ function renderPanel(ctx: RigUpCtx): void {
   const restBtn = el('button', undefined, 'REGISTER OF RESTORATION') as HTMLButtonElement;
   restBtn.addEventListener('click', ctx.onSwitchToRestoration);
   const rigBtn = el('button', 'active', 'FORM 6-R · RIG-UP') as HTMLButtonElement;
+  const decBtn = el('button', undefined, 'FORM 9-L · DECANT') as HTMLButtonElement;
+  decBtn.addEventListener('click', ctx.onSwitchToDecant);
   nav.appendChild(restBtn);
   nav.appendChild(rigBtn);
+  nav.appendChild(decBtn);
   register.appendChild(nav);
 
   if (header) {
