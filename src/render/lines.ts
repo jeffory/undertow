@@ -432,7 +432,11 @@ export function updateLines(world: WorldState, dt: number): void {
     if (ev.type === 'drag') {
       tr.thrash = true;
       if (ev.by === 'dive') tr.dive = true;
-    } else {
+    } else if (!ev.occluded) {
+      // M6 (plan 05 §2.1): a telegraph whose sight-line crosses a kelp column is
+      // heard, not seen — the event still arrived (audio/log read it), but the
+      // white flash that announces it is suppressed. In the Kelp Graves you read
+      // the line's tension ramp instead, which is untouched below.
       tr.flash = true;
     }
   }

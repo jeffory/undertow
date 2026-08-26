@@ -25,6 +25,7 @@ import {
 } from '../game/clock';
 import type { ClockPhase } from '../game/clock';
 import { hubLightCurve } from '../meta/bottledLight';
+import { zoneFogMultiplier } from '../core/zones';
 
 // Palette (spec 8.1 / plan 01 §3.2): dark teal over near-black water base.
 const SKY_TOP = 0x080e12; // deep near-black with a hint of teal
@@ -325,7 +326,11 @@ export function updateSky(world: WorldState, dt: number): void {
 
   if (fog) {
     fog.color.copy(curFog);
-    fog.density = curDensity * fogDensityScale;
+    // Three multipliers compose here (M6, plan 05 §2.1): the Night Clock's
+    // phase-lerped base density, the options menu's murk scale, and the ZONE's
+    // own multiplier — the Kelp Graves' "fog denser than Shallows". Zone 1 is
+    // exactly ×1, so the Shallows is byte-identical to pre-M6.
+    fog.density = curDensity * fogDensityScale * zoneFogMultiplier(world.run ? world.run.zone : 1);
   }
 
   // Rewrite the gradient sphere's vertex colors from the drifting palette

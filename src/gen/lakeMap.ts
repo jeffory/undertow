@@ -19,6 +19,8 @@ import {
 import { poissonDisc } from './poisson';
 import { prunedPathGraph } from './delaunay';
 import type { Edge } from './delaunay';
+import { computeKelpColumns } from './kelp';
+import type { KelpColumn } from './kelp';
 
 // --- tuning (plan §2.2-2.5, tuned for a ~200x200 lake) ------------------------
 
@@ -139,7 +141,19 @@ export interface LakeMap {
   sinkholes: Sinkhole[];
   microEvent: MicroEvent;
   buoys: Buoy[];
+  // M6 (plan 05 §2.1): the Kelp Graves' vertical columns. Grown from a SALTED
+  // copy of the layout stream after every other placement, so adding them left
+  // the whole existing map byte-identical; empty outside zone 2.
+  kelp: KelpColumn[];
   disturbanceSpawns: DisturbanceSpawn[]; // empty for round 1; the director refills
+}
+
+// The boat's run-start distance off the start islet's centre. Lives here (not
+// in lakeWorld, which owns the spawn itself) because the kelp field has to keep
+// clear of it and lakeWorld imports THIS module — the dependency only runs one
+// way. gen/lakeWorld.ts's boatSpawnDist delegates here.
+export function boatSpawnDistFor(poissonRadius: number): number {
+  return poissonRadius * MAX_RADIUS_FRACTION + 8;
 }
 
 const clamp = (v: number, lo: number, hi: number): number =>
@@ -406,6 +420,17 @@ function buildLake(runSeed: number, zone: number): LakeMap {
     }
   }
 
+  // --- step 5: the Kelp Graves field (plan 05 §2.1) -----------------------------
+  // Drawn from its OWN salted stream, after everything else, and only in zone 2.
+  const spawn: Vec2 = {
+    x: startIso.center.x + boatSpawnDistFor(radius),
+    z: startIso.center.z,
+  };
+  const kelp = computeKelpColumns(
+    { seed: runSeed, zone, bounds, islets, sinkholes, buoys },
+    spawn,
+  );
+
   return {
     seed: runSeed,
     zone,
@@ -418,6 +443,7 @@ function buildLake(runSeed: number, zone: number): LakeMap {
     sinkholes,
     microEvent,
     buoys,
+    kelp,
     disturbanceSpawns: [],
   };
 }

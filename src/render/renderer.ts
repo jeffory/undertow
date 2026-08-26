@@ -12,6 +12,8 @@ import { initPost, updatePost, compositeScene } from './post';
 import { initBoat, updateBoat } from '../game/boat';
 import { initGround, updateGround } from './ground';
 import { initLake, updateLake } from './lake';
+import { initKelp, updateKelp } from './kelp';
+import { initSilt, updateSilt } from './silt';
 import { initTown, updateTown } from './town';
 import { initRipples, updateRipples } from './ripples';
 import { initSplash, updateSplash } from './splash';
@@ -72,6 +74,8 @@ export function createRenderer(container: HTMLElement): RenderContext {
   initBoat(scene);
   initGround(scene);
   initLake(scene);
+  initKelp(scene);
+  initSilt(scene);
   initTown(scene);
   initRipples(scene);
   initSplash(scene);
@@ -108,6 +112,8 @@ export function render(world: WorldState, dt: number): void {
   updateBoat(world, dt);
   updateGround(world, dt);
   updateLake(world, dt);
+  updateKelp(world, dt); // M6: the Kelp Graves' columns (one InstancedMesh)
+  updateSilt(world, dt); // M6: the Kelp Graves' drifting silt (one Points layer)
   updateTown(world, dt);
   updateRipples(world, dt);
   updateSplash(world, dt);

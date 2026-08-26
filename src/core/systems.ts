@@ -11,7 +11,7 @@ import { updateCombat } from '../game/combat';
 import { animateFish } from '../game/fish';
 import { updateTetherFishAI } from '../game/fishAI';
 import { updateWaterPhase, WATER_DAMP } from '../game/waterPhase';
-import { constrainToCircle, separateCircles } from './collision';
+import { constrainToCircle, pushOutsideCircle, separateCircles } from './collision';
 import { constrainCircleInConvex } from './poly';
 import { dockedIslet } from '../gen/lakeWorld';
 import { stepBoatKinematics, stepBoatMovement } from '../game/boatPhysics';
@@ -135,6 +135,21 @@ export function collision(world: WorldState, _dt: number): void {
       p.z = pc.z;
     } else {
       const pc = constrainToCircle({ x: p.x, z: p.z, radius: p.radius }, g);
+      p.x = pc.x;
+      p.z = pc.z;
+    }
+  }
+
+  // M6 (plan 05 §2.1): kelp columns are world colliders on foot too — the same
+  // circles the boat slides against in boatObstacle.ts. The field lives in open
+  // water (≥ SHORE_BAND from every shore), so a keeper standing on an islet
+  // never reaches one; this bites during the WATER PHASE, when a routed drag has
+  // pulled the keeper off the rocks and they are swimming through the graves.
+  // `lake.kelp` is empty outside zone 2, so this loop costs nothing elsewhere.
+  const kelp = world.lake ? world.lake.kelp : null;
+  if (kelp && kelp.length > 0) {
+    for (const col of kelp) {
+      const pc = pushOutsideCircle({ x: p.x, z: p.z, radius: p.radius }, col);
       p.x = pc.x;
       p.z = pc.z;
     }

@@ -28,6 +28,9 @@ import { emitTownEvent, peekTownEvents } from './meta/townEvents';
 import { decant, decantsRemaining, useBottledLight } from './meta/bottledLight';
 import { applyHubMeta } from './render/hubAtmosphere';
 import { hubBeamState, setBeamAngle } from './render/sky';
+import { kelpRenderState } from './render/kelp';
+import { siltRenderState } from './render/silt';
+import { zoneFogMultiplier } from './core/zones';
 import { setShoreRestoration, shoreWarmth } from './render/water';
 import { townBuildingCount, townInstanceCount, townModelCount } from './render/town';
 import { PHASE_LENGTH_S } from './game/clock';
@@ -281,6 +284,76 @@ if (/[?&]debug/.test(search)) {
     shoreWarm: shoreWarmth(),
     charges: world.consumables.bottledLight,
   });
+  // t24 / M6 seams (tools/m6-probe.mjs): read what the Kelp Graves is worth
+  // right now (field size, instanced-mesh draw count, silt layer), park the boat
+  // beside the biggest kelp cluster for the zone-2 look shot, and set up a
+  // guaranteed routed drag straight through a column for the snag shot.
+  (window as unknown as { __kelp: () => unknown }).__kelp = () => {
+    const lake = world.lake;
+    return {
+      zone: world.run.zone,
+      columns: lake ? lake.kelp.length : 0,
+      clusters: lake ? new Set(lake.kelp.map((k) => k.cluster)).size : 0,
+      render: kelpRenderState(),
+      silt: siltRenderState(),
+      fogZoneMult: zoneFogMultiplier(world.run.zone),
+    };
+  };
+  // The cluster with the most columns, and a point of open water just outside it.
+  (window as unknown as { __toKelp: () => unknown }).__toKelp = () => {
+    const lake = world.lake;
+    if (!lake || lake.kelp.length === 0) return null;
+    const byCluster = new Map<number, { x: number; z: number; n: number }>();
+    for (const col of lake.kelp) {
+      const acc = byCluster.get(col.cluster) ?? { x: 0, z: 0, n: 0 };
+      acc.x += col.x;
+      acc.z += col.z;
+      acc.n++;
+      byCluster.set(col.cluster, acc);
+    }
+    let best = { x: 0, z: 0, n: 0, id: -1 };
+    for (const [id, acc] of byCluster) {
+      if (acc.n > best.n) best = { x: acc.x / acc.n, z: acc.z / acc.n, n: acc.n, id };
+    }
+    // park just outside the cluster on the +Z side, bow into the weed, so a
+    // chase-height camera behind the boat frames the field the way play does
+    world.boat.x = best.x;
+    world.boat.z = best.z + 16;
+    world.boat.speed = 0;
+    world.boat.heading = Math.PI;
+    return best;
+  };
+  // Park the hauled end on one side of a column and the catch far beyond it on
+  // the other, so the next constraint step pulls the hull straight through the
+  // stalk — which is exactly what the snag resolver has to refuse.
+  (window as unknown as { __kelpDrag: () => unknown }).__kelpDrag = () => {
+    const lake = world.lake;
+    const fight = world.tether.fights[0];
+    if (!lake || lake.kelp.length === 0 || !fight) return null;
+    // the column with the most open water around it (furthest from any islet)
+    let col = lake.kelp[0]!;
+    let bestClear = -1;
+    for (const c of lake.kelp) {
+      let near = Infinity;
+      for (const iso of lake.islets) {
+        const d = Math.hypot(c.x - iso.center.x, c.z - iso.center.z);
+        if (d < near) near = d;
+      }
+      if (near > bestClear) {
+        bestClear = near;
+        col = c;
+      }
+    }
+    world.boat.x = col.x - 5;
+    world.boat.z = col.z;
+    world.boat.speed = 0;
+    if (world.fish) {
+      world.fish.x = col.x + fight.L + 8;
+      world.fish.z = col.z;
+    }
+    return { column: col.id, at: { x: col.x, z: col.z }, boat: { x: world.boat.x, z: world.boat.z } };
+  };
+
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
     (x: number, z: number) => {
       const ctx = currentRenderContext();

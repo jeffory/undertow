@@ -53,3 +53,25 @@ export const ZONE_SALT_STRIDE = 0x5a17;
 export function zoneSalt(zone: number): number {
   return ((clampZone(zone) - MIN_ZONE) * ZONE_SALT_STRIDE) >>> 0;
 }
+
+// --- zone atmosphere (plan 05 §2.1) -------------------------------------------
+// M6's Kelp Graves is "bone-teal fog denser than Shallows (FogExp2 density up)".
+// This is a MULTIPLIER over the Night-Clock phase lerp, not a replacement: the
+// sky's phase palette still owns the base density and the options menu still
+// owns its own 'Permissible Murk Level' scale — the three compose
+// (fog.density = phaseDensity × optionScale × zoneMult), so a player on Low
+// murk in the Kelp Graves still gets a thinner lake than one on Heavy.
+//
+// Zone 1 is exactly 1 — the Shallows renders byte-identically to before M6.
+// Zones 3-5 are 1 until their own milestone dials them; the seam is here.
+export const ZONE_FOG_MULT: Record<number, number> = {
+  1: 1,
+  2: 1.55,
+  3: 1,
+  4: 1,
+  5: 1,
+};
+
+export function zoneFogMultiplier(zone: number): number {
+  return ZONE_FOG_MULT[clampZone(zone)] ?? 1;
+}

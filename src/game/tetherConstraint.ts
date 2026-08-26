@@ -12,6 +12,9 @@
 
 import type { WorldState } from '../core/world';
 import { STAMINA_DELAY } from './stamina';
+import { resolveKelpSnag } from '../gen/kelp';
+import type { KelpSnagResult } from '../gen/kelp';
+import { BOAT_HULL_RADIUS } from './boatObstacle';
 import type { Anchor, TetherFight, TetherEndpoint, Vec2 } from './tether';
 import {
   PLAYER_ENTITY,
@@ -120,6 +123,43 @@ function drainFishStamina(world: WorldState, fight: TetherFight, amount: number)
   if (!f) return;
   f.stamina = Math.max(0, f.stamina - amount);
   if (f.stamina <= 0) f.tether.exhausted = true;
+}
+
+// --- M6 KELP DRAG-SNAG (plan 05 §2.1) ------------------------------------------
+// "They block drag routes: a drag that would pull you through a kelp column
+// instead snags you at the column edge. Braced players use kelp to ARREST
+// drags." The arrest happens exactly where the pull displacement is applied —
+// the hauled endpoint's write below — so nothing downstream (movement,
+// collision, the water phase) can undo it or double-count it.
+//
+// Only the PLAYER/BOAT end is arrested: the catch is a fish, it swims through
+// weed. Outside zone 2 `lake.kelp` is empty and this is a no-op.
+
+const NO_SNAG: KelpSnagResult = { x: 0, z: 0, snagged: false, column: -1, arrested: 0 };
+
+// The body radius the arrest keeps clear of a column: the keeper's own circle,
+// or the boat's gunwale clearance (the same radius its obstacle response uses).
+function hauledBodyRadius(world: WorldState, end: TetherEndpoint): number | null {
+  if (end.owner === 'enemy') return null;
+  if (end.anchor.kind === 'boat') return BOAT_HULL_RADIUS;
+  if (end.anchor.kind === 'entity' && end.anchor.entityId === PLAYER_ENTITY) {
+    return world.player.radius;
+  }
+  return null; // fixed anchors never move; other entities are not hauled bodies
+}
+
+// Arrest one endpoint's pull displacement at the first kelp column it crosses.
+function arrestOnKelp(
+  world: WorldState,
+  end: TetherEndpoint,
+  from: Vec2,
+  to: Vec2,
+): KelpSnagResult {
+  const kelp = world.lake ? world.lake.kelp : null;
+  if (!kelp || kelp.length === 0) return { ...NO_SNAG, x: to.x, z: to.z };
+  const radius = hauledBodyRadius(world, end);
+  if (radius === null) return { ...NO_SNAG, x: to.x, z: to.z };
+  return resolveKelpSnag(kelp, from, to, radius);
 }
 
 // The player's current normalized move direction (0,0 when idle). Brace opposes
@@ -291,8 +331,13 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
         : 1;
     const corrA = excess * shareA * braceA;
     const corrB = excess * shareB * braceB;
-    aPos.write(pa.x + nx * corrA, pa.z + nz * corrA);
-    bPos.write(pb.x - nx * corrB, pb.z - nz * corrB);
+    // M6: the pull is routed through the kelp field before it lands. A clear
+    // pull writes the same position it always did; a pull that crosses a column
+    // stops at the column edge.
+    const snagA = arrestOnKelp(world, fight.a, pa, { x: pa.x + nx * corrA, z: pa.z + nz * corrA });
+    const snagB = arrestOnKelp(world, fight.b, pb, { x: pb.x - nx * corrB, z: pb.z - nz * corrB });
+    aPos.write(snagA.x, snagA.z);
+    bPos.write(snagB.x, snagB.z);
     fight.tension += excess * tuning.kTension * dt;
 
     // Drag detection (plan §4.2): displacement actually applied to the HAULED
@@ -302,6 +347,7 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
     // boat-anchored fight produced no drag events and a Dragger could never
     // take a bite of boat.
     const playerCorr = fight.a.owner === 'enemy' ? corrB : corrA;
+    const snag = fight.a.owner === 'enemy' ? snagB : snagA;
     const drag = fight.drag;
     // Slide the window FIRST, then accumulate. Plan §4.2: "a single huge lunge
     // can exceed 1.5m in one frame — the window logic treats that as an
@@ -311,23 +357,44 @@ function stepFight(world: WorldState, fight: TetherFight, dt: number): boolean {
       drag.windowStart = world.time.elapsed;
       drag.accumulated = 0;
     }
-    drag.accumulated += playerCorr;
     drag.lastDir = { x: nx, z: nz };
-    if (drag.accumulated > DRAG_THRESHOLD && drag.cooldown <= 0) {
-      // Round 2A hook: the fish AI tags the pull source (lunge burst vs dive
-      // swim) so render/log know what kind of yank this was.
-      const ai = catchFish(world, fight)?.ai;
-      const by = ai ? ai.pullBy : 'lunge';
-      world.tetherEvents.push({
-        type: 'drag',
-        fightId: fight.id,
-        anchor: fight.anchor,
-        dir: { x: nx, z: nz },
-        magnitude: drag.accumulated,
-        by,
-      });
+    if (snag.snagged) {
+      // The kelp took it. Drop the drag's remaining energy — the window resets
+      // and no drag event fires from a pull that never landed. This is the
+      // "braced at kelp = free arrest" the milestone is built around; the
+      // cooldown rate-limits the event while the hauled body stays pinned
+      // against the same column. Tension keeps climbing, because the line is
+      // still over-extended: the arrest costs you the line, not the ground.
       drag.accumulated = 0;
-      drag.cooldown = DRAG_COOLDOWN;
+      if (drag.cooldown <= 0) {
+        world.tetherEvents.push({
+          type: 'kelpSnag',
+          fightId: fight.id,
+          anchor: fight.anchor,
+          at: { x: snag.x, z: snag.z },
+          column: snag.column,
+          arrested: snag.arrested,
+        });
+        drag.cooldown = DRAG_COOLDOWN;
+      }
+    } else {
+      drag.accumulated += playerCorr;
+      if (drag.accumulated > DRAG_THRESHOLD && drag.cooldown <= 0) {
+        // Round 2A hook: the fish AI tags the pull source (lunge burst vs dive
+        // swim) so render/log know what kind of yank this was.
+        const ai = catchFish(world, fight)?.ai;
+        const by = ai ? ai.pullBy : 'lunge';
+        world.tetherEvents.push({
+          type: 'drag',
+          fightId: fight.id,
+          anchor: fight.anchor,
+          dir: { x: nx, z: nz },
+          magnitude: drag.accumulated,
+          by,
+        });
+        drag.accumulated = 0;
+        drag.cooldown = DRAG_COOLDOWN;
+      }
     }
   } else {
     fight.tension -= tuning.slackDecay * dt;

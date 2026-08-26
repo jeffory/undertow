@@ -32,6 +32,21 @@ export function constrainToCircle(pos: Circle, boundary: Boundary): Circle {
   return { ...pos };
 }
 
+// Returns a copy of `pos` pushed just outside `obstacle` (centre distance >=
+// obstacle.radius + pos.radius). Unlike separateCircles, only `pos` moves — the
+// obstacle is world geometry (a kelp column, M6) and never budges. A circle
+// already clear is returned unchanged; a concentric one is pushed along +X.
+export function pushOutsideCircle(pos: Circle, obstacle: Boundary): Circle {
+  const dx = pos.x - obstacle.x;
+  const dz = pos.z - obstacle.z;
+  const minDist = obstacle.radius + pos.radius;
+  const dist = Math.hypot(dx, dz);
+  if (dist >= minDist) return { ...pos };
+  if (dist <= 1e-9) return { ...pos, x: obstacle.x + minDist, z: obstacle.z };
+  const scale = minDist / dist;
+  return { ...pos, x: obstacle.x + dx * scale, z: obstacle.z + dz * scale };
+}
+
 // Returns [a', b'] pushed just apart so the two circles no longer overlap
 // (centre distance >= a.radius + b.radius). The overlap is split evenly.
 // Concentric (degenerate) circles are separated along +X. A pair that already

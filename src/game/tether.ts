@@ -131,12 +131,20 @@ export const BOAT_RADIUS_DEFAULT = 3; // boat endpoint radius (03 tune)
 
 export type TetherEvent =
   | { type: 'drag'; fightId: number; anchor: 'player' | 'boat'; dir: Vec2; magnitude: number; by: 'lunge' | 'dive' }
-  | { type: 'telegraph'; fightId: number; dir: Vec2; kind: 'lunge' | 'drag' }
+  // `occluded` (M6, plan 05 §2.1): a kelp column stands on the sight-line from
+  // the hauling end to the catch. The event STILL FIRES — audio and the sim read
+  // it unchanged — but the visual cue is suppressed, so a fight fought inside
+  // the Kelp Graves is read off the line, not off the fish.
+  | { type: 'telegraph'; fightId: number; dir: Vec2; kind: 'lunge' | 'drag'; occluded?: boolean }
   | { type: 'lunge'; fightId: number; dir: Vec2; force: number }
   | { type: 'snap'; fightId: number; cause: 'reel' | 'lunge' | 'greed' | 'delivered'; lineId: string; side: 'player' | 'enemy' }
   | { type: 'cut'; fightId: number; lineId: string; cost: 'lure' | 'hull-segment' | 'contextual' }
   | { type: 'landed'; clean: true }
   | { type: 'butchered'; lineId: string; minusOneTier: true }
+  // M6 drag-snag (plan 05 §2.1): a drag that would have hauled the player/boat
+  // through a kelp column was arrested at the column edge instead. `arrested` is
+  // the metres of pull that were dropped — braced-at-kelp is a free arrest.
+  | { type: 'kelpSnag'; fightId: number; anchor: 'player' | 'boat'; at: Vec2; column: number; arrested: number }
   | { type: 'pulledUnder'; breathSec: number; occupied: boolean; sinkingHaul?: boolean }
   | { type: 'surfaced'; breathSec: number } // T9 — water phase exit (reached shore / line ended)
   | { type: 'reeledMs'; ms: number }                                   // instrumentation

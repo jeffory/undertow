@@ -29,6 +29,7 @@ import type { WorldState, FishState, TetherAIMode } from '../core/world';
 import type { TetherFight } from './tether';
 import { FISH_ENTITY } from './tether';
 import { FISH_TARGET_ID } from './combat';
+import { segmentCrossesKelp } from '../gen/kelp';
 
 // --- FSM constants (all tunable later via the species stats block) -------------
 export const ORBIT_SPEED = 2.2; // m/s — tangential orbit speed
@@ -163,6 +164,34 @@ function routeDir(world: WorldState, fight: TetherFight) {
   return shorelineDir(world);
 }
 
+// --- M6 partial LOS (plan 05 §2.1) ---------------------------------------------
+// "They block … the player's sight-line to the tethered fish (tension state
+// still shown, but lunge telegraphs are PARTIALLY read — you learn to read the
+// line, not the fish)."
+//
+// The full light-occlusion pass is out of budget this round; this is the
+// readable half. The telegraph EVENT still fires — the sim, the playtest log and
+// the audio layer see it unchanged — it just carries `occluded: true`, and the
+// render side skips the visual cue. What is left to read is the line itself
+// (its tension colour ramp is untouched).
+//
+// m — a sight-line that only grazes a stalk is still a sight-line through weed.
+export const LOS_PAD = 0.35;
+
+// The eye the sight-line is drawn from: the hauling end of the fight (the
+// keeper on foot, the hull in a boat fight).
+function sightOrigin(world: WorldState, fight: TetherFight): { x: number; z: number } {
+  return fight.anchor === 'boat'
+    ? { x: world.boat.x, z: world.boat.z }
+    : { x: world.player.x, z: world.player.z };
+}
+
+function telegraphOccluded(world: WorldState, fight: TetherFight, fish: FishState): boolean {
+  const kelp = world.lake ? world.lake.kelp : null;
+  if (!kelp || kelp.length === 0) return false;
+  return segmentCrossesKelp(kelp, sightOrigin(world, fight), { x: fish.x, z: fish.z }, LOS_PAD);
+}
+
 // --- state transitions ----------------------------------------------------------
 
 function enterOrbit(fish: FishState, ai: FishState['ai']): void {
@@ -195,6 +224,9 @@ function enterLunge(world: WorldState, fight: TetherFight, fish: FishState, ai: 
     fightId: fight.id,
     dir: { x: d.x, z: d.z },
     kind: 'lunge',
+    // omitted (not `false`) when clear, so a zone-1 telegraph event is exactly
+    // the object it has always been
+    ...(telegraphOccluded(world, fight, fish) ? { occluded: true } : {}),
   });
 }
 
@@ -230,6 +262,7 @@ function enterDrag(world: WorldState, fight: TetherFight, fish: FishState, ai: F
       fightId: fight.id,
       dir: { x: d.x, z: d.z },
       kind: 'drag',
+      ...(telegraphOccluded(world, fight, fish) ? { occluded: true } : {}),
     });
   } else {
     // "if no hazard exists, drags go straight with jitter" (plan §7)

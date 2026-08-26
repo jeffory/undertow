@@ -1,14 +1,16 @@
 // BOAT OBSTACLES — sim-side obstacle response for the rowable boat (qa-issues.md
 // B2, task T4). Pure geometry over the generated LakeMap: islet silhouettes
-// (concave-aware: pointInPolygon + distToPolygonEdge, not the convex hull) and
-// the wreck/buoy marker circles. No three, no render/*, no DOM.
+// (concave-aware: pointInPolygon + distToPolygonEdge, not the convex hull), the
+// wreck/buoy marker circles, and (M6) the zone-2 kelp columns. No three, no
+// render/*, no DOM.
 //
 // The movement system resolves the boat's integrated position through this
 // module each fixed step. A position collides when it lies inside an islet
 // polygon OR within BOAT_HULL_RADIUS of a polygon edge (the boat's gunwale
-// clearance), or within (obstacle radius + hull radius) of a wreck/buoy. The
-// resolution slides the remaining movement along the obstacle's tangent and
-// drops the inward normal component — a thud, not a bounce.
+// clearance), or within (obstacle radius + hull radius) of a wreck/buoy/kelp
+// column (M6). The resolution slides the remaining movement along the
+// obstacle's tangent and drops the inward normal component — a thud, not a
+// bounce.
 //
 // Deterministic: obstacles are processed in fixed array order with a fixed pass
 // count; no Math.random, no Date. Drag/thrust and all other open-water boat
@@ -137,9 +139,10 @@ function slideCircle(
 }
 
 // Resolve the boat's desired next position `to` (one fixed-step integration from
-// `from`) against every islet, wreck and buoy in the lake. Slides along obstacle
-// tangents and drops the inward normal movement; returns the corrected position
-// plus whether anything was hit. Submerged buoys are no longer surface obstacles.
+// `from`) against every islet, wreck, buoy and kelp column in the lake. Slides
+// along obstacle tangents and drops the inward normal movement; returns the
+// corrected position plus whether anything was hit. Submerged buoys are no
+// longer surface obstacles.
 export function resolveBoatObstacles(lake: LakeMap, from: Vec2, to: Vec2): BoatObstacleResult {
   const r = BOAT_HULL_RADIUS;
   let x = to.x;
@@ -168,6 +171,17 @@ export function resolveBoatObstacles(lake: LakeMap, from: Vec2, to: Vec2): BoatO
     for (const buoy of lake.buoys) {
       if (buoy.submerged) continue;
       const res = slideCircle({ x, z }, mx, mz, buoy.pos, BUOY_RADIUS + r);
+      x = res.x;
+      z = res.z;
+      mx = res.mx;
+      mz = res.mz;
+      hit = hit || res.hit;
+    }
+    // M6 (plan 05 §2.1): kelp columns are world colliders — same circle slide
+    // as a buoy, at the column's own radius. Empty outside the Kelp Graves, so
+    // this loop costs nothing in every other zone.
+    for (const col of lake.kelp) {
+      const res = slideCircle({ x, z }, mx, mz, col, col.radius + r);
       x = res.x;
       z = res.z;
       mx = res.mx;

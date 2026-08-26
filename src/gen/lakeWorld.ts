@@ -7,7 +7,7 @@
 
 import type { WorldState } from '../core/world';
 import { createFish } from '../core/world';
-import { generateLake } from './lakeMap';
+import { boatSpawnDistFor, generateLake } from './lakeMap';
 import type { Islet, LakeMap } from './lakeMap';
 import type { Vec2 } from '../core/poly';
 import { polygonCentroid, constrainCircleInConvex, distanceToHull } from '../core/poly';
@@ -17,7 +17,7 @@ export const DOCK_RANGE = 2; // m — approach within this of an islet edge to d
 // Run start: the boat spawns off the lighthouse islet, in the water, facing the
 // lake — just past the islet's maximum reach so it can never sit on land.
 export function boatSpawnDist(lake: LakeMap): number {
-  return lake.poissonRadius * 0.36 + 8;
+  return boatSpawnDistFor(lake.poissonRadius);
 }
 
 export function ensureLake(world: WorldState): LakeMap {
