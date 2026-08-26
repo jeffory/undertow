@@ -327,6 +327,17 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
   };
 }
 
+// --- M5 town / hub (plan 05 §1.1/§1.3, task t18) ------------------------------
+// The hub's transient interaction state. The MetaState itself lives in the save
+// (save/schemas.ts `metaState`); this is only the doorstep: is the keeper at the
+// lighthouse door, how long has the restoration verb been held, and is the
+// ledger up. The sim owns `near`/`held`; the ui system consumes `open`.
+export interface TownState {
+  near: boolean; // the keeper is within reach of the lighthouse door
+  held: number; // s the contextual hold has been held at the door
+  open: boolean; // the RESTORATION NOTICE ledger overlay is up
+}
+
 export interface WorldState {
   entities: EntityStore;
   input: InputState;
@@ -353,6 +364,7 @@ export interface WorldState {
   dockedIslet: number | null; // 03 — islet index the foot player is on (null = aboard)
   clock: NightClock; // 03 — the Night Clock (epoch + phase length)
   run: RunState; // 03 — the run reducer state (haul / cast / result)
+  town: TownState; // 05 — the lighthouse-door restoration verb (M5 hub)
   disturbances: Disturbance[]; // 03 — live disturbance ripples (cast targets)
   // Gate-driver camera override (plan 06 composed shots): when set, the render
   // system uses this framing instead of the boat/player follow. Cleared on run
@@ -433,6 +445,7 @@ export function createWorld(seed = 1): WorldState {
     dockedIslet: null,
     clock: createClock(0),
     run: createRunState(0, 0),
+    town: { near: false, held: 0, open: false },
     disturbances: [],
   };
 }

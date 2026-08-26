@@ -20,6 +20,11 @@ import { applyRunStartPassives } from './loot/runStart';
 import { gradeForXp } from './loot/license';
 import { descend } from './run/descent';
 import { hookDragger, swampBoat } from './systems/boatCombat';
+import { lighthouseFoot } from './meta/hubStreet';
+import { restore, restoredIds, startingDreadFor } from './meta/restoration';
+import { unlockContextFor } from './meta/runMeta';
+import { emitTownEvent, peekTownEvents } from './meta/townEvents';
+import { townInstanceCount } from './render/town';
 import { PHASE_LENGTH_S } from './game/clock';
 import * as THREE from 'three';
 
@@ -104,6 +109,53 @@ if (/[?&]debug/.test(search)) {
     world.boat.z = s.mouth.z;
     world.boat.speed = 0;
     return s;
+  };
+  // M5 gate seams (tools/m5-probe.mjs): read the town slice, inject Memories
+  // through the same save write path the receipt uses, walk to the lighthouse
+  // door, open/close the register, and pay for a building headlessly.
+  (window as unknown as { __meta: () => unknown }).__meta = () => {
+    const save = getSave();
+    if (!save) return null;
+    return {
+      version: save.version,
+      metaState: save.metaState,
+      restored: restoredIds(save.metaState),
+      startingDread: startingDreadFor(save.metaState),
+      instances: townInstanceCount(),
+      events: peekTownEvents(),
+    };
+  };
+  (window as unknown as { __grantMemories: (n: number) => void }).__grantMemories = (n: number) => {
+    void updateSave((s) => ({
+      ...s,
+      metaState: { ...s.metaState, memories: Math.max(0, s.metaState.memories + n) },
+    }));
+  };
+  (window as unknown as { __toDoor: () => unknown }).__toDoor = () => {
+    const lake = world.lake;
+    if (!lake) return null;
+    const iso = lake.islets[lake.startIslet];
+    if (!iso) return null;
+    const door = lighthouseFoot(iso);
+    dockPlayer(world, lake.startIslet, { x: door.x, z: door.z });
+    world.player.x = door.x;
+    world.player.z = door.z;
+    return door;
+  };
+  (window as unknown as { __openTown: (on: boolean) => void }).__openTown = (on: boolean) => {
+    world.town.open = on;
+  };
+  (window as unknown as { __restore: (id: string) => unknown }).__restore = (id: string) => {
+    const save = getSave();
+    if (!save) return { ok: false, reason: 'no-save' };
+    const out = restore(save.metaState, id, {
+      atRun: save.meta.runsCompleted,
+      ctx: unlockContextFor(save),
+    });
+    if (!out.ok) return { ok: false, reason: out.reason };
+    if (out.event) emitTownEvent(out.event);
+    void updateSave((s) => ({ ...s, metaState: out.meta }));
+    return { ok: true, event: out.event };
   };
   (window as unknown as { __toScreen: (x: number, z: number) => { x: number; y: number } }).__toScreen =
     (x: number, z: number) => {

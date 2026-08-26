@@ -1,7 +1,8 @@
-// SAVES — tests-first (plan 03 §8, task t12 #5; task t19 → v2). Pins the zod v2
-// schema round-trip, the version-0/1→2 migrations, the refuse-forward-data rule,
-// corrupt import rejection, and the meta/cap bookkeeping on persist — plus the
-// M4 folds: bestiary events → entry states, sundries → box, tribute XP → license.
+// SAVES — tests-first (plan 03 §8, task t12 #5; task t19 → v2; task t18 → v3).
+// Pins the zod schema round-trip, the version-0/1/2 → current migrations, the
+// refuse-forward-data rule, corrupt import rejection, and the meta/cap
+// bookkeeping on persist — plus the M4 folds (bestiary events → entry states,
+// sundries → box, tribute XP → license) and the M5 town slice.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -51,6 +52,19 @@ function sampleV1(): Record<string, unknown> {
   };
 }
 
+// A v2 blob (pre-M5) — the shape every real save from the M4 rounds has.
+function sampleV2(): Record<string, unknown> {
+  return {
+    version: 2,
+    meta: { memoriesTotal: 0, runsCompleted: 0, bestHaul: 0, seenIntro: false },
+    runs: [],
+    bestiary: {},
+    license: { grade: 1, xp: 0 },
+    box: [],
+    equipped: [],
+  };
+}
+
 function sampleSave(): SaveGame {
   return {
     version: SAVE_VERSION,
@@ -60,6 +74,16 @@ function sampleSave(): SaveGame {
     license: { grade: 1, xp: 0 },
     box: [],
     equipped: [],
+    metaState: {
+      buildings: {},
+      memories: 0,
+      notesRead: [],
+      decants: 0,
+      damKeyUsed: false,
+      breadcrumbs: [],
+      endingsSeen: {},
+      nplus: false,
+    },
   };
 }
 
@@ -113,12 +137,12 @@ describe('schema round-trip', () => {
 });
 
 describe('migrate (versioned, forward-data-safe)', () => {
-  it('passes a v2 save through unchanged', () => {
+  it('passes a current-version save through unchanged', () => {
     const save = sampleSave();
     expect(migrate(save)).toEqual(save);
   });
 
-  it('migrates a version-0 stub up to v2 defaults', () => {
+  it('migrates a version-0 stub up to current defaults', () => {
     const v0 = { version: 0 };
     const out = migrate(v0 as unknown as Record<string, unknown>);
     expect(out.version).toBe(SAVE_VERSION);
@@ -128,6 +152,7 @@ describe('migrate (versioned, forward-data-safe)', () => {
     expect(out.license).toEqual({ grade: 1, xp: 0 });
     expect(out.box).toEqual([]);
     expect(out.equipped).toEqual([]);
+    expect(out.metaState).toEqual(sampleSave().metaState);
   });
 
   it('a raw object with no version migrates as a fresh save', () => {
@@ -143,7 +168,7 @@ describe('migrate (versioned, forward-data-safe)', () => {
     expect(() => migrate({ version: 2, meta: { runsCompleted: 'nope' } })).toThrow();
   });
 
-  it('v1 → v2: keeps meta + runs and adds the M4 slices empty', () => {
+  it('v1 → current: keeps meta + runs and adds the M4/M5 slices empty', () => {
     const v1 = {
       ...sampleV1(),
       runs: [
@@ -161,7 +186,7 @@ describe('migrate (versioned, forward-data-safe)', () => {
       ],
     };
     const out = migrate(v1);
-    expect(out.version).toBe(2);
+    expect(out.version).toBe(SAVE_VERSION);
     expect(out.meta).toEqual(v1.meta);
     expect(out.runs).toHaveLength(1);
     expect(out.runs[0]!.memoriesTotal).toBe(6);
@@ -169,6 +194,39 @@ describe('migrate (versioned, forward-data-safe)', () => {
     expect(out.license).toEqual({ grade: 1, xp: 0 });
     expect(out.box).toEqual([]);
     expect(out.equipped).toEqual([]);
+    expect(out.metaState).toEqual(sampleSave().metaState);
+  });
+
+  it('v2 → current: keeps every M4 slice and adds an EMPTY town', () => {
+    const v2 = {
+      ...sampleV2(),
+      license: { grade: 3, xp: 900 },
+      equipped: ['trink-1'],
+      box: [
+        {
+          id: 'trink-1',
+          name: 'Damp of Held Water',
+          rarity: 'U',
+          slot: 'trinket',
+          effects: [{ key: 'staminaRegen', value: 1.5 }],
+        },
+      ],
+    };
+    const out = migrate(v2);
+    expect(out.version).toBe(SAVE_VERSION);
+    expect(out.license).toEqual({ grade: 3, xp: 900 });
+    expect(out.equipped).toEqual(['trink-1']);
+    expect(out.box).toHaveLength(1);
+    expect(out.metaState.buildings).toEqual({});
+    expect(out.metaState.notesRead).toEqual([]);
+    expect(out.metaState.nplus).toBe(false);
+  });
+
+  it('v2 → current: the lifetime Memories tally becomes the town\'s opening purse', () => {
+    const v2 = { ...sampleV2(), meta: { memoriesTotal: 420, runsCompleted: 9, bestHaul: 88, seenIntro: true } };
+    const out = migrate(v2);
+    expect(out.metaState.memories).toBe(420);
+    expect(out.meta.memoriesTotal).toBe(420); // the odometer is untouched
   });
 
   it('a corrupt v1 blob is rejected, not silently wiped', () => {
@@ -266,7 +324,8 @@ describe('export / import', () => {
     const imported = importSave({ version: 0 });
     expect(imported.version).toBe(SAVE_VERSION);
     const v1 = importSave(sampleV1());
-    expect(v1.version).toBe(2);
+    expect(v1.version).toBe(SAVE_VERSION);
     expect(v1.license).toEqual({ grade: 1, xp: 0 });
+    expect(v1.metaState.buildings).toEqual({});
   });
 });

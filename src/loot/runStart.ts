@@ -1,8 +1,10 @@
 // RUN START (loot) — the build-passives seam (task t19 "effect hooks as a clean
 // applyTrinkets(world) at run start"). applyTrinkets applies a set of trinkets'
 // effects to a fresh world; applyRunStartPassives is the run-start hook that
-// reads the save's equipped loadout + license grade and applies both. Called by
-// startNewRun (run/run.ts) and after the boot save load (main.ts).
+// reads the save's equipped loadout + license grade and applies both, then runs
+// the M5 `runMetaStart` hook (plan 05 §0.2: starting Dread = 2 × restored
+// buildings, capped 30). Called by startNewRun (run/run.ts) and after the boot
+// save load (main.ts).
 //
 // Wired effects (only where a system exists):
 //   hp            → +player.maxHp
@@ -18,6 +20,7 @@
 import type { WorldState } from '../core/world';
 import { getSave } from '../core/save';
 import { applyLicensePassives } from './license';
+import { runMetaStart } from '../meta/runMeta';
 import type { SundryItem } from './items';
 
 // Apply trinket effects to a FRESH world. Mutates world in place.
@@ -65,11 +68,14 @@ export function equippedItems(save: { equipped: string[]; box: SundryItem[] }): 
 }
 
 // The run-start seam: read the save (no-op when none is loaded — boot/tests),
-// then apply license passives + equipped trinkets to the fresh world.
+// then apply license passives + equipped trinkets to the fresh world, and
+// finally the town's starting-Dread base (plan 05 §0.2). The Dread hook runs
+// LAST so it stamps run.startedAtDread after everything else has settled.
 export function applyRunStartPassives(world: WorldState): void {
   const save = getSave();
   if (!save) return;
   world.run.licenseGrade = save.license.grade;
   applyLicensePassives(world, save.license.grade);
   applyTrinkets(world, equippedItems(save));
+  runMetaStart(world, save.metaState);
 }
