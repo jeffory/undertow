@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "node tools/smoke.mjs"
+    "smoke": "node tools/smoke.mjs",
+    "qa:check": "node tools/qa-annotate-check.mjs"
   },
   "dependencies": {
     "three": "^0.160.0",

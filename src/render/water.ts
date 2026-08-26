@@ -258,6 +258,7 @@ export function initWater(scene: THREE.Scene): void {
   });
 
   plane = new THREE.Mesh(geo, waterMaterial);
+  plane.name = 'water:plane';
   scene.add(plane);
 }
 

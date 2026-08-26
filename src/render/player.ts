@@ -123,6 +123,7 @@ export function initPlayer(scene: THREE.Scene): void {
 
   root.position.y = GROUND_Y;
   root.visible = false; // foot mode only
+  root.name = 'player:root';
   scene.add(root);
 }
 

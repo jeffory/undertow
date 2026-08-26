@@ -22,6 +22,7 @@ const TIER_COLOR: Record<number, number> = {
 export function initRipples(scene: THREE.Scene): void {
   root = new THREE.Group();
   root.renderOrder = 5;
+  root.name = 'ripples:root';
   scene.add(root);
 }
 

@@ -10,6 +10,7 @@ import { ensureLake, spawnAtLakeStart, dockPlayer } from './gen/lakeWorld';
 import { initRun } from './run/run';
 import { initSaveSystem, getSave, updateSave } from './core/save';
 import { initSavePanel } from './ui/savePanel';
+import { initQaAnnotate, isQaPaused } from './ui/qaAnnotate';
 import { toggleBestiary } from './ui/bestiaryScreen';
 import { applyRunStartPassives } from './loot/runStart';
 import { gradeForXp } from './loot/license';
@@ -95,6 +96,10 @@ if (typeof location !== 'undefined' && /[?&]debug/.test(location.search)) {
   (window as unknown as { __camera: unknown }).__camera = ctx.camera;
 }
 
+// QA annotate overlay (?qa / ?debug): Q freezes the sim, click pins a note
+// carrying seed + tick + scene hit, written to qa-notes/ by the dev server.
+initQaAnnotate(world);
+
 window.addEventListener('resize', () => resizeRenderer(ctx.renderer));
 
 // sim systems run at fixed DT; render+ui run once per display frame (plan 01
@@ -108,12 +113,19 @@ function frame(now: number): void {
   // runSimSteps advances world.time.elapsed per fixed step (not per display
   // frame), so elapsed-sampling systems behave identically however the steps
   // batch into frames (determinism, spec 8.3).
-  runSimSteps(world.time, now, (dt) => {
-    for (let s = 0; s < SIM_COUNT; s++) {
-      const system = UPDATE_ORDER[s];
-      if (system) system(world, dt);
-    }
-  });
+  if (isQaPaused()) {
+    // QA annotate holds the sim so a click resolves against the frame actually
+    // on screen. Park the clock at `now` each frame so resuming doesn't replay
+    // the pause as catch-up steps.
+    world.time.lastReal = now;
+  } else {
+    runSimSteps(world.time, now, (dt) => {
+      for (let s = 0; s < SIM_COUNT; s++) {
+        const system = UPDATE_ORDER[s];
+        if (system) system(world, dt);
+      }
+    });
+  }
   // present at display rate regardless of sim steps
   for (let s = PRESENT_INDEX; s < UPDATE_ORDER.length; s++) {
     const system = UPDATE_ORDER[s];

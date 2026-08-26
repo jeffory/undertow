@@ -81,11 +81,13 @@ export function initGround(scene: THREE.Scene): void {
   mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(0, GROUND_Y, 0);
   mesh.visible = false; // foot mode only
+  mesh.name = 'ground:disc';
   scene.add(mesh);
 
   // Group for the islet props (rocks) — toggled with the ground, foot mode only.
   props = new THREE.Group();
   props.visible = false;
+  props.name = 'ground:props';
   scene.add(props);
 }
 

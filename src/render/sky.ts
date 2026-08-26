@@ -143,6 +143,7 @@ function ensureBeam(scene: THREE.Scene): void {
     });
     beamMesh = new THREE.Mesh(geo, mat);
     beamMesh.frustumCulled = false;
+    beamMesh.name = 'sky:beam';
     scene.add(beamMesh);
   }
 }
@@ -185,6 +186,7 @@ export function initSky(scene: THREE.Scene): void {
   const bmat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false });
   bgSphere = new THREE.Mesh(bgeo, bmat);
   bgSphere.scale.set(-1, 1, 1); // invert → render the inside
+  bgSphere.name = 'sky:dome';
   scene.add(bgSphere);
   bgGeo = bgeo;
 
@@ -200,6 +202,7 @@ export function initSky(scene: THREE.Scene): void {
   moon = new THREE.DirectionalLight(0x9db8d4, 1.1);
   moon.position.set(-12, 16, -10);
   moon.target.position.set(0, 0, 0);
+  moon.name = 'sky:moon';
   scene.add(moon);
   scene.add(moon.target);
 }

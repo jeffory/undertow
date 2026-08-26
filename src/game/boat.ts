@@ -233,9 +233,11 @@ export function initBoat(scene: THREE.Scene): void {
   // group made it translate/yaw with the hull (bug B3: a wake carried by its
   // emitter reads as flicker stuck to the stern, never as a trail).
   wake = makeWake();
+  wake.name = 'boat:wake';
   scene.add(wake);
 
   group.position.set(0, 0, 0);
+  group.name = 'boat:root';
   scene.add(group);
   boat = group;
 }
