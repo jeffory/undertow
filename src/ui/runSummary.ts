@@ -64,13 +64,19 @@ export function showRunSummary(
     #run-summary .invoice {
       width: 460px; max-height: 86vh; overflow: auto;
       background: #efe4c8;
+      /* water stains + a cup ring over the ruled grid — the Office's copies
+         have been damp for thirty years (TODO.md paperwork grunge) */
       background-image:
+        radial-gradient(ellipse 130px 90px at 82% 6%, rgba(110, 82, 42, 0.13), transparent 70%),
+        radial-gradient(ellipse 170px 120px at 8% 92%, rgba(92, 72, 46, 0.11), transparent 70%),
+        radial-gradient(circle 58px at 74% 78%, transparent 62%, rgba(110, 82, 42, 0.14) 68%, transparent 76%),
         linear-gradient(rgba(120, 90, 50, 0.05) 1px, transparent 1px),
         linear-gradient(90deg, rgba(120, 90, 50, 0.05) 1px, transparent 1px);
-      background-size: 22px 22px;
+      background-size: auto, auto, auto, 22px 22px, 22px 22px;
       border: 1px solid #4a3a26;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 42px rgba(110, 82, 42, 0.09);
       padding: 22px 26px;
+      transform: rotate(-0.55deg);
     }
     #run-summary .masthead {
       text-align: center; letter-spacing: 0.18em;
@@ -110,9 +116,13 @@ export function showRunSummary(
     }
     #run-summary .stamp {
       margin: 14px 0 4px; padding: 4px 10px; display: inline-block;
-      border: 2px solid #8a2014; color: #8a2014; border-radius: 3px;
+      border: 2px solid #8a2014; color: #8a2014;
+      border-radius: 4px 7px 3px 8px / 7px 3px 8px 4px; /* uneven worn die */
       font-size: 12px; font-weight: bold; letter-spacing: 0.16em;
       transform: rotate(-4deg); opacity: 0.85;
+      background: rgba(138, 32, 20, 0.05);
+      box-shadow: inset 0 0 7px rgba(138, 32, 20, 0.28); /* blotted ink edge */
+      text-shadow: 0.6px 0.6px 0 rgba(138, 32, 20, 0.35);
     }
     #run-summary .stamp.ok { border-color: #2a5c2a; color: #2a5c2a; }
     #run-summary .discharge {
