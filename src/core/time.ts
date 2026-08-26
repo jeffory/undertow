@@ -57,7 +57,13 @@ export function advanceClock(time: Time, realMs: number): number {
   time.accumulator += frame;
   // Clamp the accumulator so a stall can never queue more than
   // MAX_STEPS_PER_FRAME steps; the excess is dropped, not deferred.
-  time.accumulator = Math.min(time.accumulator, FIXED_DT * MAX_STEPS_PER_FRAME);
+  // Under a debug ?timescale the cap scales with it: gate drivers on a loaded
+  // machine hit slow frames, and a fixed 5-step cap silently dropped wall time
+  // — the effective timescale sagged to ~4x of the requested 10x and made the
+  // gates' wall budgets a coin flip (t16 flake investigation). Production
+  // (timescale 1) keeps the original spiral-of-death clamp unchanged.
+  const capSteps = MAX_STEPS_PER_FRAME * (time.timescale > 1 ? time.timescale : 1);
+  time.accumulator = Math.min(time.accumulator, FIXED_DT * capSteps);
   let steps = 0;
   while (time.accumulator >= FIXED_DT) {
     time.accumulator -= FIXED_DT;

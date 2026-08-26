@@ -26,7 +26,16 @@
 
 import { chromium } from 'playwright';
 
-const URL = 'http://localhost:5173/?mode=foot&debug&timescale=10';
+// seed pinned (t16 flake investigation): unpinned, parseRunSeed rolled a random
+// lake per run and scenario B became a coin flip under load. Same investigation:
+// MAX_STEPS_PER_FRAME used to cap the effective timescale to ~4x on a loaded
+// machine (core/time.ts now scales the cap with ?timescale), and per-scenario
+// wall budgets are 60s (not 30s).
+// KNOWN RESIDUAL FLAKE: scenario B drives real gaff taps at WALL speed against
+// a 10x sim — on a heavily loaded machine the driver can lose that footrace
+// and time out. A B-timeout on a loaded box is suspect; rerun once on a quiet
+// machine before treating it as a regression (see docs/decisions.md).
+const URL = 'http://localhost:5173/?mode=foot&debug&timescale=10&seed=2026';
 const WALK_SPEED = 4.5; // controller.ts WALK_SPEED — the movement walk while braced
 const GROUND_R = 20; // world.ts GROUND_RADIUS
 const PLAYER_R = 0.5; // shore threshold = GROUND_R - PLAYER_R = 19.5
@@ -246,7 +255,7 @@ async function fightAngler() {
   // spikes or when the player's own stamina runs low.
   const t0 = Date.now();
   let exhausted = false;
-  while (Date.now() - t0 < 30000) {
+  while (Date.now() - t0 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight) break;
     if (w.fish && w.fish.exhausted) {
@@ -265,7 +274,7 @@ async function fightAngler() {
   const t1 = Date.now();
   let landingShot = null;
   let landed = false;
-  while (Date.now() - t1 < 30000) {
+  while (Date.now() - t1 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight) break;
     if (w.fight.landEligible) {
@@ -321,7 +330,7 @@ async function fightButcher() {
 // out.
   const t0 = Date.now();
   let inReach = false;
-  while (Date.now() - t0 < 30000) {
+  while (Date.now() - t0 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight || !w.fish) break;
     // stop early (L ~4.2): each tap's CDP round-trip overshoots L by ~1.5m, so
@@ -381,7 +390,7 @@ async function gaffHeavy() {
   let gaffs = 0;
   let hpDrops = 0;
   let lastHp = -1;
-  while (Date.now() - t2 < 30000) {
+  while (Date.now() - t2 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight || !w.fish) break;
     if (w.fish.hp <= 0) break;
@@ -460,7 +469,7 @@ async function fightSnap() {
   const t0 = Date.now();
   let redShot = null;
   let snapped = false;
-  while (Date.now() - t0 < 30000) {
+  while (Date.now() - t0 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight) {
       snapped = true;
@@ -521,7 +530,7 @@ async function fightCut() {
   // wait for a drag EVENT in the playtest log, then cut mid-drag
   const t0 = Date.now();
   let pulled = false;
-  while (Date.now() - t0 < 30000) {
+  while (Date.now() - t0 < 60000) {
     const w = await getWorld();
     if (!w || !w.fight) break;
     const logNow = await getLog();
@@ -591,7 +600,7 @@ async function fightDraggedIn() {
   const hpAtEntry = (await getWorld()).player.hp;
   const t1 = Date.now();
   let breathZero = false;
-  while (Date.now() - t1 < 30000) {
+  while (Date.now() - t1 < 60000) {
     const w = await getWorld();
     if (w.water.breath <= 0) {
       breathZero = true;
