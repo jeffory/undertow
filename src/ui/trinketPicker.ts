@@ -20,7 +20,9 @@ export function showTrinketPicker(world: WorldState, onComplete?: () => void): v
 
   const save = getSave();
   const trinkets = (save?.box ?? []).filter((i) => i.slot === 'trinket');
-  const equipped = save?.equipped ?? [];
+  // The M5 rig-up register is the loadout's source of truth; the legacy
+  // `equipped` mirror falls back for saves that never touched the rig-up.
+  const equipped = save?.rigLoadout?.trinketIds ?? save?.equipped ?? [];
 
   const root = document.createElement('div');
   root.id = 'trinket-picker';

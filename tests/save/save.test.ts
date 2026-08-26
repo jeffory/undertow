@@ -84,6 +84,7 @@ function sampleSave(): SaveGame {
       endingsSeen: {},
       nplus: false,
     },
+    rigLoadout: { rodId: null, lineId: null, lureIds: [], trinketIds: [], consumables: [] },
   };
 }
 

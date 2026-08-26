@@ -1,5 +1,6 @@
 // TOWN EVENTS (meta) — plan 05 §0.2 "Events I emit (for audio + UI):
-// `building.restored`, …". Task t18 emits the FIRST of them.
+// `building.restored`, …". Task t18 emits the FIRST of them; task t19 adds
+// `bark.shown` (the doorstep-bark record the future audio worker binds to).
 //
 // A tiny queue of plain data. The audio engine and the hub renderer can drain it
 // later without either of them importing the restoration logic (or it theirs);
@@ -10,8 +11,18 @@
 // Pure data: no `three`, no DOM.
 
 import type { BuildingRestoredEvent } from './restoration';
+import type { PendingBark } from '../core/world';
 
-export type TownEvent = BuildingRestoredEvent;
+export interface BarkShownEvent {
+  type: 'bark.shown';
+  buildingId: string;
+  residentId: string;
+  text: string;
+  maskSlipping: boolean;
+  visitCount: number;
+}
+
+export type TownEvent = BuildingRestoredEvent | BarkShownEvent;
 
 const QUEUE_CAP = 32;
 const queue: TownEvent[] = [];
@@ -19,6 +30,19 @@ const queue: TownEvent[] = [];
 export function emitTownEvent(event: TownEvent): void {
   queue.push(event);
   if (queue.length > QUEUE_CAP) queue.shift();
+}
+
+// A bark that has just been scheduled — the toast the UI shows AND the record
+// the audio engine will hear. Two writes, one source.
+export function emitBarkShown(bark: PendingBark, visitCount: number): void {
+  emitTownEvent({
+    type: 'bark.shown',
+    buildingId: bark.buildingId,
+    residentId: bark.residentId,
+    text: bark.text,
+    maskSlipping: bark.maskSlipping,
+    visitCount,
+  });
 }
 
 // Read without consuming (the probe / a debug readout).

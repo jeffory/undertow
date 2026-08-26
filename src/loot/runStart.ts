@@ -21,6 +21,7 @@ import type { WorldState } from '../core/world';
 import { getSave } from '../core/save';
 import { applyLicensePassives } from './license';
 import { runMetaStart } from '../meta/runMeta';
+import { applyRigGear } from '../meta/rigLoadout';
 import type { SundryItem } from './items';
 
 // Apply trinket effects to a FRESH world. Mutates world in place.
@@ -54,11 +55,20 @@ export function applyEffect(world: WorldState, key: string, value: number): void
 }
 
 // The save's currently-equipped trinkets (2 slots; ids resolve into the box).
-// Missing ids and duplicates are both ignored (the loadout is a Set).
-export function equippedItems(save: { equipped: string[]; box: SundryItem[] }): SundryItem[] {
+// SOURCE OF TRUTH: the M5 rig-up register's `rigLoadout.trinketIds` (task t19 —
+// the rig-up is the writer of the loadout, run-start reads the same array). The
+// legacy top-level `equipped` mirror is the fallback for saves/pre-picker call
+// sites that only ever knew the old field. Missing ids and duplicates are both
+// ignored (the loadout is a Set).
+export function equippedItems(save: {
+  equipped?: string[];
+  rigLoadout?: { trinketIds?: string[] };
+  box: SundryItem[];
+}): SundryItem[] {
   const seen = new Set<string>();
   const out: SundryItem[] = [];
-  for (const id of save.equipped) {
+  const ids = save.rigLoadout?.trinketIds ?? save.equipped ?? [];
+  for (const id of ids) {
     if (seen.has(id)) continue;
     seen.add(id);
     const item = save.box.find((i) => i.id === id);
@@ -68,14 +78,16 @@ export function equippedItems(save: { equipped: string[]; box: SundryItem[] }): 
 }
 
 // The run-start seam: read the save (no-op when none is loaded — boot/tests),
-// then apply license passives + equipped trinkets to the fresh world, and
-// finally the town's starting-Dread base (plan 05 §0.2). The Dread hook runs
-// LAST so it stamps run.startedAtDread after everything else has settled.
+// then apply license passives + equipped trinkets to the fresh world, then the
+// rig-up's gear (line/lure slots — the same rigLoadout the register writes),
+// and finally the town's starting-Dread base (plan 05 §0.2). The Dread hook
+// runs LAST so it stamps run.startedAtDread after everything else has settled.
 export function applyRunStartPassives(world: WorldState): void {
   const save = getSave();
   if (!save) return;
   world.run.licenseGrade = save.license.grade;
   applyLicensePassives(world, save.license.grade);
   applyTrinkets(world, equippedItems(save));
+  applyRigGear(world, save);
   runMetaStart(world, save.metaState);
 }

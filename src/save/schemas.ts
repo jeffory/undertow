@@ -12,11 +12,17 @@
 // endingsSeen, nplus }. It is stored under `metaState` because `meta` is
 // already taken by the t12 run-counter block; the two are different animals
 // (run bookkeeping vs. the town's memory of itself).
+//
+// Version 4 adds the M5 RIG-UP slice — `rigLoadout`, the plan 05 §1.2
+// RigLoadout exactly: { rodId, lineId, lureIds[3], trinketIds[2],
+// consumables[] }. It is the single source of truth for the pre-run loadout
+// (rod/line/lure/trinket/consumable slots); `equipped` remains a legacy
+// mirror of `trinketIds` so the M4 picker path and old saves keep working.
 // Pure logic: no `three` imports.
 
 import { z } from 'zod';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export const CatchRecordSchema = z.object({
   species: z.string(),
@@ -127,6 +133,21 @@ export const MetaStateSchema = z.object({
 });
 export type MetaState = z.infer<typeof MetaStateSchema>;
 
+// --- M5 rig-up loadout (plan 05 §1.2, task t19) -------------------------------
+// The pre-run tackle requisition, exactly as plan §1.2 shapes it:
+//   rod (1) + line (1) + lure (3) + trinket (2) + consumables (bait + bottled
+// light + food). Ids are item ids (content/rigCatalog.ts rods, loot/items.ts
+// pools, and the box's trinkets); empty arrays are empty slots, not errors —
+// a class with no catalogue yet just renders as an unfilled slot.
+export const RigLoadoutSchema = z.object({
+  rodId: z.string().nullable().default(null),
+  lineId: z.string().nullable().default(null),
+  lureIds: z.array(z.string()).max(3).default([]),
+  trinketIds: z.array(z.string()).max(2).default([]),
+  consumables: z.array(z.string()).default([]),
+});
+export type RigLoadout = z.infer<typeof RigLoadoutSchema>;
+
 export const SaveGameSchema = z.object({
   version: z.literal(SAVE_VERSION),
   meta: MetaSchema,
@@ -136,6 +157,7 @@ export const SaveGameSchema = z.object({
   box: z.array(SundryItemSchema),
   equipped: z.array(z.string()).max(2),
   metaState: MetaStateSchema,
+  rigLoadout: RigLoadoutSchema,
 });
 export type SaveGame = z.infer<typeof SaveGameSchema>;
 
@@ -160,3 +182,18 @@ export const SaveGameV2Schema = z.object({
   equipped: z.array(z.string()).max(2),
 });
 export type SaveGameV2 = z.infer<typeof SaveGameV2Schema>;
+
+// The pre-v4 v3 shape (used by the v3→v4 migration): the M5 town slice exists,
+// the rig-up loadout does not — the migration seeds `rigLoadout.trinketIds`
+// from the legacy `equipped` mirror so nothing a player already packed is lost.
+export const SaveGameV3Schema = z.object({
+  version: z.literal(3),
+  meta: MetaSchema,
+  runs: z.array(RunResultSchema),
+  bestiary: z.record(z.string(), BestiaryEntryStateSchema),
+  license: LicenseStateSchema,
+  box: z.array(SundryItemSchema),
+  equipped: z.array(z.string()).max(2),
+  metaState: MetaStateSchema,
+});
+export type SaveGameV3 = z.infer<typeof SaveGameV3Schema>;

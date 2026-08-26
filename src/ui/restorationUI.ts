@@ -36,6 +36,7 @@ import { unlockContextFor } from '../meta/runMeta';
 import { emitTownEvent } from '../meta/townEvents';
 import { DOOR_HOLD_SECONDS } from '../systems/townDoor';
 import { freshMetaState } from '../save/migrate';
+import { renderRigUpInto } from './rigUpScreen';
 
 let overlayEl: HTMLDivElement | null = null;
 let styleEl: HTMLStyleElement | null = null; // injected once, reused
@@ -125,6 +126,14 @@ const STYLE = `
   }
   #restoration .close:hover { background: #5c4a30; }
   #restoration .footnote { margin-top: 10px; text-align: center; font-size: 10px; color: #6a5638; }
+  #restoration .door-nav { display: flex; gap: 8px; margin-top: 10px; }
+  #restoration .door-nav button {
+    flex: 1; padding: 6px 0; border: 1px solid #4a3a26; background: #efe4c8;
+    color: #3a2c1a; cursor: pointer;
+    font: 11px/1.3 ui-monospace, monospace; letter-spacing: 0.14em;
+  }
+  #restoration .door-nav button.active { background: #4a3a26; color: #efe4c8; font-weight: bold; }
+  #restoration .door-nav button:hover:not(.active) { background: #e4d7b6; }
 
   #town-door {
     position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
@@ -177,6 +186,19 @@ function renderRegister(): void {
 
   const register = el('div', 'register');
   overlayEl.appendChild(register);
+
+  // The door's two-button register: the restoration ledger and the rig-up
+  // requisition share one masthead and one overlay (plan 05 §1.2 "RESTORATION /
+  // RIG-UP"). Defaults to the restoration tab.
+  const nav = el('div', 'door-nav');
+  const restBtn = el('button', 'active', 'REGISTER OF RESTORATION') as HTMLButtonElement;
+  const rigBtn = el('button', undefined, 'FORM 6-R · RIG-UP') as HTMLButtonElement;
+  rigBtn.addEventListener('click', () => {
+    if (overlayEl && pendingWorld) renderRigUpInto(overlayEl, pendingWorld, () => renderRegister());
+  });
+  nav.appendChild(restBtn);
+  nav.appendChild(rigBtn);
+  register.appendChild(nav);
 
   register.appendChild(el('div', 'masthead', 'THE OFFICE OF PUBLIC WORKS'));
   register.appendChild(el('div', 'form-no', '[REGISTER OF RESTORATION — GREYWATER HOLLOW]'));
@@ -312,7 +334,7 @@ function ensurePrompt(): void {
   promptFill = el('div') as HTMLDivElement;
   bar.appendChild(promptFill);
   promptEl.appendChild(bar);
-  promptEl.appendChild(el('div', 'hint', 'HOLD E — RESTORATION REGISTER'));
+  promptEl.appendChild(el('div', 'hint', 'HOLD E — OFFICE DOOR'));
   document.body.appendChild(promptEl);
 }
 

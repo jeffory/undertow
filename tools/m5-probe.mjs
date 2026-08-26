@@ -71,7 +71,7 @@ assert(snap && snap.mode === 'foot', `boots on foot (${snap?.mode})`);
 assert(snap && snap.docked === snap.start, 'docked on the lighthouse islet');
 
 let m = await meta();
-assert(m && m.version === 3, `save schema v3 (version ${m?.version})`);
+assert(m && m.version === 4, `save schema v4 (version ${m?.version})`);
 assert(m && Object.keys(m.metaState.buildings).length === 0, 'a fresh save carries an EMPTY town');
 assert(m && m.metaState.memories === 0, 'the purse opens at 0 Memories');
 assert(m && m.metaState.decants === 0 && m.metaState.nplus === false, 'the deferred §0.2 fields are present and empty');
@@ -172,7 +172,7 @@ assert(m && m.metaState.buildings.smokehouse?.restored === true, 'the save recor
 assert(m && m.metaState.buildings.smokehouse?.paid === 40, 'the ledger row keeps the receipt (paid 40)');
 assert(m && m.restored.length === 1, 'exactly one building stands');
 assert(m && m.startingDread === 2, `starting Dread is now 2 (${m?.startingDread})`);
-const ev = m?.events?.[m.events.length - 1];
+const ev = (m?.events ?? []).find((e) => e.type === 'building.restored');
 assert(
   ev && ev.type === 'building.restored' && ev.id === 'smokehouse' && ev.cost === 40 && ev.restoredCount === 1 && ev.startingDread === 2,
   `building.restored event emitted with the §0.2 shape (${JSON.stringify(ev)})`,

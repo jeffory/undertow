@@ -1,11 +1,14 @@
 // SAVES — migration + meta bookkeeping (plan 03 §8, task t12 #5; task t19;
-// task t18 / plan 05 §0.2).
+// task t18 / plan 05 §0.2; task t19 / plan 05 §1.2).
 // `migrate` stepwise-up-migrates any raw blob to the current version and REFUSES
 // unknown newer versions (never destroy forward data). v1→v2 adds the M4 meta
 // slices (bestiary, license, box, equipped) with safe defaults; v2→v3 adds the
 // M5 town slice (`metaState`) — an OLD SAVE LOADS AND GETS AN EMPTY TOWN, and
 // the Memories it has already banked in `meta.memoriesTotal` are carried into
 // `metaState.memories` so a returning player's ledger is not reset to zero.
+// v3→v4 adds the M5 rig-up loadout (`rigLoadout`) — an old save loads with an
+// empty loadout except that whatever was in the legacy `equipped` mirror is
+// seeded into `rigLoadout.trinketIds` so already-packed trinkets carry over.
 // `applyRunResult` is the write path: append to the runs log (capped), sum
 // Memories (into BOTH the run counter and the town's spendable purse), bump
 // runsCompleted, keep bestHaul, and fold in the run's bestiary events, sundries
@@ -18,10 +21,13 @@ import {
   SaveGameSchema,
   SaveGameV1Schema,
   SaveGameV2Schema,
+  SaveGameV3Schema,
   type MetaState,
+  type RigLoadout,
   type RunResult,
   type SaveGame,
   type SaveGameV2,
+  type SaveGameV3,
 } from './schemas';
 import type { SundryItem } from './schemas';
 import { applyBestiaryEvents } from '../bestiary/bestiary';
@@ -46,6 +52,18 @@ export function freshMetaState(): MetaState {
   };
 }
 
+// plan 05 §1.2 RigLoadout, empty: no rod, no line, no lures, no trinkets, no
+// stores. Empty slots are the "no catalogue yet" state, not an error.
+export function freshRigLoadout(): RigLoadout {
+  return {
+    rodId: null,
+    lineId: null,
+    lureIds: [],
+    trinketIds: [],
+    consumables: [],
+  };
+}
+
 export function freshSave(): SaveGame {
   return {
     version: SAVE_VERSION,
@@ -56,6 +74,7 @@ export function freshSave(): SaveGame {
     box: [],
     equipped: [],
     metaState: freshMetaState(),
+    rigLoadout: freshRigLoadout(),
   };
 }
 
@@ -67,8 +86,8 @@ export function mergeSundries(box: SundryItem[], gained: readonly SundryItem[]):
 
 // Raw blob → validated current-version SaveGame. A missing/0 version is treated
 // as the pre-M3 stub and migrates to a fresh save. Older versions are validated
-// against their own shape and stepped up one version at a time (v1→v2→v3). An
-// unknown NEWER version throws (forward data is never destroyed). A
+// against their own shape and stepped up one version at a time (v1→v2→v3→v4).
+// An unknown NEWER version throws (forward data is never destroyed). A
 // structurally-corrupt document at any step throws too.
 export function migrate(raw: unknown): SaveGame {
   if (raw === null || typeof raw !== 'object') return freshSave();
@@ -80,12 +99,13 @@ export function migrate(raw: unknown): SaveGame {
       `save version ${version} is newer than supported (${SAVE_VERSION}) — refusing to touch forward data`,
     );
   }
-  if (version === 1) return migrateV2toV3(migrateV1toV2(r));
-  if (version === 2) return migrateV2toV3(parseV2(r));
+  if (version === 1) return migrateV3toV4(migrateV2toV3(migrateV1toV2(r)));
+  if (version === 2) return migrateV3toV4(migrateV2toV3(parseV2(r)));
+  if (version === 3) return migrateV3toV4(parseV3(r));
   if (version === SAVE_VERSION) {
     const parsed = SaveGameSchema.safeParse(r);
     if (parsed.success) return parsed.data;
-    throw new Error('corrupt save: failed v3 schema validation');
+    throw new Error('corrupt save: failed v4 schema validation');
   }
   // any other older version → migrate as the v0 stub
   return freshSave();
@@ -116,12 +136,20 @@ function parseV2(raw: Record<string, unknown>): SaveGameV2 {
   return parsed.data;
 }
 
+function parseV3(raw: Record<string, unknown>): SaveGameV3 {
+  const parsed = SaveGameV3Schema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error('corrupt save: failed v3 schema validation');
+  }
+  return parsed.data;
+}
+
 // v2 → v3: add the M5 town slice. The town starts EMPTY (nothing restored), but
 // the Memories the save has already banked become the town's opening purse —
 // a player who has been fishing since M3 walks up to the ledger with money.
-function migrateV2toV3(v2: SaveGameV2): SaveGame {
+function migrateV2toV3(v2: SaveGameV2): SaveGameV3 {
   return {
-    version: SAVE_VERSION,
+    version: 3,
     meta: v2.meta,
     runs: v2.runs,
     bestiary: v2.bestiary,
@@ -129,6 +157,23 @@ function migrateV2toV3(v2: SaveGameV2): SaveGame {
     box: v2.box,
     equipped: v2.equipped,
     metaState: { ...freshMetaState(), memories: Math.max(0, Math.floor(v2.meta.memoriesTotal)) },
+  };
+}
+
+// v3 → v4: add the M5 rig-up loadout. Everything starts empty except the legacy
+// `equipped` mirror, which seeds `trinketIds` so trinkets the player had packed
+// under the M4 picker carry straight into the requisition register.
+function migrateV3toV4(v3: SaveGameV3): SaveGame {
+  return {
+    version: SAVE_VERSION,
+    meta: v3.meta,
+    runs: v3.runs,
+    bestiary: v3.bestiary,
+    license: v3.license,
+    box: v3.box,
+    equipped: v3.equipped,
+    metaState: v3.metaState,
+    rigLoadout: { ...freshRigLoadout(), trinketIds: v3.equipped.slice(0, 2) },
   };
 }
 
@@ -164,6 +209,9 @@ export function applyRunResult(save: SaveGame, result: RunResult): SaveGame {
       ...(save.metaState ?? freshMetaState()),
       memories: (save.metaState?.memories ?? 0) + banked,
     },
+    // The rig-up loadout is carried through the run end untouched — the Office
+    // holds the requisition between runs.
+    rigLoadout: save.rigLoadout ?? freshRigLoadout(),
   };
 }
 

@@ -332,10 +332,30 @@ export function createRunState(startedAt: number, startedAtDread: number): RunSt
 // (save/schemas.ts `metaState`); this is only the doorstep: is the keeper at the
 // lighthouse door, how long has the restoration verb been held, and is the
 // ledger up. The sim owns `near`/`held`; the ui system consumes `open`.
+// `barks` is the doorstep-bark scheduler state (task t19): per-approach cooldown
+// + per-run visit counts, so a bark fires at most once per building per approach
+// and the rotation is seeded by the visit count.
 export interface TownState {
   near: boolean; // the keeper is within reach of the lighthouse door
   held: number; // s the contextual hold has been held at the door
   open: boolean; // the RESTORATION NOTICE ledger overlay is up
+  barks: TownBarkSimState; // 05 §1.5 — doorstep-bark scheduler
+  pendingBark: PendingBark | null; // one bark waiting for the ui toast
+}
+
+export interface TownBarkSimState {
+  /** buildingId → a bark already played on the current approach (re-approach resets). */
+  fired: Record<string, boolean>;
+  /** buildingId → how many approaches this run (feeds the deterministic rotation). */
+  visits: Record<string, number>;
+}
+
+export interface PendingBark {
+  text: string;
+  residentId: string;
+  residentName: string;
+  buildingId: string;
+  maskSlipping: boolean;
 }
 
 export interface WorldState {
@@ -445,7 +465,7 @@ export function createWorld(seed = 1): WorldState {
     dockedIslet: null,
     clock: createClock(0),
     run: createRunState(0, 0),
-    town: { near: false, held: 0, open: false },
+    town: { near: false, held: 0, open: false, barks: { fired: {}, visits: {} }, pendingBark: null },
     disturbances: [],
   };
 }

@@ -7,6 +7,7 @@
 
 import {
   SAVE_VERSION,
+  type RigLoadout,
   type RunResult,
   type SaveGame,
 } from '../save/schemas';
@@ -175,6 +176,31 @@ export async function updateSave(mutate: (s: SaveGame) => SaveGame): Promise<Sav
 
 // Persist the two equipped trinket slots (ids resolve into the box). Returns the
 // updated save or null when none is loaded.
+// The M5 rig-up register is the writer of the LOADOUT; this helper is the M4
+// picker's write path and writes the SAME data (rigLoadout.trinketIds, with the
+// legacy `equipped` mirror kept in sync) so the two UIs converge on one source.
 export async function setEquippedTrinkets(ids: string[]): Promise<SaveGame | null> {
-  return updateSave((s) => ({ ...s, equipped: ids.slice(0, 2) }));
+  const trinketIds = ids.slice(0, 2);
+  return updateSave((s) => ({
+    ...s,
+    equipped: trinketIds,
+    rigLoadout: { ...s.rigLoadout, trinketIds },
+  }));
+}
+
+// Persist the full rig-up requisition (plan 05 §1.2 RigLoadout). This is the
+// canonical loadout writer: rod/line/lure/trinket/consumable slots, with the
+// legacy `equipped` mirror re-derived from trinketIds so run-start stays unified.
+export async function setRigLoadout(loadout: RigLoadout): Promise<SaveGame | null> {
+  return updateSave((s) => ({
+    ...s,
+    rigLoadout: {
+      rodId: loadout.rodId ?? null,
+      lineId: loadout.lineId ?? null,
+      lureIds: loadout.lureIds.slice(0, 3),
+      trinketIds: loadout.trinketIds.slice(0, 2),
+      consumables: loadout.consumables.slice(),
+    },
+    equipped: loadout.trinketIds.slice(0, 2),
+  }));
 }

@@ -20,7 +20,8 @@ import { applyRunStartPassives } from './loot/runStart';
 import { gradeForXp } from './loot/license';
 import { descend } from './run/descent';
 import { hookDragger, swampBoat } from './systems/boatCombat';
-import { lighthouseFoot } from './meta/hubStreet';
+import { lighthouseFoot, townSlots } from './meta/hubStreet';
+import { BUILDINGS } from './content/buildings';
 import { restore, restoredIds, startingDreadFor } from './meta/restoration';
 import { unlockContextFor } from './meta/runMeta';
 import { emitTownEvent, peekTownEvents } from './meta/townEvents';
@@ -119,6 +120,8 @@ if (/[?&]debug/.test(search)) {
     return {
       version: save.version,
       metaState: save.metaState,
+      rigLoadout: save.rigLoadout,
+      box: save.box,
       restored: restoredIds(save.metaState),
       startingDread: startingDreadFor(save.metaState),
       instances: townInstanceCount(),
@@ -144,6 +147,31 @@ if (/[?&]debug/.test(search)) {
   };
   (window as unknown as { __openTown: (on: boolean) => void }).__openTown = (on: boolean) => {
     world.town.open = on;
+  };
+  // M5 round 2 gate seams (tools/m5b-probe.mjs): drop a sundry into the box (so
+  // the rig-up has something collected to requisition), open the rig-up register
+  // directly, and walk the keeper to a specific building's doorstep (for the
+  // bark gate).
+  (window as unknown as { __grantSundry: (s: unknown) => void }).__grantSundry = (s: unknown) => {
+    void updateSave((save) => ({ ...save, box: [...save.box, s as never] }));
+  };
+  (window as unknown as { __openRigUp: () => void }).__openRigUp = () => {
+    world.town.open = true;
+    requestAnimationFrame(() => {
+      document.querySelector('#restoration .door-nav button:last-child')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  };
+  (window as unknown as { __toBuilding: (id: string) => unknown }).__toBuilding = (id: string) => {
+    const lake = world.lake;
+    if (!lake) return null;
+    const iso = lake.islets[lake.startIslet];
+    if (!iso) return null;
+    const slot = townSlots(iso, BUILDINGS.length)[BUILDINGS.findIndex((b) => b.id === id)];
+    if (!slot) return null;
+    dockPlayer(world, lake.startIslet, { x: slot.x, z: slot.z });
+    world.player.x = slot.x;
+    world.player.z = slot.z;
+    return slot;
   };
   (window as unknown as { __restore: (id: string) => unknown }).__restore = (id: string) => {
     const save = getSave();

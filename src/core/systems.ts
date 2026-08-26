@@ -28,9 +28,11 @@ import { updateNightClockSystem } from '../systems/nightClockSystem';
 import { updateBoatCombat } from '../systems/boatCombat';
 import { updateDescent } from '../systems/descent';
 import { updateTownDoor } from '../systems/townDoor';
+import { updateBarks } from '../systems/barks';
 import { updateRunTerminal } from '../systems/runTerminal';
 import { updateCastPrompt, updateDescentPrompt } from '../ui/castPrompt';
 import { updateRestorationUI } from '../ui/restorationUI';
+import { updateBarkOverlay } from '../ui/barkOverlay';
 import { updateHud } from '../ui/hud';
 import { updateBestiaryToggle } from '../ui/bestiaryScreen';
 import { updateAudio } from '../audio/engine';
@@ -181,6 +183,7 @@ function ui(world: WorldState, _dt: number): void {
   updateCastPrompt(world);
   updateDescentPrompt(world);
   updateRestorationUI(world);
+  updateBarkOverlay(world);
   updateBestiaryToggle(world);
   updateAudio(world, _dt); // t13: procedural audio — reads world, never writes
 }
@@ -307,6 +310,7 @@ export const UPDATE_ORDER: SystemFn[] = [
   updateNightClockSystem, // 03 §5: phase one-shots (buoy submergence, refill cadence)
   updateDescent, // 03 §2.5: sinkhole descent (zoneFloor rises; the clock does not reset)
   updateTownDoor, // 05 §1.1: the lighthouse-door hold that opens the restoration ledger
+  updateBarks, // 05 §1.5: restored residents' doorstep barks (proximity + cooldown)
   animation,
   updateRunTerminal, // 03 §7: extraction / death / run summary — a SIM system (timers scale)
   renderSystem,
